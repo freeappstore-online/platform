@@ -71,12 +71,16 @@ kept audio and choices. The voice model stays until **Delete model**.
    400 MB on disk).
 3. It runs one job from each app in turn, and looks again every 15 minutes when there is nothing to do.
 
-**Pause** (Contribute or the tray) stops the job in hand at once. **History** lists every job this computer tried,
+**Auto** (the default), **Run now** and **Off** sit at the top of Contribute and in the tray. Off stops the job in
+hand at once, and nothing starts again until you turn it back on, even after a restart. **History** lists every job this computer tried,
 with **In progress** for the current one. Each item has the server's verdict, **Play** for its audio (20 newest),
 **Good** / **Not good** with a note, and **Save record…** for bug reports.
 
-The desktop app has no battery, heat or data limits yet. It runs whenever Contribute is not paused and the computer
-is awake. It does not keep the computer awake.
+In Auto it runs only while every condition in **When it runs** holds: on AC power (or on battery above a minimum,
+40% by default), not hot, the computer not in use (no keyboard or mouse for 2 minutes; or run slower instead), within
+the CPU level (Light / Balanced / Full), the optional daily maximum and quiet hours. A job at least 80% done finishes;
+any other stops and is given back. The status says why it is paused. There is no mobile-data setting: a computer
+can't reliably tell a metered connection. It does not keep the computer awake.
 
 ### What keeps running
 
