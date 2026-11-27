@@ -1,8 +1,9 @@
 # FreeAppStore desktop
 
 The FreeAppStore desktop app (Electron). Phase 1 (#797): it runs FAS apps in their own windows and lets an AI
-client on this computer (Claude Code, Claude Desktop) use the tools those apps offer, on data that never leaves
-the device.
+client on this computer (Claude Code, Claude Desktop) use the tools those apps offer. Calls stay on this computer and
+never reach a FreeAppStore server; what a tool returns goes to that AI client, which may send it to its model
+provider ([where data goes](../docs/device-data.md)). User guide: [docs/devices.md](../docs/devices.md).
 
 ```
 Claude Code / Desktop ──stdio──▶ FreeAppStore binary, node mode (dist/stdio/main.mjs)

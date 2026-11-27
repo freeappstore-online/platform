@@ -64,8 +64,9 @@ Neither is a place for an app to keep user content.
 - **Moving data between devices:** a backup file the user carries, or a live
   transfer relayed through realtime rooms, where nothing is persisted.
 - **Local AI access:** the local desktop bridge (#797). An AI client on the
-  user's machine works on an open app's data in the browser; the data never
-  leaves the device.
+  user's machine works on an open app's data in the browser; FreeAppStore's
+  servers never receive it. The AI client gets what the tools return and, if it
+  uses a cloud model, sends it to its provider (#849).
 - **Server-backed or multi-user data:** PAS. A collaborative Sheets lives on
   PAS; the FAS spreadsheet is a single-user, local, AI-assisted tool.
 

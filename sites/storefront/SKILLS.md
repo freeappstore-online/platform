@@ -626,8 +626,9 @@ bridge.setEnabled(false); // when the user turns AI access off
   enabled, so the app can be opened before or after the desktop app.
 - Messages are capped at 1 MB and each call times out after 30 s: return summaries or ranges, not whole datasets.
 - Tool errors reach the AI as-is, so write them as instructions ("Sheet \"Q4\" does not exist. Sheets: Q1, Q2.").
-- The data stays on the device: the desktop app relays calls on this computer only, and nothing goes to a
-  FreeAppStore server. Desktop windows and browser tabs keep separate local data.
+- The desktop app relays calls on this computer only and sends none of them to a FreeAppStore server. A tool's
+  result goes to the AI app the user connected; if that AI app uses a cloud model, it sends the result to its
+  provider. Desktop windows and browser tabs keep separate local data. Details: [where data goes](https://docs.freeappstore.online/device-data/).
 
 ## Pregenerated audio via community generation
 

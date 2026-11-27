@@ -346,3 +346,6 @@ The 15-minute reaper (`pruneGenerated`) deletes artifacts, sets, jobs, submissio
 rows of apps that were unpublished or deleted, and rejects submissions still pending after 6 days
 (their quarantined bytes are about to expire). Deleting an account removes that user's leases,
 submissions and attempt records and clears the contributor on their accepted artifacts, which stay public.
+
+What a contributor's device sends, who sees it and how long it is kept, in one place:
+[Desktop and phone apps: where data goes](device-data.md#contribute-community-generation).

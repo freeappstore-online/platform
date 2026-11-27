@@ -34,7 +34,7 @@
       <p>What stays on your device, what platform features store, and what you control.</p>
     </div>
     <div class="page-content">
-      <p class="legal-date">Last updated: November 24, 2026</p>
+      <p class="legal-date">Last updated: November 27, 2026</p>
       <h2>Using apps without an account</h2>
       <p>Standalone apps can save progress in localStorage or IndexedDB on your device. Clearing browser storage removes that local copy. Features that fetch information, sync data, or call external services require network requests; an app being free does not mean all of its data stays on your device.</p>
       <h2>Accounts and connected apps</h2>
@@ -52,7 +52,7 @@
       <p>The storefront can use Cloudflare Web Analytics when its beacon is configured. App analytics settings can also load Cloudflare analytics or creator-configured third-party tags. What those services receive depends on the app's configuration. The platform's compliance checks reject known tracking SDKs in submitted source, but that is not a promise that every network request or configured integration collects no data.</p>
       <p>The platform processes operational information needed to serve requests, investigate errors, measure app quality, and prevent abuse. SDK error logs can be uploaded to the platform and are pruned after seven days by the scheduled cleanup. Hosting, authentication, fonts, avatars, email, analytics, AI, and other requested integrations involve service providers such as Cloudflare, GitHub, and Google Fonts. Request metadata can be processed by those providers.</p>
       <h2 id="companion">FreeAppStore companion apps (Android and iPhone)</h2>
-      <p>The FreeAppStore companion apps for Android and iPhone share your location with the FreeAppStore apps you turn on, including while your phone is locked. Connecting the companion signs you in with GitHub or Google, which creates a FreeAppStore account if you do not have one.</p>
+      <p>The FreeAppStore companion apps for Android and iPhone share your location with the FreeAppStore apps you turn on, including while your phone is locked. They also list store apps and can <a href="#contribute">Contribute</a>. Connecting the companion signs you in with GitHub or Google, which creates a FreeAppStore account if you do not have one. This section covers location.</p>
       <h3>What is collected</h3>
       <ul>
         <li><strong>Precise location</strong> (latitude, longitude, accuracy and time), only for apps you turn on, and only after the companion shows that app's disclosure and you agree. Collection continues in the background, with the phone locked or the app closed, only if you allow background location. Nothing is collected while no app is on, or while sharing is paused.</li>
@@ -61,7 +61,7 @@
       </ul>
       <h3>Who receives it</h3>
       <p>Location goes only to the apps you turn on in the companion. The current list is Run, which uses it to record runs and walks. An app reads your points only through your own signed-in session in that app, and only your points. FreeAppStore gives an app's creator no way to read your location outside the app. What the app does with the points is described in its disclosure: Run adds them only to an activity you are recording, and runs you save stay in Run until you delete them.</p>
-      <p>The companion does not use advertising or analytics SDKs, and we do not sell or share your location for advertising. All traffic goes over HTTPS to api.freeappstore.online. The Store tab loads the public app list without your credentials. On iPhone, the sharing map uses Apple Maps for backgrounds, so Apple receives the map area you view, not your track.</p>
+      <p>The companion does not use advertising, analytics or crash-reporting SDKs, and we do not sell or share your location for advertising. Your account and location traffic goes over HTTPS to api.freeappstore.online. The Store tab loads the public app list from freeappstore.online without your credentials, and your avatar image comes from your sign-in provider. On iPhone, the sharing map uses Apple Maps for backgrounds, so Apple receives the map area you view, not your track. On iPhone, <strong>Scan a code</strong> uses the camera only to read the pairing code; no image is kept or sent.</p>
       <h3>How long it is kept</h3>
       <ul>
         <li><strong>On FreeAppStore</strong>: location points are kept 7 days, then deleted by a cleanup job that runs every 15 minutes. They are not included in database backups.</li>
@@ -76,8 +76,51 @@
         <li><strong>Delete your account</strong>: deletes every connected phone, its permissions and points, along with your other account data. See <a href="/delete-account">Delete your account</a>.</li>
       </ul>
       <p>Pausing stops new collection, or new sharing with one app, without deleting anything. Uninstalling the companion removes everything it stored on the phone.</p>
+      <h2 id="desktop">FreeAppStore desktop app</h2>
+      <p>The desktop app for Mac, Windows and Linux opens FreeAppStore apps in their own windows and can let an AI app on the same computer use the tools those apps offer.</p>
+      <h3>AI access</h3>
+      <ul>
+        <li>The desktop app passes requests between your AI app (such as Claude Code or Claude Desktop) and your open FreeAppStore apps on this computer only (127.0.0.1), protected by a key stored on this computer. These requests never reach FreeAppStore's servers.</li>
+        <li><strong>Your AI app receives what an app's tools return</strong>, which can include your app data. If your AI app uses a cloud model, it sends that data to its provider, under that provider's terms. FreeAppStore cannot control that. Connect only AI apps you trust with the data, and use an app's <strong>Allow AI access</strong> switch or <strong>Pause AI access</strong> when you don't want it read.</li>
+        <li>The desktop app's Activity list (which tool ran, for which app, and whether it worked) is kept in memory only and is gone when you quit. It does not record what was sent or returned.</li>
+        <li>Apps in desktop windows keep their data in the desktop app, separate from your browsers. Nothing syncs the two.</li>
+      </ul>
+      <h3>What the desktop app connects to</h3>
+      <ul>
+        <li>freeappstore.online for the public app list and vote counts, and each app's own address when you open it.</li>
+        <li>api.freeappstore.online only after you connect this computer to your account (for Account and Contribute). It sends this computer's label ("FreeAppStore desktop (Mac)" and similar) and the app's version.</li>
+        <li>GitHub to check for updates (at start and daily, unless you turn it off), download them, and show release notes; and to download the voice model when you ask.</li>
+        <li>Your sign-in provider for your avatar, and Google Fonts for the home screen's fonts.</li>
+      </ul>
+      <p>It has no analytics or crash reporting. Its settings, recent and favourite apps, and the keys it holds stay in its folder on this computer.</p>
+
+      <h2 id="contribute">Contribute (optional)</h2>
+      <p>Contribute lets your desktop, phone or browser (the console's Generate page) make narration for store apps that ask for it, with a voice model that runs on your device. It is off until you connect, choose apps and download the model.</p>
+      <h3>What is sent</h3>
+      <ul>
+        <li><strong>The audio you generate</strong> and its sentence timings. The app's creator wrote the text; your device only reads it aloud.</li>
+        <li><strong>An attempt record</strong> for each job: how it ended, the app version, operating system, device model (on desktop, the processor model), network type, foreground or background, battery level and charging, thermal state, timings, CPU time and memory. No text, audio or location.</li>
+        <li><strong>Your Good / Not good report</strong> and its optional note, if you send one.</li>
+      </ul>
+      <h3>Who sees it</h3>
+      <ul>
+        <li><strong>Everyone</strong>: accepted audio is published for anyone to download and play, without your name.</li>
+        <li><strong>The app's creator</strong> (who may be anyone who publishes on FreeAppStore): your user id and login, your uploads to their app, your reports and notes, and the attempt records. They can remove your audio and block you from their app.</li>
+        <li>No AI judges the audio. The server checks its format and length; people listen.</li>
+      </ul>
+      <h3>How long it is kept</h3>
+      <ul>
+        <li>Attempt records: 14 days.</li>
+        <li>Audio that is not accepted: deleted at once if it fails the checks, otherwise kept at most 7 days in private storage.</li>
+        <li>Accepted audio: public until the creator removes it or the app is removed.</li>
+        <li>Your uploads' records, reports and notes: until you delete your account or the app is removed.</li>
+        <li>On your device: the desktop keeps the latest 200 jobs and the audio of the latest 20; phones keep their record and the latest 20 recordings; the console keeps its records in that browser. The voice model (about 400 MB) stays until you delete it.</li>
+      </ul>
+      <p>Disconnecting or signing out on a device deletes that device's Contribute history, kept audio and choices on the device. It does not delete what you already contributed. Deleting your account does (see below), except accepted audio, which stays public without your name.</p>
+      <p>A private, non-public pilot of this feature is planned but not built. It will be described here before it runs. Technical details: <a href="https://docs.freeappstore.online/device-data/">where data goes</a>.</p>
+
       <h2>Managing and deleting data</h2>
-      <p>Use an app's controls to manage its content and permissions. Signing out clears the local session; it does not delete the server account. You can delete your account from its settings at <a href="/app/settings?delete-account=1">freeappstore.online/app/settings</a> (the SDK profile menu links there). It removes the account's keys, per-user storage, owned documents, friendships, roles, logs, push subscriptions, reminder schedules, and connected companion phones from the active database. Published apps and shared counters are retained. Clearing browser storage only removes local data, and copies may remain in operational backups. <a href="/delete-account">Delete your account</a> explains what is deleted and how to ask us if you cannot sign in.</p>
+      <p>Use an app's controls to manage its content and permissions. Signing out clears the local session; it does not delete the server account. You can delete your account from its settings at <a href="/app/settings?delete-account=1">freeappstore.online/app/settings</a> (the SDK profile menu links there). It removes the account's keys, per-user storage, owned documents, friendships, roles, logs, push subscriptions, reminder schedules, connected phones and computers, and your Contribute uploads' records, reports and attempt records from the active database. Published apps, shared counters and accepted Contribute audio (without your name) are retained. If an app's creator blocked you from Contribute, that block keeps your user id until the app is removed. Clearing browser storage only removes local data, and copies may remain in operational backups. <a href="/delete-account">Delete your account</a> explains what is deleted and how to ask us if you cannot sign in.</p>
       <h2>Children and age-restricted features</h2>
       <p>The platform's date-of-birth flow rejects ages under 13. Individual apps can have stricter age requirements. We do not claim that every app or feature is suitable for every age.</p>
       <h2>Changes and contact</h2>

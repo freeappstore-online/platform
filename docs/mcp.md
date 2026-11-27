@@ -173,8 +173,9 @@ Write tools (`create_app`, `update_files`) additionally verify app ownership via
 
 ## Local AI access to app data (FreeAppStore desktop)
 
-AI clients work on an app's data through the **FreeAppStore desktop app**, not through a server: the app's
-data stays on the device ([download the desktop app](https://freeappstore.online/download)). The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
+AI clients work on an app's data through the **FreeAppStore desktop app**, not through a FreeAppStore server
+([download the desktop app](https://freeappstore.online/download)). The AI client still receives what the tools
+return, and a client using a cloud model sends it to its provider. The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
 protected by a per-install token. Users connect Claude Code or Claude Desktop with one click (**Connect** on the
 home screen), which registers a stdio entry: the app's own binary in node mode, proxying to that server and
 reading the token itself, so client configs hold no token. Other clients use the HTTP URL with the token, under
@@ -225,8 +226,9 @@ bridge.setEnabled(false); // when the user turns AI access off
   enabled, so the app can be opened before or after the desktop app.
 - Messages are capped at 1 MB and each call times out after 30 s: return summaries or ranges, not whole datasets.
 - Tool errors reach the AI as-is, so write them as instructions ("Sheet \"Q4\" does not exist. Sheets: Q1, Q2.").
-- The data stays on the device: the desktop app relays calls on this computer only, and nothing goes to a
-  FreeAppStore server. Desktop windows and browser tabs keep separate local data.
+- The desktop app relays calls on this computer only and sends none of them to a FreeAppStore server. A tool's
+  result goes to the AI app the user connected; if that AI app uses a cloud model, it sends the result to its
+  provider. Desktop windows and browser tabs keep separate local data. Details: [where data goes](device-data.md).
 
 Running and building the desktop app: [`desktop/README.md`](https://github.com/freeappstore-online/platform/blob/main/desktop/README.md).
 
