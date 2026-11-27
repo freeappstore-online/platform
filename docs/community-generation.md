@@ -252,6 +252,14 @@ claimed. Runners today:
 | Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC-LC 32 kbps mono, 24 kHz, else 48 kHz where the browser refuses 24 kHz) | same | English voices only |
 | FAS desktop app ([#826](https://github.com/freeappstore-online/platform/issues/826), [#837](https://github.com/freeappstore-online/platform/issues/837); `desktop/`, Electron) | same as the phones (`sherpa-onnx-node` in a utility process, CPU) | WebCodecs AAC-LC 32 kbps mono in a hidden window; 48 kHz on macOS, whose Electron build refuses 24 kHz AAC | same | same as the phones |
 
+Model packages each runner downloads, only after the user asks (the phones and desktop also wait for 1,751 MB of free
+storage, #792):
+
+| Runners | Package | Download | Installed | Checked | Licence |
+|---|---|---|---|---|---|
+| Android, iOS, desktop | [`kokoro-multi-lang-v1_0.tar.bz2`](https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2) (sherpa-onnx release asset) | 349,886,476 B | 401,239,297 B | SHA-256 `60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4` before anything is unpacked; a mismatch installs nothing | Apache-2.0 (Kokoro weights) |
+| Browser | `onnx-community/Kokoro-82M-v1.0-ONNX` on Hugging Face through kokoro-js 1.2.1 (fp32 for WebGPU, q8 for WebAssembly) | 325,532,232 B / 92,361,116 B | in Cache Storage | Not pinned: the latest revision, no checksum (#788) | Apache-2.0 (Kokoro weights) |
+
 A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
 `formats`, params other than `voice` and `speed`, or a voice it doesn't have. Language
 ([#812](https://github.com/freeappstore-online/platform/issues/812)):
