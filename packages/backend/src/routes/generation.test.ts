@@ -705,6 +705,101 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     expect((await review(reviewed)).status).toBe(409);
   });
 
+  it('review queue, contributor good rates and the owner-set auto-block (#842)', async () => {
+    const s = await setup({ verify: false });
+    const setId = await s.createSet();
+    const keys = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    await s.addJobs(
+      setId,
+      keys.map((key) => ({ key, input: { text: `${key}.` } })),
+    );
+    // u2 makes five accepted artifacts, u3 two.
+    const made: { jobId: string; submissionId: string; user: string }[] = [];
+    for (const user of ['u2', 'u2', 'u2', 'u2', 'u2', 'u3', 'u3']) {
+      const job = (await s.claim(user))!;
+      const { submissionId } = await s.submissionId(await s.submit(user, job.id, job.leaseToken));
+      await acceptSubmission(s.env as never, submissionId, 1000);
+      made.push({ jobId: job.id, submissionId, user });
+    }
+    const report = (i: number, good: boolean) =>
+      s.request(`/submissions/${made[i]!.submissionId}/report`, {
+        method: 'PUT',
+        user: made[i]!.user,
+        json: { good },
+      });
+    await report(1, true);
+    await report(2, false);
+    type Queue = { items: { key: string; submissionId: string; report: unknown; url: string }[] };
+    const queue = async () =>
+      ((await (await s.request(`/review?setId=${setId}`)).json()) as Queue).items;
+    // Reported not good first, then unreported, then reported good; oldest first within each.
+    expect((await queue()).map((i) => i.key)).toEqual(['c', 'a', 'd', 'e', 'f', 'g', 'b']);
+    expect((await s.request('/review', { user: 'u2' })).status).toBe(403);
+    const consoleSession = await signSession('u1', KEY, { aud: 'console' });
+    const review = (i: number, status: string) =>
+      s.request(`/artifacts/${made[i]!.jobId}/review`, {
+        method: 'PUT',
+        token: consoleSession,
+        json: { submissionId: made[i]!.submissionId, status },
+      });
+    expect((await review(2, 'reviewed')).status).toBe(200);
+    expect((await queue()).map((i) => i.key)).not.toContain('c');
+
+    // The owner's review outweighs the device's report: c is good.
+    type Listed = {
+      autoBlockBelow: number | null;
+      contributors: {
+        contributor: { id: string };
+        judged: number;
+        good: number;
+        goodRate: number | null;
+        blocked: boolean;
+      }[];
+    };
+    const contributors = async () => (await (await s.request('/contributors')).json()) as Listed;
+    const u2 = async () =>
+      (await contributors()).contributors.find((r) => r.contributor.id === 'u2')!;
+    expect(await u2()).toEqual(
+      expect.objectContaining({ judged: 2, good: 2, goodRate: 1, blocked: false }),
+    );
+    expect(
+      (await contributors()).contributors.find((r) => r.contributor.id === 'u3')!.goodRate,
+    ).toBeNull();
+
+    // Auto-block: console session of the owner only, a rate from 0 to 1 or null.
+    const settings = (json: unknown, token = consoleSession) =>
+      s.request('/settings', { method: 'PUT', token, json });
+    expect(
+      (await settings({ autoBlockBelow: 0.5 }, await signSession('u1', KEY, { aud: 'books' })))
+        .status,
+    ).toBe(403);
+    expect((await settings({ autoBlockBelow: 2 })).status).toBe(400);
+    expect((await settings({ autoBlockBelow: 0.5 })).status).toBe(200);
+    expect((await contributors()).autoBlockBelow).toBe(0.5);
+    // Fewer than 5 judged: not blocked yet, however bad.
+    await review(0, 'needs_changes');
+    await review(1, 'needs_changes');
+    await review(3, 'needs_changes');
+    expect((await u2()).blocked).toBe(false);
+    // The fifth judgement brings u2 to 1 good of 5: blocked, everything withdrawn, audited.
+    await review(4, 'needs_changes');
+    expect(await u2()).toEqual(expect.objectContaining({ judged: 5, good: 1, blocked: true }));
+    expect(
+      s.db.prepare("SELECT COUNT(*) AS n FROM generation_artifacts WHERE user_id = 'u2'").get(),
+    ).toEqual({ n: 0 });
+    expect(
+      s.db
+        .prepare(
+          "SELECT actor, target FROM generation_audit WHERE action = 'contributor.autoblock'",
+        )
+        .all(),
+    ).toEqual([{ actor: 'auto-block', target: 'u2' }]);
+    expect(
+      (await s.request('/claim', { method: 'POST', user: 'u2', json: { models: [MODEL] } })).status,
+    ).toBe(403);
+    expect((await settings({ autoBlockBelow: null })).status).toBe(200);
+  });
+
   it('the app daily limit is enforced; there is no per-user limit (#830)', async () => {
     const s = await setup();
     const setId = await s.createSet();

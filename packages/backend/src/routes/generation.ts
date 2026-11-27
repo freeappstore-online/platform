@@ -53,6 +53,10 @@ export const GENERATION_LIMITS = {
   eventsKeepMs: 14 * 24 * 60 * 60_000,
   /** A device report's or an owner review's note (#831). */
   noteChars: 500,
+  /** Judged submissions a contributor needs before the owner's auto-block threshold applies (#842). */
+  autoBlockMinJudged: 5,
+  /** The review queue's page (#842). */
+  reviewQueue: 100,
 };
 
 /** How a job attempt ended on the device (#813), the same on every runner; `submitted`: it uploaded. */
@@ -1034,6 +1038,7 @@ generationRoutes.put('/apps/:appId/generation/submissions/:submissionId/report',
     .bind(report.good ? 1 : 0, report.note, report.at, c.req.param('submissionId'), appId, who.id)
     .run();
   if (!updated.meta.changes) throw new HttpError(404, 'submission not found');
+  await autoBlock(c.env, appId, who.id);
   return c.json({ report });
 });
 
@@ -1079,11 +1084,209 @@ generationRoutes.put('/apps/:appId/generation/artifacts/:jobId/review', async (c
     if (other) throw new HttpError(409, 'the artifact is another version now; review that one');
     throw new HttpError(404, 'artifact not found');
   }
-  const login = await db
-    .prepare('SELECT github_login FROM users WHERE id = ?')
-    .bind(actor)
-    .first<{ github_login: string | null }>();
+  const [login, by] = await Promise.all([
+    db
+      .prepare('SELECT github_login FROM users WHERE id = ?')
+      .bind(actor)
+      .first<{ github_login: string | null }>(),
+    db
+      .prepare('SELECT user_id FROM generation_submissions WHERE id = ?')
+      .bind(b.submissionId)
+      .first<{ user_id: string }>(),
+  ]);
+  if (by) await autoBlock(c.env, appId, by.user_id);
   return c.json({ review: { ...review, by: login?.github_login ?? actor, at: now } });
+});
+
+/**
+ * Each submission's judgement (#842): the owner's review when there is one, else the contributor's
+ * own device report (#831); null while neither. 1 good, 0 not good.
+ */
+const JUDGED = "CASE WHEN x.review IS NOT NULL THEN x.review = 'reviewed' ELSE x.report_good END";
+
+/**
+ * The owner's review queue (#842): accepted artifacts not yet reviewed, those their contributor's
+ * device reported not good first, then unreported, then reported good; oldest first within each.
+ * `setId` narrows to one set. At most `reviewQueue` items.
+ */
+generationRoutes.get('/apps/:appId/generation/review', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.job_id, a.set_id, a.key, a.submission_id, a.sha256, a.meta_key, a.bytes, a.duration_ms, a.accepted_at,
+       a.user_id, u.github_login, x.report_good, x.report_note, x.reported_at,
+       substr(json_extract(j.input, '$.text'), 1, ?3) AS preview, length(json_extract(j.input, '$.text')) AS chars
+     FROM generation_artifacts a JOIN generation_submissions x ON x.id = a.submission_id
+     JOIN generation_jobs j ON j.id = a.job_id LEFT JOIN users u ON u.id = a.user_id
+     WHERE a.app_id = ?1 AND (?2 IS NULL OR a.set_id = ?2) AND x.review IS NULL
+     ORDER BY COALESCE(x.report_good, 0.5), a.accepted_at, a.job_id LIMIT ?4`,
+  )
+    .bind(appId, c.req.query('setId') ?? null, PREVIEW_CHARS, GENERATION_LIMITS.reviewQueue)
+    .all<
+      Pick<
+        ArtifactRow,
+        | 'job_id'
+        | 'set_id'
+        | 'key'
+        | 'submission_id'
+        | 'sha256'
+        | 'meta_key'
+        | 'bytes'
+        | 'duration_ms'
+        | 'accepted_at'
+      > &
+        Parameters<typeof reportInfo>[0] & {
+          user_id: string | null;
+          github_login: string | null;
+          preview: string;
+          chars: number;
+        }
+    >();
+  return c.json({
+    items: results.map((r) => {
+      const a = { app_id: appId, job_id: r.job_id, sha256: r.sha256 };
+      return {
+        jobId: r.job_id,
+        setId: r.set_id,
+        key: r.key,
+        submissionId: r.submission_id,
+        url: artifactUrl(c, a),
+        metaUrl: r.meta_key ? artifactUrl(c, a, '/meta') : null,
+        bytes: r.bytes,
+        durationMs: r.duration_ms,
+        acceptedAt: r.accepted_at,
+        contributor: contributorInfo(r.user_id, r.github_login),
+        report: reportInfo(r),
+        inputPreview: r.preview,
+        inputChars: r.chars,
+      };
+    }),
+  });
+});
+
+/** The app's contributor judgements (#842), by user: `{ user_id, judged, good }`, of `userId` only when given. */
+const judgements = (db: D1Database, appId: string, userId: string | null) =>
+  db
+    .prepare(
+      `SELECT x.user_id, COUNT(${JUDGED}) AS judged, COALESCE(SUM(${JUDGED}), 0) AS good
+       FROM generation_submissions x WHERE x.app_id = ?1 AND (?2 IS NULL OR x.user_id = ?2) GROUP BY x.user_id`,
+    )
+    .bind(appId, userId)
+    .all<{ user_id: string; judged: number; good: number }>();
+
+const autoBlockBelow = async (db: D1Database, appId: string) =>
+  (
+    await db
+      .prepare('SELECT auto_block_below FROM generation_settings WHERE app_id = ?')
+      .bind(appId)
+      .first<{ auto_block_below: number | null }>()
+  )?.auto_block_below ?? null;
+
+/**
+ * Block the app's contributors (or only `userId`) whose good rate is under the owner's threshold
+ * once they have `autoBlockMinJudged` judged submissions (#842). People's judgements only (#831).
+ */
+async function autoBlock(env: Env, appId: string, userId: string | null = null) {
+  const below = await autoBlockBelow(env.DB, appId);
+  if (below === null) return;
+  const { results } = await judgements(env.DB, appId, userId);
+  for (const r of results) {
+    if (r.judged < GENERATION_LIMITS.autoBlockMinJudged || r.good / r.judged >= below) continue;
+    const blocked = await env.DB.prepare(
+      'SELECT 1 FROM generation_blocks WHERE app_id = ? AND user_id = ?',
+    )
+      .bind(appId, r.user_id)
+      .first();
+    if (!blocked) await block(env, appId, r.user_id, 'auto-block', 'contributor.autoblock');
+  }
+}
+
+/**
+ * The app's contributors (#842), most submissions first: how many they submitted and had
+ * accepted, their judged submissions (owner review, else device report) and good rate, whether
+ * they are blocked; and the owner's auto-block threshold.
+ */
+generationRoutes.get('/apps/:appId/generation/contributors', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const db = c.env.DB;
+  const [{ results }, below] = await Promise.all([
+    db
+      .prepare(
+        `SELECT x.user_id, u.github_login, COUNT(*) AS submissions, SUM(x.status = 'accepted') AS accepted,
+           COUNT(${JUDGED}) AS judged, COALESCE(SUM(${JUDGED}), 0) AS good,
+           SUM(x.review = 'reviewed') AS reviewed, SUM(x.review = 'needs_changes') AS needs_changes,
+           SUM(x.report_good = 1) AS reported_good, SUM(x.report_good = 0) AS reported_not_good,
+           EXISTS (SELECT 1 FROM generation_blocks b WHERE b.app_id = x.app_id AND b.user_id = x.user_id) AS blocked
+         FROM generation_submissions x LEFT JOIN users u ON u.id = x.user_id
+         WHERE x.app_id = ? GROUP BY x.user_id ORDER BY submissions DESC, x.user_id`,
+      )
+      .bind(appId)
+      .all<
+        Record<
+          | 'submissions'
+          | 'accepted'
+          | 'judged'
+          | 'good'
+          | 'reviewed'
+          | 'needs_changes'
+          | 'reported_good'
+          | 'reported_not_good'
+          | 'blocked',
+          number
+        > & { user_id: string; github_login: string | null }
+      >(),
+    autoBlockBelow(db, appId),
+  ]);
+  return c.json({
+    autoBlockBelow: below,
+    autoBlockMinJudged: GENERATION_LIMITS.autoBlockMinJudged,
+    contributors: results.map((r) => ({
+      contributor: { id: r.user_id, login: r.github_login },
+      submissions: r.submissions,
+      accepted: r.accepted,
+      judged: r.judged,
+      good: r.good,
+      goodRate: r.judged ? r.good / r.judged : null,
+      reviewed: r.reviewed,
+      needsChanges: r.needs_changes,
+      reportedGood: r.reported_good,
+      reportedNotGood: r.reported_not_good,
+      blocked: !!r.blocked,
+    })),
+  });
+});
+
+/**
+ * The owner's auto-block threshold (#842), on a console session: `autoBlockBelow` a good rate
+ * from 0 to 1, or null for off. Audited; applied at once to every contributor, then whenever a
+ * submission is judged.
+ */
+generationRoutes.put('/apps/:appId/generation/settings', async (c) => {
+  const appId = c.req.param('appId');
+  const actor = (await requireConsoleAppOwner(c, appId)).id;
+  const { autoBlockBelow: below } = await nativeBody(c, 1024);
+  if (below !== null && !(typeof below === 'number' && below >= 0 && below <= 1))
+    throw new HttpError(400, 'autoBlockBelow must be a number from 0 to 1, or null');
+  const db = c.env.DB;
+  const now = Date.now();
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO generation_settings (app_id, auto_block_below, updated_by, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (app_id) DO UPDATE SET auto_block_below = excluded.auto_block_below,
+           updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
+      )
+      .bind(appId, below, actor, now),
+    db
+      .prepare(
+        `INSERT INTO generation_audit (app_id, actor, action, target, detail, created_at)
+         VALUES (?, ?, 'settings.update', ?, ?, ?)`,
+      )
+      .bind(appId, actor, appId, JSON.stringify({ autoBlockBelow: below }), now),
+  ]);
+  await autoBlock(c.env, appId);
+  return c.json({ autoBlockBelow: below });
 });
 
 /** A device's record of one attempt, validated: only RECORD_FIELDS, strings of at most 300 characters. */
@@ -1306,11 +1509,9 @@ generationRoutes.delete('/apps/:appId/generation/artifacts/:jobId', async (c) =>
   return c.json({ withdrawn: n });
 });
 
-generationRoutes.post('/apps/:appId/generation/contributors/:userId/block', async (c) => {
-  const appId = c.req.param('appId');
-  const userId = c.req.param('userId');
-  const actor = await owner(c, appId);
-  const db = c.env.DB;
+/** Block a contributor (#842: also automatically): release their leases, reject their pending uploads, withdraw their artifacts. */
+async function block(env: Env, appId: string, userId: string, actor: string, action: string) {
+  const db = env.DB;
   const now = Date.now();
   await db.batch([
     db
@@ -1330,7 +1531,13 @@ generationRoutes.post('/apps/:appId/generation/contributors/:userId/block', asyn
       )
       .bind(now, appId, userId),
   ]);
-  const withdrawn = await withdraw(c.env, appId, 'user_id', userId, actor, 'contributor.block');
+  return withdraw(env, appId, 'user_id', userId, actor, action);
+}
+
+generationRoutes.post('/apps/:appId/generation/contributors/:userId/block', async (c) => {
+  const appId = c.req.param('appId');
+  const actor = await owner(c, appId);
+  const withdrawn = await block(c.env, appId, c.req.param('userId'), actor, 'contributor.block');
   return c.json({ blocked: true, withdrawn });
 });
 
@@ -1460,6 +1667,9 @@ export async function pruneGenerated(env: Env, now = Date.now(), limit = 100): P
     ),
     db.prepare(
       `DELETE FROM generation_audit WHERE id IN (SELECT g.id FROM generation_audit g WHERE ${gone})`,
+    ),
+    db.prepare(
+      `DELETE FROM generation_settings WHERE app_id IN (SELECT g.app_id FROM generation_settings g WHERE ${gone})`,
     ),
     db
       .prepare(

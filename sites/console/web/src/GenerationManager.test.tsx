@@ -222,3 +222,80 @@ it('derives the meta URL beside the artifact', () => {
   expect(metaUrlOf('https://a/x/artifacts/j?v=1')).toBe('https://a/x/artifacts/j/meta?v=1')
   expect(metaUrlOf('https://a/x/artifacts/j')).toBe('https://a/x/artifacts/j/meta')
 })
+
+it('review queue: plays each unreviewed version, G/B judge it with the note and move on, N skips (#842)', async () => {
+  const item = (key: string, good: boolean | null) => ({
+    jobId: `j-${key}`, setId: 'set1', key, submissionId: `s-${key}`, url: `${api}/artifacts/j-${key}?v=abc`, metaUrl: null,
+    bytes: 4096, durationMs: 2500, acceptedAt: Date.now(), contributor, inputPreview: `Text ${key}.`, inputChars: 7,
+    report: good === null ? null : { good, note: good ? null : 'mumbles', at: Date.now() },
+  })
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/generation/sets')) return json({ sets: [set] })
+    if (url.endsWith('/review')) return json({ items: [item('a', false), item('b', null), item('c', true)] })
+    if (init?.method === 'PUT') return json({ review: {} })
+    return json({ jobs: [], nextCursor: null })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => root.render(<GenerationManager appId="demo" getToken={getToken} />))
+  await flush()
+  act(() => button('Review queue')!.click())
+  await flush()
+  expect(container.textContent).toContain('1 of 3')
+  expect(container.textContent).toContain('Device says Not good')
+  expect(container.textContent).toContain('mumbles')
+  expect(container.querySelector('audio')!.autoplay).toBe(true)
+  const press = (key: string) => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key })) })
+  // Typing a note doesn't judge
+  const note = container.querySelector('textarea') as HTMLTextAreaElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'garbled')
+    note.dispatchEvent(new Event('input', { bubbles: true }))
+    note.dispatchEvent(new KeyboardEvent('keydown', { key: 'g', bubbles: true }))
+  })
+  expect(fetchMock.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(false)
+  await press('b')
+  await flush()
+  const put = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!
+  expect(put[0]).toBe(`${api}/artifacts/j-a/review`)
+  expect(JSON.parse(put[1]!.body as string)).toEqual({ submissionId: 's-a', status: 'needs_changes', note: 'garbled' })
+  expect(container.textContent).toContain('2 of 3')
+  await press('n')
+  expect(container.textContent).toContain('3 of 3')
+  await press('g')
+  await flush()
+  const last = fetchMock.mock.calls.filter(([, i]) => i?.method === 'PUT').at(-1)!
+  expect(JSON.parse(last[1]!.body as string)).toEqual({ submissionId: 's-c', status: 'reviewed' })
+  // At the end the queue loads again
+  expect(fetchMock.mock.calls.filter(([u]) => u === `${api}/review`)).toHaveLength(2)
+})
+
+it('contributors: good rates and the auto-block threshold (#842)', async () => {
+  const stats = {
+    contributor, submissions: 9, accepted: 6, judged: 5, good: 2, goodRate: 0.4, reviewed: 1, needsChanges: 2,
+    reportedGood: 1, reportedNotGood: 1, blocked: true,
+  }
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/generation/sets')) return json({ sets: [set] })
+    if (url.endsWith('/contributors')) return json({ autoBlockBelow: null, autoBlockMinJudged: 5, contributors: [stats] })
+    if (init?.method === 'PUT') return json({ autoBlockBelow: 0.5 })
+    return json({})
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => root.render(<GenerationManager appId="demo" getToken={getToken} />))
+  await flush()
+  act(() => button('Contributors')!.click())
+  await flush()
+  expect(container.textContent).toContain('40% of 5')
+  expect(container.textContent).toContain('blocked')
+  expect(container.textContent).toContain('1 good · 2 bad')
+  const input = container.querySelector('#auto-block') as HTMLInputElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '50')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => button('Save')!.click())
+  await flush()
+  const put = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!
+  expect(put[0]).toBe(`${api}/settings`)
+  expect(JSON.parse(put[1]!.body as string)).toEqual({ autoBlockBelow: 0.5 })
+})

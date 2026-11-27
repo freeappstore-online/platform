@@ -6,6 +6,7 @@ import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
 import { attemptRows } from './attempt'
 import { API_URL, authHeaders } from './builder/lib/api'
 import { formatTimeAgo } from './deploy-status'
+import { Contributors, ReviewQueue } from './GenerationReview'
 
 /** Books-style sentence timings: [charStart, charEnd, startSec, endSec]. */
 type Segment = [number, number, number, number]
@@ -26,11 +27,13 @@ export function GenerationManager({ appId, getToken }: Props) {
   const [sets, setSets] = useState<GenerationSetSummary[] | null>(null)
   const [error, setError] = useState('')
   const [openSet, setOpenSet] = useState<string | null>(null)
+  const [panel, setPanel] = useState<'queue' | 'contributors' | null>(null)
+  const base = `${API_URL}/v1/apps/${encodeURIComponent(appId)}/generation`
 
   const load = useCallback(async () => {
     setError('')
     try {
-      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/generation/sets`, {
+      const res = await fetch(`${base}/sets`, {
         headers: authHeaders(getToken()),
       })
       if (!res.ok) { setError(`Couldn't load generation sets (HTTP ${res.status}).`); return }
@@ -38,14 +41,31 @@ export function GenerationManager({ appId, getToken }: Props) {
     } catch {
       setError("Couldn't load generation sets.")
     }
-  }, [appId, getToken])
+  }, [base, getToken])
 
   useEffect(() => { load() }, [load])
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
-        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Generation sets</h3>
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+          <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Generation sets</h3>
+          {!!sets?.length && (
+            <div className="flex gap-1">
+              {([['queue', 'Review queue'], ['contributors', 'Contributors']] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setPanel(panel === value ? null : value)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${panel === value ? 'bg-ink text-paper' : 'text-muted border border-line'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {panel === 'queue' && <div className="mb-3"><ReviewQueue base={base} getToken={getToken} /></div>}
+        {panel === 'contributors' && <div className="mb-3"><Contributors base={base} getToken={getToken} /></div>}
         {error && <p className="text-sm text-danger mb-3">{error}</p>}
         {!sets && !error && <p className="text-sm text-muted">Loading…</p>}
         {sets?.length === 0 && (
@@ -441,12 +461,14 @@ export const metaUrlOf = (url: string) => url.replace(/(\?|$)/, '/meta$1')
  * the text is there (or if it can't load) it shows the 200-character preview and
  * a sentence beyond it by number.
  */
-export function ArtifactPlayer({ url, metaUrl = metaUrlOf(url), preview, loadText }: {
+export function ArtifactPlayer({ url, metaUrl = metaUrlOf(url), preview, loadText, autoPlay = false }: {
   url: string
   /** The artifact's meta, when the server gave it (null: it has none); else beside `url`. */
   metaUrl?: string | null
   preview: string
   loadText: () => Promise<string>
+  /** Start playing at once (the review queue, #842). */
+  autoPlay?: boolean
 }) {
   const [segments, setSegments] = useState<Segment[] | null>(null)
   const [text, setText] = useState<string | null>(null)
@@ -478,6 +500,7 @@ export function ArtifactPlayer({ url, metaUrl = metaUrlOf(url), preview, loadTex
       <audio
         controls
         preload="none"
+        autoPlay={autoPlay}
         src={url}
         onPlay={load}
         onTimeUpdate={e => setTime(e.currentTarget.currentTime)}

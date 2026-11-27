@@ -40,6 +40,13 @@ audited), or withdraws it. An artifact is shown as *Not reviewed* until then, an
 again (after a withdrawal) is a new, unreviewed one: a review is never carried over. A review or report
 never publishes, withdraws or changes the manifest.
 
+The Generation tab's **Review queue** (#842) plays the unreviewed artifacts one after another (`…/review`),
+device-reported *Not good* first, with keys G (reviewed), B (needs changes) and N (next). Each contributor's
+**good rate** counts their judged submissions: the owner's review where there is one, else the device's own
+report. The owner can set an **auto-block** threshold (`…/settings`): once a contributor has at least 5 judged
+submissions and a good rate below it, they are blocked as by **Block** (audited as `contributor.autoblock`). It
+is checked when set and whenever one of their submissions is reviewed or reported.
+
 Any signed-in creator can generate for every store app from the console's **Generate** page
 (`freeappstore.online/app/generate`, desktop browsers with WebCodecs AAC): it lists the apps with open
 work from discovery, runs Kokoro sets (`kokoro` `v1.0`, `audio/mp4`) for the apps they opt in to, after
@@ -81,6 +88,9 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 | `GET /apps/:appId/generation/sets` | | `{ sets: [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }] }`, newest first |
 | `GET /apps/:appId/generation/sets/:setId/jobs?status=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
 | `GET /apps/:appId/generation/sets/:setId/jobs/:jobId` | | `{ job: { ...as listed, input: { text } } }`, the whole input |
+| `GET /apps/:appId/generation/review?setId=` | | `{ items: [{ jobId, setId, key, submissionId, url, metaUrl, bytes, durationMs, acceptedAt, contributor, report, inputPreview, inputChars }] }`: the review queue (#842), accepted artifacts not yet reviewed, those the device reported not good first, then unreported, then reported good, oldest first within each; at most 100 |
+| `GET /apps/:appId/generation/contributors` | | `{ autoBlockBelow, autoBlockMinJudged, contributors: [{ contributor, submissions, accepted, judged, good, goodRate, reviewed, needsChanges, reportedGood, reportedNotGood, blocked }] }`, most submissions first |
+| `PUT /apps/:appId/generation/settings` | `{ autoBlockBelow: 0-1 \| null }`; console session of the owner only | `{ autoBlockBelow }`; audited |
 
 `formats` is a non-empty subset of `audio/mp4`, `audio/ogg`, `audio/wav`; `maxBytes` at most
 25,000,000; `replicas` 1-3. Keys are 1-200 characters of `A-Za-z0-9._:/-`; `text` at most 100,000
