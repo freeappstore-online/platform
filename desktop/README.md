@@ -174,6 +174,9 @@ pnpm --dir desktop lint && pnpm --dir desktop typecheck && pnpm --dir desktop te
 pnpm --dir desktop test:e2e   # Playwright + Electron: real MCP client, desktop window and browser tab paths
 ```
 
+CI (`.github/workflows/desktop.yml`, also run on every release tag before publishing) runs all of these on Linux
+under xvfb, except the tests marked "needs the network" and the real-model Contribute test.
+
 The e2e test also clicks Connect / Disconnect against temp client configs and a fake `claude`
 (`e2e/fixture/fake-claude.mjs`), runs the stdio entry Connect wrote with a real `StdioClientTransport`, pauses and
 resumes, and closes the window while the server keeps answering.

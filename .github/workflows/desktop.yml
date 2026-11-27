@@ -1,6 +1,12 @@
 name: Desktop
 
-# Typecheck, lint and unit tests for the desktop app (desktop/, #797). No release or signing here (#799).
+# Lint, typecheck, unit tests, the Electron e2e suite and a packaged-app check for the desktop app (desktop/, #797).
+# No release or signing here (#799). desktop-release.yml calls this workflow on the release tag and publishes only
+# when every job here passed (#851).
+#
+# Coverage: check and e2e on Linux x64 (Electron from source under xvfb; the network-dependent Store and What's new
+# tests and the real-model Contribute test are left to local runs, desktop/README.md, Test); package on macOS
+# (x64 + arm64 packed, arm64 run), Windows x64 and Linux x64 (the packaged app loads its asar-unpacked native addon).
 on:
   push:
     branches: [main]
@@ -8,6 +14,12 @@ on:
   pull_request:
     branches: [main]
     paths: ['desktop/**', '.github/workflows/desktop.yml']
+  workflow_call:
+    inputs:
+      ref:
+        description: The ref to test, e.g. refs/tags/desktop-v0.4.1
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -22,6 +34,8 @@ jobs:
       ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10.30.3
@@ -32,6 +46,36 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      # Ubuntu 24.04's AppArmor blocks the unprivileged user namespaces Chromium's sandbox needs.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: pnpm build
+      - run: xvfb-run -a pnpm exec playwright test --grep-invert "needs the network" --reporter=list,html
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: desktop-e2e
+          path: |
+            desktop/playwright-report/
+            desktop/test-results/
 
   # Each platform's app packs Contribute's native TTS (#837): sherpa-onnx-node's addon for that OS and CPU, unpacked
   # from the archive, loads in the packaged Electron. No installers, signing or release here.
@@ -55,6 +99,8 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.ref }}
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10.30.3

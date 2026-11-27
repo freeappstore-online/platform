@@ -12,6 +12,9 @@ name: Desktop release
 # version to desktop/package.json on main (scripts/app-release.sh cut), tags the commit desktop-v<version> and builds
 # the tag. A pushed tag desktop-v<version> builds as long as it matches the package.json at that tag.
 #
+# Nothing is published unless desktop.yml (lint, typecheck, unit tests, Electron e2e, packaged apps) passes on the
+# tag being released (#851): the release job needs the test job, so a failed or cancelled check skips it.
+#
 # Each run publishes a versioned release `desktop-v<version>` and refreshes the fixed release `desktop-latest`,
 # whose download URLs never change:
 #   https://github.com/freeappstore-online/platform/releases/download/desktop-latest/<asset>
@@ -68,6 +71,12 @@ jobs:
           committed=$(bash scripts/app-release.sh version desktop)
           [ "$committed" = "${{ steps.v.outputs.version }}" ] || { echo "::error::desktop/package.json is $committed at this tag"; exit 1; }
 
+  test:
+    needs: tag
+    uses: ./.github/workflows/desktop.yml
+    with:
+      ref: refs/tags/${{ needs.tag.outputs.tag }}
+
   build:
     needs: tag
     strategy:
@@ -116,7 +125,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [tag, build]
+    needs: [tag, test, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -52,4 +52,10 @@ A desktop tag pushed by hand (`git tag desktop-v0.3.0 && git push origin desktop
 `desktop/package.json` at that commit already says `0.3.0`. Running `desktop-release.yml` with an existing version
 rebuilds that tag.
 
+Each release is tested on its own tag before anything is published. The desktop release runs `desktop.yml` (lint,
+typecheck, unit tests, the Electron e2e suite and the packaged apps on macOS, Windows and Linux) on the tag and
+publishes the installers and update files only if it passes (#851). Android signs and uploads to Play only after
+the build, unit tests, lint and the emulator's instrumented tests passed in the same run (#852). A passing release
+run means the build is ready; Google Play's review and availability are separate.
+
 To see what a release would contain before cutting it: `scripts/app-release.sh notes <app> HEAD`.
