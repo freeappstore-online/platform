@@ -497,12 +497,13 @@ private fun Toggle(label: String, on: Boolean, set: (Boolean) -> Unit) = Row(ver
     Switch(checked = on, onCheckedChange = set)
 }
 
+/** The label on its own line, so it never shares the width with the buttons at large font sizes (#806). */
 @Composable
-private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
-    Column(Modifier.weight(1f)) {
-        Text(label)
-        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> Unit) = Column {
+    Text(label)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(value, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = less) { Text("−") }
+        TextButton(onClick = more) { Text("+") }
     }
-    TextButton(onClick = less) { Text("−") }
-    TextButton(onClick = more) { Text("+") }
 }
