@@ -15,8 +15,9 @@
  *
  * main → worker: { type: 'narrate', id, text, voice, speed, config, device } | { type: 'load', id, device }
  *              | { type: 'cancel' }
- * worker → main: { type: 'loading', progress } | { type: 'loaded', id } | { type: 'progress', id, done, total, chars }
- *              | { type: 'done', id, file: Blob, segments, timing } | { type: 'error', id, message, skip? }
+ * worker → main: { type: 'loading', progress } | { type: 'loaded', id, device }
+ *              | { type: 'progress', id, done, total, chars }
+ *              | { type: 'done', id, file: Blob, segments, timing, device } | { type: 'error', id, message, skip, stage }
  * A new narrate, or cancel, stops the text in progress at its next sentence.
  */
 import { env, KokoroTTS } from 'kokoro-js';
@@ -26,6 +27,7 @@ import {
   KOKORO_REPO,
   type KokoroDevice,
   type KokoroSegment,
+  type KokoroStage,
   type KokoroTiming,
   type WorkerReply,
   type WorkerRequest,
@@ -46,6 +48,8 @@ export interface KokoroWorkerOptions {
 }
 
 let tts: Promise<KokoroTTS> | null = null;
+/** Where the loaded model runs: WebGPU, or WebAssembly when asked or when WebGPU failed. */
+let loadedOn: KokoroDevice | null = null;
 /** The text being narrated; any other stops at its next sentence */
 let active: number | null = null;
 
@@ -56,6 +60,9 @@ function post(message: WorkerReply) {
 /** A job this device can't do exactly; the main thread gives it back. */
 class Unsupported extends Error {}
 
+/** The narration's stage now, for the end reason of a failure (#813); one narration runs at a time. */
+let stage: KokoroStage = 'load';
+
 async function load(device: KokoroDevice): Promise<KokoroTTS> {
   const progress_callback = (p: { status: string; progress?: number }) => {
     if (p.status === 'progress' && p.progress !== undefined)
@@ -63,14 +70,25 @@ async function load(device: KokoroDevice): Promise<KokoroTTS> {
   };
   if (device === 'webgpu') {
     try {
-      return await KokoroTTS.from_pretrained(KOKORO_REPO, {
+      const model = await KokoroTTS.from_pretrained(KOKORO_REPO, {
         dtype: 'fp32',
         device: 'webgpu',
         progress_callback,
       });
-    } catch {}
+      loadedOn = 'webgpu';
+      return model;
+    } catch (err) {
+      // Not fatal: WebAssembly runs it too, more slowly. Said, and the record names the device (#813).
+      console.warn('kokoro: WebGPU failed to load the model, using WebAssembly', err);
+    }
   }
-  return KokoroTTS.from_pretrained(KOKORO_REPO, { dtype: 'q8', device: 'wasm', progress_callback });
+  const model = await KokoroTTS.from_pretrained(KOKORO_REPO, {
+    dtype: 'q8',
+    device: 'wasm',
+    progress_callback,
+  });
+  loadedOn = 'wasm';
+  return model;
 }
 
 /** `text` in pieces of at most PIECE characters, cut after a comma, semicolon or dash, else a space. */
@@ -149,8 +167,10 @@ async function narrate(
     timing[stage] += now - t;
     t = now;
   };
+  stage = 'load';
   const tts = await model(device);
   mark('loadMs');
+  stage = 'encode';
   if (!Object.hasOwn(tts.voices, voice)) throw new Unsupported(`unknown voice ${voice}`);
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -188,8 +208,10 @@ async function narrate(
       if (active !== id) throw new Error('cancelled');
       if (failure) throw failure;
       mark('encodeMs');
+      stage = 'synth';
       const samples = await say(tts, text.slice(start, end), voice, speed);
       mark('synthMs');
+      stage = 'encode';
       if (samples.length) {
         if (pause) feed(new Float32Array(Math.round(pause * RATE)));
         segments.push([start, end, round(frames / RATE), round((frames + samples.length) / RATE)]);
@@ -207,7 +229,12 @@ async function narrate(
   mark('encodeMs');
   for (const stage of Object.keys(timing) as (keyof KokoroTiming)[])
     timing[stage] = Math.round(timing[stage]);
-  return { file: new Blob([muxer.target.buffer], { type: 'audio/mp4' }), segments, timing };
+  return {
+    file: new Blob([muxer.target.buffer], { type: 'audio/mp4' }),
+    segments,
+    timing,
+    ...(loadedOn && { device: loadedOn }),
+  };
 }
 
 /** Serve narrate/cancel messages from the main thread's `KokoroRunner`. Call once, in a module worker. */
@@ -227,9 +254,14 @@ export function serveKokoroWorker(options: KokoroWorkerOptions = {}): void {
         id: msg.id,
         message: err instanceof Error ? err.message : String(err),
         skip: err instanceof Unsupported,
+        stage,
       });
     if (msg.type === 'load') {
-      model(msg.device).then(() => post({ type: 'loaded', id: msg.id }), fail);
+      stage = 'load';
+      model(msg.device).then(
+        () => post({ type: 'loaded', id: msg.id, ...(loadedOn && { device: loadedOn }) }),
+        fail,
+      );
       return;
     }
     if (msg.type === 'narrate') {

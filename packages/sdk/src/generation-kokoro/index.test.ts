@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ContributeOptions, Generation, GenerationJob } from '../generation.js';
+import { GenerationError } from '../generation.js';
 import {
   contributeKokoro,
   contributeKokoroApps,
+  KokoroError,
   KokoroRunner,
   KokoroSkip,
   kokoroEncoder,
+  kokoroEndReason,
   kokoroProblem,
 } from './index.js';
 import type { WorkerReply, WorkerRequest } from './shared.js';
@@ -268,7 +271,7 @@ describe('KokoroRunner', () => {
       device: 'wasm',
     });
     const err = await runner.generate(job()).catch((e) => e);
-    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(KokoroError);
     expect(err).not.toBeInstanceOf(KokoroSkip);
 
     const silent = fakeWorker(() => {});
@@ -280,6 +283,68 @@ describe('KokoroRunner', () => {
     expect(silent.requests.at(-1)).toEqual({ type: 'cancel' });
     quiet.dispose();
     expect(silent.worker.terminate).toHaveBeenCalled();
+  });
+
+  it('fails with the stage the worker names, and reports where the model runs (#813)', async () => {
+    const encoding = fakeWorker((req, send) => {
+      if (req.type === 'load') send({ type: 'loaded', id: req.id, device: 'wasm' });
+      if (req.type === 'narrate')
+        send({ type: 'error', id: req.id, message: 'EncodingError', skip: false, stage: 'encode' });
+    });
+    const runner = new KokoroRunner({
+      createWorker: () => encoding.worker,
+      encoder,
+      device: 'webgpu',
+    });
+    expect(runner.device).toBeNull();
+    await runner.load();
+    expect(runner.device).toBe('wasm'); // WebGPU fell back
+    const err = await runner.generate(job()).catch((e) => e);
+    expect(err).toMatchObject({ stage: 'encode', message: 'EncodingError' });
+  });
+
+  it('fails a job when the worker crashes, and starts a new worker for the next (#813)', async () => {
+    const crashing = fakeWorker((req) => {
+      if (req.type === 'narrate')
+        queueMicrotask(() =>
+          crashing.worker.dispatchEvent(
+            Object.assign(new Event('error'), { message: 'out of memory' }),
+          ),
+        );
+    });
+    const created = vi.fn(() => crashing.worker);
+    const runner = new KokoroRunner({ createWorker: created, encoder, device: 'wasm' });
+    const err = await runner.generate(job()).catch((e) => e);
+    expect(err).toBeInstanceOf(KokoroError);
+    expect(err).toMatchObject({
+      stage: 'worker',
+      message: 'the model worker crashed: out of memory',
+    });
+    expect(crashing.worker.terminate).toHaveBeenCalled();
+    await runner.generate(job()).catch(() => {});
+    expect(created).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('kokoroEndReason', () => {
+  it('names every end in the #813 vocabulary', () => {
+    expect(kokoroEndReason('submitted', null)).toBe('submitted');
+    expect(kokoroEndReason('failed', 'x', new GenerationError('gone', 403))).toBe('lease_403');
+    expect(kokoroEndReason('failed', 'x', new GenerationError('bad', 400))).toBe('server_4xx');
+    expect(kokoroEndReason('failed', 'x', new GenerationError('down', 503))).toBe('server_5xx');
+    expect(kokoroEndReason('failed', 'x', new TypeError('Failed to fetch'))).toBe('network');
+    expect(kokoroEndReason('failed', 'x', new KokoroError('oom', 'worker'))).toBe('model_error');
+    expect(kokoroEndReason('failed', 'x', new KokoroError('no', 'load'))).toBe('model_error');
+    expect(kokoroEndReason('failed', 'x', new KokoroError('enc', 'encode'))).toBe('encode_error');
+    expect(kokoroEndReason('failed', 'x', Object.assign(new Error('e'), { stage: 'synth' }))).toBe(
+      'model_error',
+    );
+    expect(kokoroEndReason('skipped', 'audio exceeds maxBytes')).toBe('too_large');
+    expect(kokoroEndReason('skipped', 'too slow to finish within the lease')).toBe('lease_cap');
+    expect(kokoroEndReason('skipped', 'unknown voice x')).toBe('unsupported');
+    expect(kokoroEndReason('stopped', 'the lease ran out before it finished')).toBe('lease_cap');
+    expect(kokoroEndReason('stopped', 'stopped before it finished')).toBe('user_stop');
+    expect(kokoroEndReason('failed', 'something')).toBe('other');
   });
 });
 

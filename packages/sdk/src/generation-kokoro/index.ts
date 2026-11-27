@@ -9,23 +9,26 @@
  * only, params `{ voice, speed? }` only, English only (kokoro-js phonemizes English), within the
  * job's `maxBytes` and the 64 KB meta limit.
  */
-import type {
-  Generation,
-  GenerationFormat,
-  GenerationJob,
-  GenerationModel,
+import {
+  type Generation,
+  type GenerationEndReason,
+  GenerationError,
+  type GenerationFormat,
+  type GenerationJob,
+  type GenerationModel,
 } from '../generation.js';
 import { narrationSentences } from './sentences.js';
 import type {
   KokoroDevice,
   KokoroSegment,
+  KokoroStage,
   KokoroTiming,
   WorkerReply,
   WorkerRequest,
 } from './shared.js';
 
 export { narrationSentences } from './sentences.js';
-export type { KokoroDevice, KokoroSegment, KokoroTiming } from './shared.js';
+export type { KokoroDevice, KokoroSegment, KokoroStage, KokoroTiming } from './shared.js';
 
 /** The model and version this runner generates with (what devices claim and sets must ask for). */
 export const KOKORO_MODEL: GenerationModel = { model: 'kokoro', modelVersion: 'v1.0' };
@@ -143,6 +146,45 @@ export class KokoroSkip extends Error {
   }
 }
 
+/**
+ * A narration that failed (#813): the model didn't load or speak, the encoder failed, or the worker
+ * crashed (`worker`, e.g. out of memory). `stage` picks the attempt's end reason.
+ */
+export class KokoroError extends Error {
+  constructor(
+    message: string,
+    readonly stage: KokoroStage,
+  ) {
+    super(message);
+    this.name = 'KokoroError';
+  }
+}
+
+/**
+ * The #813 end reason of a job a browser or desktop runner ended with `outcome`, its local `reason`
+ * text and, for a failure, the error: the vocabulary `POST …/generation/events` takes, shared so
+ * every runner names an end the same way.
+ */
+export function kokoroEndReason(
+  outcome: 'submitted' | 'skipped' | 'stopped' | 'failed',
+  reason: string | null,
+  err?: unknown,
+): GenerationEndReason {
+  if (outcome === 'submitted') return 'submitted';
+  if (err instanceof GenerationError)
+    return err.status === 403 ? 'lease_403' : err.status >= 500 ? 'server_5xx' : 'server_4xx';
+  if (err instanceof TypeError) return 'network';
+  if (err instanceof KokoroError) return err.stage === 'encode' ? 'encode_error' : 'model_error';
+  const stage = (err as { stage?: unknown } | undefined)?.stage;
+  if (stage === 'synth' || stage === 'load') return 'model_error';
+  if (stage === 'encode') return 'encode_error';
+  const text = reason ?? '';
+  if (outcome === 'skipped')
+    return /exceed/.test(text) ? 'too_large' : /lease/.test(text) ? 'lease_cap' : 'unsupported';
+  if (outcome === 'stopped') return /lease/.test(text) ? 'lease_cap' : 'user_stop';
+  return /network|fetch/i.test(text) ? 'network' : 'other';
+}
+
 export interface KokoroProgress {
   /** Sentences done, of `sentences`. */
   sentence: number;
@@ -174,22 +216,66 @@ export interface KokoroResult {
 export class KokoroRunner {
   private worker: Worker | null = null;
   private ids = 0;
+  private loadedOn: KokoroDevice | null = null;
 
   constructor(private readonly opts: KokoroRunnerOptions) {}
 
-  /** Download (unless cached) and load the model, e.g. once the user agreed to the download. */
-  load(onLoading?: (progress: number) => void): Promise<void> {
+  /** Where the model runs once loaded (WebGPU falls back to WebAssembly), else null. */
+  get device(): KokoroDevice | null {
+    return this.loadedOn;
+  }
+
+  /**
+   * The worker, started when needed. `onCrash` hears it die (an uncaught error, e.g. out of memory,
+   * or a module that failed to load); it is then dropped, so the next job starts a new one.
+   */
+  private start(onCrash: (err: KokoroError) => void): { w: Worker; off: () => void } {
     this.worker ??= this.opts.createWorker();
     const w = this.worker;
+    const onError = (e: Event) => {
+      if (e.type === 'error') e.preventDefault();
+      if (this.worker === w) this.dispose();
+      const message = (e as ErrorEvent).message;
+      const what = typeof message === 'string' && message ? `: ${message}` : '';
+      onCrash(
+        new KokoroError(
+          e.type === 'error'
+            ? `the model worker crashed${what}`
+            : 'unreadable message from the model worker',
+          'worker',
+        ),
+      );
+    };
+    w.addEventListener('error', onError);
+    w.addEventListener('messageerror', onError);
+    return {
+      w,
+      off: () => {
+        w.removeEventListener('error', onError);
+        w.removeEventListener('messageerror', onError);
+      },
+    };
+  }
+
+  /** Download (unless cached) and load the model, e.g. once the user agreed to the download. */
+  load(onLoading?: (progress: number) => void): Promise<void> {
     const id = ++this.ids;
     return new Promise<void>((resolve, reject) => {
+      const { w, off } = this.start((err) => {
+        w.removeEventListener('message', onMessage);
+        off();
+        reject(err);
+      });
       const onMessage = (e: MessageEvent<WorkerReply>) => {
         const msg = e.data;
         if (msg.type === 'loading') return onLoading?.(msg.progress);
         if (msg.id !== id || (msg.type !== 'loaded' && msg.type !== 'error')) return;
         w.removeEventListener('message', onMessage);
-        if (msg.type === 'loaded') resolve();
-        else reject(new Error(msg.message));
+        off();
+        if (msg.type === 'loaded') {
+          this.loadedOn = msg.device ?? this.loadedOn;
+          resolve();
+        } else reject(new KokoroError(msg.message, msg.stage ?? 'load'));
       };
       w.addEventListener('message', onMessage);
       w.postMessage({ type: 'load', id, device: this.opts.device } satisfies WorkerRequest);
@@ -220,13 +306,13 @@ export class KokoroRunner {
     const capAt = job.leaseExpiresAt - LEASE_MS + LEASE_CAP_MS;
     // Pace is measured from the end of the model's download, which can take minutes on a first run
     let started = Date.now();
-    this.worker ??= this.opts.createWorker();
-    const w = this.worker;
     const id = ++this.ids;
     return new Promise<KokoroResult>((resolve, reject) => {
+      const { w, off } = this.start((err) => finish(() => reject(err)));
       const finish = (fn: () => void) => {
         w.removeEventListener('message', onMessage);
         signal?.removeEventListener('abort', onAbort);
+        off();
         fn();
       };
       const cancel = () => w.postMessage({ type: 'cancel' } satisfies WorkerRequest);
@@ -256,6 +342,7 @@ export class KokoroRunner {
             finish(() => reject(new KokoroSkip(job, 'too slow to finish within the lease')));
           }
         } else if (msg.type === 'done') {
+          this.loadedOn = msg.device ?? this.loadedOn;
           const meta = { segments: msg.segments };
           const problem =
             msg.file.size > job.maxBytes
@@ -270,7 +357,11 @@ export class KokoroRunner {
           );
         } else if (msg.type === 'error') {
           finish(() =>
-            reject(msg.skip ? new KokoroSkip(job, msg.message) : new Error(msg.message)),
+            reject(
+              msg.skip
+                ? new KokoroSkip(job, msg.message)
+                : new KokoroError(msg.message, msg.stage ?? 'synth'),
+            ),
           );
         }
       };
@@ -292,6 +383,7 @@ export class KokoroRunner {
   dispose(): void {
     this.worker?.terminate();
     this.worker = null;
+    this.loadedOn = null;
   }
 }
 
@@ -303,8 +395,11 @@ export type KokoroEvent =
   | { type: 'generated'; job: GenerationJob; result: KokoroResult }
   | { type: 'submitted'; job: GenerationJob; submitted: number }
   | { type: 'skipped'; job: GenerationJob; reason: string }
-  /** `contributeKokoroApps` only: a claimed job that failed (e.g. its upload never got through). */
-  | { type: 'failed'; job: GenerationJob; reason: string };
+  /**
+   * `contributeKokoroApps` only: a claimed job that failed (e.g. its upload never got through),
+   * with the error, for `kokoroEndReason`.
+   */
+  | { type: 'failed'; job: GenerationJob; reason: string; error: unknown };
 
 type Turn =
   | { outcome: 'submitted'; job: GenerationJob }
@@ -433,7 +528,12 @@ export async function contributeKokoroApps(opts: {
         } catch (err) {
           const job = (err as { failedJob?: GenerationJob | null }).failedJob;
           if (!job || (err as Error).message === 'Not signed in.') throw err;
-          emit({ type: 'failed', job, reason: err instanceof Error ? err.message : String(err) });
+          emit({
+            type: 'failed',
+            job,
+            reason: err instanceof Error ? err.message : String(err),
+            error: err,
+          });
           turn = { outcome: 'failed', job };
         }
         if (turn.outcome !== 'no-work') break;
