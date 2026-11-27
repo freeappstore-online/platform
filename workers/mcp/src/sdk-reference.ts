@@ -348,7 +348,7 @@ await fas.generation.openWork()                 // this app's sets the user coul
 // Public, no sign-in
 const artifacts = await fas.generation.manifest(set.id)  // [{ key, url, metaUrl?, contentType, durationMs, sha256, ... }]
 \`\`\`
-\`submit(job, file, { meta?, attestation? })\` uploads one result against the job's lease. Uploads stay private until verified (format, size, duration, transcript, optional replicas).`,
+\`submit(job, file, { meta?, attestation? })\` uploads one result against the job's lease. Uploads stay private until verified (format, size, duration, optional replicas; no AI compute).`,
   hooks: `## React Hooks
 \`\`\`tsx
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'

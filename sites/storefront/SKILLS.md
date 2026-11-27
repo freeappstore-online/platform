@@ -633,15 +633,15 @@ bridge.setEnabled(false); // when the user turns AI access off
 
 Apps that need many pregenerated audio files (narration, phrase audio) can have signed-in users' devices make them
 with a local model (`fas.generation`). The app owner (or the app repo's CI with GitHub OIDC) creates a set and jobs;
-contributors' devices claim, generate and upload; the server verifies each upload with Whisper and publishes the first
-good one write-once to a public manifest. Players should fall back to bundled audio when an artifact is missing.
+contributors' devices claim, generate and upload; the server checks each upload's container, duration and timings (no
+AI compute) and publishes the first good one write-once to a public manifest. People judge the audio: the contributor
+reports Good / Not good on their device and the owner reviews it in the console. Players should fall back to bundled audio when an artifact is missing.
 
 - Runners exist only for `model: 'kokoro'`, `modelVersion: 'v1.0'`, `formats: ['audio/mp4']`, `params: { voice, speed? }`:
   the Android and iOS companions (all Kokoro v1.0 voices, Mandarin `zf_*`/`zm_*` included) and the browser runner
   `@freeappstore/sdk/generation-kokoro` (English voices only). A set naming any other model is accepted but never claimed.
-- Set `language` (BCP 47: `en`, `es`, `zh`, …) on non-English sets. Chinese and other scripts without spaces are
-  verified by character error rate; short phrases pass, and a reference of up to 3 characters may be heard with one
-  extra or changed character (`对。` as `对呀`).
+- Set `language` (BCP 47: `en`, `es`, `zh`, …) on non-English sets. It picks the default characters-per-second band
+  (Chinese and Japanese are slower), and audio up to 3 s is never too long, so short phrases such as `对。` pass.
 - Need another model? Open an issue on `freeappstore-online/platform`. Don't promise a model no runner supports.
 
 Full contract: https://docs.freeappstore.online/community-generation/ and the `fas.generation` section of
