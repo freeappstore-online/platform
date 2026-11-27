@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -181,13 +183,18 @@ private fun ContributeModes(state: CompanionState, actions: CompanionActions) {
     val canRun = state.contributing == null && state.contributeApps.isNotEmpty() && state.model == ModelState.INSTALLED
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         SegmentedButton(!off && state.contributeMode != "Run now", { if (off) actions.contributeSettings(state.contributeSettings.copy(off = false)) },
-            SegmentedButtonDefaults.itemShape(0, 3)) { Text("Auto") }
+            SegmentedButtonDefaults.itemShape(0, 3), icon = {}) { ModeLabel("Auto") }
         SegmentedButton(state.contributeMode == "Run now", { if (canRun) actions.contributeNow() }, SegmentedButtonDefaults.itemShape(1, 3),
-            enabled = canRun || state.contributeMode == "Run now") { Text("Run now") }
+            enabled = canRun || state.contributeMode == "Run now", icon = {}) { ModeLabel("Run now") }
         SegmentedButton(off, { if (!off) actions.contributeSettings(state.contributeSettings.copy(off = true)) },
-            SegmentedButtonDefaults.itemShape(2, 3)) { Text("Off") }
+            SegmentedButtonDefaults.itemShape(2, 3), icon = {}) { ModeLabel("Off") }
     }
 }
+
+/** One line at any font size, shrinking to fit (#806), like the tab labels. */
+@Composable
+private fun ModeLabel(text: String) = Text(text, maxLines = 1, softWrap = false,
+    autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = LocalTextStyle.current.fontSize))
 
 /** Every job this phone tried, newest first and by day, filtered by status and app; pull to refresh the verdicts. */
 @OptIn(ExperimentalMaterial3Api::class)
