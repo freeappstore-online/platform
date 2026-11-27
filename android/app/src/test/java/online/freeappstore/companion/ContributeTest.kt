@@ -660,8 +660,8 @@ class ContributeTest {
         assertEquals("never another origin", emptyList<Segment>(), client.segments("https://example.com/v1/apps/books/generation/artifacts/j1/meta"))
     }
     @Test fun activityFiltersPutEachStatusUnderOne() {
-        val of = listOf("accepted", "uploading", "pending", "rejected", "superseded", "skipped", "failed").associateWith { ContributionFilter.of(it) }
-        assertEquals(mapOf("accepted" to ContributionFilter.ACCEPTED, "uploading" to ContributionFilter.CHECKING, "pending" to ContributionFilter.CHECKING,
+        val of = listOf("generating", "accepted", "uploading", "pending", "rejected", "superseded", "skipped", "failed").associateWith { ContributionFilter.of(it) }
+        assertEquals(mapOf("generating" to ContributionFilter.IN_PROGRESS, "accepted" to ContributionFilter.ACCEPTED, "uploading" to ContributionFilter.CHECKING, "pending" to ContributionFilter.CHECKING,
             "rejected" to ContributionFilter.REJECTED, "superseded" to ContributionFilter.NOT_DONE, "skipped" to ContributionFilter.NOT_DONE,
             "failed" to ContributionFilter.NOT_DONE), of)
         assertTrue(of.keys.all { ContributionFilter.ALL.matches(it) })
@@ -682,6 +682,47 @@ class ContributeTest {
         assertEquals("No connection.", why(ready.copy(online = false, unmetered = false)))
         assertEquals("Idle", contributeStatus(ready.copy(contributeAnyTime = true, plugged = false, unmetered = false)).first)
     }
+    /** #835: the job is on the record from the claim, its record so far updated each sentence, then it takes its final status. */
+    @Test fun theJobInHandIsInProgressWithItsLiveRecord() {
+        api.jobs += job("j1", "One. Two.")
+        val seen = mutableListOf<Pair<String, JSONObject>>()
+        val watching = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio {
+                seen += log.rows["j1"]!!.status to log.attempts["j1"]!!; t += 2_000; return Audio(FloatArray(12_000), 24_000)
+            }
+        }
+        val cpu = ArrayDeque(listOf(100L, 300L, 600L, 900L, 2_200L, 2_600L))
+        val probes = DeviceProbes(device = "Google Pixel 10a", cpuMs = { cpu.removeFirst() })
+        val kept = KeptAudio(File(dir, "kept"))
+        var uploading: Pair<String, File?>? = null
+        api.onUpload = { uploading = log.rows["j1"]!!.status to kept.audio("j1") }
+        assertEquals(1, Contributor(GenerationClient(api) { "ndev_test" }, log, watching, encoder, dir, now = { t }, sleep = sleep, probes = probes, kept = kept).run(books, { true }))
+        assertEquals(listOf("generating", "generating"), seen.map { it.first })
+        val (_, second) = seen[1]
+        assertEquals("kokoro v1.0", second.getString("model"))
+        assertEquals(2, second.getInt("sentence")); assertEquals(2, second.getInt("sentences"))
+        assertEquals("Google Pixel 10a", second.getString("device"))
+        assertEquals(2_000L, second.getLong("wallMs")); assertEquals(800L, second.getLong("cpuMs"))
+        assertEquals(now + 15 * 60_000, second.getLong("leaseExpiresAt"))
+        assertFalse("never sent while it runs", second.has("reason"))
+        assertEquals("the audio is playable once encoded, before the upload", "uploading", uploading!!.first)
+        assertNotNull(uploading!!.second)
+        assertEquals("pending", log.rows["j1"]!!.status)
+        assertEquals("submitted", log.attempts["j1"]!!.getString("reason"))
+        assertEquals("only the final record is sent", 1, api.events.size)
+        assertEquals(listOf("Model" to "kokoro v1.0", "Progress" to "Sentence 2 of 2 · 50%", "Lease expires" to Format.time(now + 15 * 60_000),
+            "Runner" to "android", "Device" to "Google Pixel 10a", "Wall time" to "2.0 s", "CPU time" to "800 ms"), attemptLines(second))
+    }
+    /** #835: a job whose run stops part-way leaves In progress with its end reason. */
+    @Test fun aStoppedJobLeavesInProgress() {
+        api.jobs += job("j1")
+        var go = true
+        val stopping = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
+        }
+        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run(books, { go })
+        assertEquals("skipped" to "stopped", log.rows["j1"]!!.let { it.status to it.reason })
+    }
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))
         assertTrue(Regex("^[0-9a-f]{64}$").matches(KokoroModel.SHA256))
@@ -699,7 +740,7 @@ class ContributeTest {
         }
         val slow = { f: File, rate: Int -> val sink = encoder(f, rate); object : AudioSink by sink { override fun write(samples: FloatArray) { t += 50; sink.write(samples) } } }
         api.onUpload = { t += 700 }
-        val cpu = ArrayDeque(listOf(100L, 2_600L))
+        val cpu = ArrayDeque(listOf(100L, 200L, 300L, 400L, 500L, 2_600L)) // the start, the record so far at the claim, each sentence and the upload (#835), the end
         val readings = ArrayDeque(listOf(DeviceReading(80, true, "none"), DeviceReading(78, false, "light")))
         val memory = ArrayDeque(listOf(100L, 150L, 120L, 110L))
         val foreground = ArrayDeque(listOf(false, true))

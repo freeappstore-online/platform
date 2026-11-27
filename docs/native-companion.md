@@ -145,10 +145,14 @@ and verifies every upload; the phone is never trusted.
   server sends no `wer`; a version 5 or 6 table keeps an unused `wer` column. Cleared by **Disconnect**.
 - **Screens** (#820): the **Contribute** tab is one status card (running with app, job, sentence n of N and speed as
   seconds of audio per second of work; or paused or idle and why: no model, no apps, not plugged in, no connection, not on
-  Wi‑Fi) with **Run now** / **Stop**, and today's counts (accepted, checking, rejected, not done) as chips that open
+  Wi‑Fi) with **Run now** / **Stop**, and today's counts (in progress, accepted, checking, rejected, not done) as chips that open
   **Activity** filtered. **Activity** lists every job this phone tried, newest first and by day, with status chips (All ·
-  Accepted · Checking · Rejected · Not done; "Not needed" counts as Not done) and app chips, and pull to refresh the
-  verdicts. A row opens the job: app, key, input preview, time, length and size, the phone's reason or the server's
+  In progress · Accepted · Checking · Rejected · Not done; "Not needed" counts as Not done) and app chips, and pull to refresh the
+  verdicts. **In progress** (#835): a job is on the record as `generating` from its claim, its attempt record replaced at
+  each sentence by the record so far (model, sentence n of N, wall and CPU time so far, device, lease expiry; kept on the
+  phone, never sent); its detail follows it live (the screen re-reads every 2 s) and plays its audio once encoded, before
+  the upload. A run that starts finds no other run live, so it closes any `generating` row left by a killed run as
+  `skipped` with reason `interrupted`. A row opens the job: app, key, input preview, time, length and size, the phone's reason or the server's
   verdict and reason, and for an accepted job **Play**, which streams `artifact.url` and highlights the
   sentence being spoken in the job's whole `input.text` (fetched from the submissions route when the detail opens; the
   stored preview when offline) from the `artifact.metaUrl` timings. For a job this phone uploaded, **Your report**

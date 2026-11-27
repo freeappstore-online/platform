@@ -591,6 +591,20 @@ class CompanionTest {
     }
 
     // On-device sharing history (#649), ported from PAS (iOS LocalStoreTests).
+    /** #835: a job left `generating` by a killed run is closed as not done; it never counts as contributed. */
+    @Test fun anInterruptedJobIsClosedOnTheNextRun() {
+        val local = store()
+        local.record(Contribution("j1", "books", "book/1", 10, "generating", "", "It was a bright cold day."))
+        local.attempt("j1", JSONObject().put("jobId", "j1").put("sentence", 3).put("sentences", 40))
+        local.record(Contribution("j2", "books", "book/2", 20, "pending"))
+        assertEquals(1, local.contributedSince("books", 0))
+        assertEquals(1, local.closeInterrupted())
+        assertEquals("skipped" to "interrupted", local.contributions().single { it.jobId == "j1" }.let { it.status to it.reason })
+        assertEquals("the record so far stays", 3, JSONObject(local.contributions().single { it.jobId == "j1" }.record!!).getInt("sentence"))
+        assertTrue(local.handled("j1"))
+        assertEquals(0, local.closeInterrupted())
+        local.clear(); local.close()
+    }
     @Test fun enqueueWritesHistoryPerAppAndAcknowledgeKeepsIt() {
         val local = store()
         local.enqueue(TrackPoint("p", 10, 1.0, 2.0, 5f, listOf("walk-g", "run-g")))

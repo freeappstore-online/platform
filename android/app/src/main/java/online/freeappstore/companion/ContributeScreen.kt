@@ -34,7 +34,7 @@ internal fun contributeDisclosure(name: String) =
 
 /** The labels of [Contribution.status]. */
 internal val contributionLabels = mapOf(
-    "uploading" to "Uploading", "pending" to "Being checked", "accepted" to "Accepted", "rejected" to "Rejected",
+    "generating" to "In progress", "uploading" to "Uploading", "pending" to "Being checked", "accepted" to "Accepted", "rejected" to "Rejected",
     "superseded" to "Not needed", "skipped" to "Skipped", "failed" to "Failed",
 )
 
@@ -47,12 +47,16 @@ internal fun contributionDetail(c: Contribution): String = listOfNotNull(
     "not retried on this phone".takeIf { c.status == "skipped" || c.status == "failed" },
 ).joinToString(" · ")
 
-/** Activity's status filters (#820). Each status is under one: superseded ("Not needed") is Not done. */
+/**
+ * Activity's status filters (#820). Each status is under one: superseded ("Not needed") is Not done, and the job being
+ * generated now is In progress (#835).
+ */
 internal enum class ContributionFilter(val label: String) {
-    ALL("All"), ACCEPTED("Accepted"), CHECKING("Checking"), REJECTED("Rejected"), NOT_DONE("Not done");
+    ALL("All"), IN_PROGRESS("In progress"), ACCEPTED("Accepted"), CHECKING("Checking"), REJECTED("Rejected"), NOT_DONE("Not done");
     fun matches(status: String) = this == ALL || of(status) == this
     companion object {
         fun of(status: String) = when (status) {
+            "generating" -> IN_PROGRESS
             "accepted" -> ACCEPTED
             "uploading", "pending" -> CHECKING
             "rejected" -> REJECTED
@@ -205,6 +209,7 @@ private fun ContributeActivity(state: CompanionState, page: ContributePage.Activ
 /**
  * The attempt record's numbers for the job detail (#827), in reading order; fields it does not have are left out. Times
  * are wall time per stage, CPU the process CPU time over the attempt, real-time factor synthesis time over audio length.
+ * While the job runs (#835) the record so far adds the model, the sentence being spoken and the lease's expiry.
  */
 internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
     fun text(key: String) = if (record.has(key)) record.get(key).toString() else null
@@ -214,7 +219,11 @@ internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
         val charging = if (record.has("charging$at")) if (record.getBoolean("charging$at")) "charging" else "on battery" else null
         return listOfNotNull(battery, charging, text("thermal$at")?.let { "thermal $it" }).joinToString(" · ").ifBlank { null }
     }
+    val sentences = record.optInt("sentences")
     return listOf(
+        "Model" to text("model"),
+        "Progress" to if (sentences > 0) record.getInt("sentence").let { "Sentence $it of $sentences · ${(it - 1) * 100 / sentences}%" } else null,
+        "Lease expires" to if (record.has("leaseExpiresAt")) Format.time(record.getLong("leaseExpiresAt")) else null,
         "Runner" to text("runner"), "App version" to text("appVersion"), "OS" to text("os"), "Device" to text("device"),
         "Network" to text("network"),
         "Ran" to if (record.has("background")) if (record.getBoolean("background")) "In the background at times" else "In the foreground" else null,
@@ -227,7 +236,8 @@ internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
 }
 
 /**
- * One job: what it was, what happened to it, how the attempt went, its audio (kept on this phone, or once accepted) and,
+ * One job: what it was, what happened to it (or while it runs, how far it is, #835: the screen refreshes every 2 s), how
+ * the attempt went, its audio (kept on this phone, or once accepted) and,
  * for an upload, this phone's report on it (#831).
  */
 @Composable
@@ -256,7 +266,7 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
                 }
             }
         }
-        val url = remember(c.jobId) { keptAudio(c) } ?: c.artifactUrl?.takeIf { c.status == "accepted" }
+        val url = remember(c.jobId, c.status) { keptAudio(c) } ?: c.artifactUrl?.takeIf { c.status == "accepted" }
         if (url != null) Playback(c, url, loadPlayback)
         else if (c.inputPreview.isNotBlank()) InputText(c.inputPreview, null)
         if (c.submissionId != null) ReportCard(c, sendReport)

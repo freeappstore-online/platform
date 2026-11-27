@@ -50,6 +50,8 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             return@withContext Result.success()
         }
         stopRequested = false
+        // No other run is live (the lock), so a job still `generating` was left by a run that was killed (#835).
+        local.closeInterrupted().takeIf { it > 0 }?.let { Log.i(TAG, "Closed $it interrupted job(s)") }
         val anyTime = local.contributeAnyTime
         var checkedAt = -1_000L
         var power = true

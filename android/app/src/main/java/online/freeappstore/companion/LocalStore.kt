@@ -332,6 +332,12 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     @Synchronized override fun attempt(jobId: String, record: JSONObject) {
         writableDatabase.update("generation_jobs", ContentValues().apply { put("record", record.toString()) }, "job_id = ?", arrayOf(jobId))
     }
+    /**
+     * Closes a `generating` row (#835) left by a run that never finished it (the process was killed), as `skipped`
+     * (`interrupted`): called by a run before it claims, when no other run can hold one.
+     */
+    @Synchronized fun closeInterrupted(): Int = writableDatabase.update("generation_jobs",
+        ContentValues().apply { put("status", "skipped"); put("reason", "interrupted") }, "status = 'generating'", null)
     /** Newest first: every job this phone tried, up to [limit] (#820). */
     @Synchronized fun contributions(limit: Int = 2_000): List<Contribution> = readableDatabase.rawQuery(
         "SELECT job_id, app_id, job_key, at, status, reason, input_preview, duration_ms, bytes, artifact_url, meta_url, record, submission_id, report FROM generation_jobs ORDER BY at DESC LIMIT ?",
@@ -350,7 +356,7 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     fun databaseBytes(): Long = context.getDatabasePath(databaseName).length()
     /** Jobs uploaded for [appId] since [from], whatever the verdict. */
     @Synchronized fun contributedSince(appId: String, from: Long): Int = readableDatabase.rawQuery(
-        "SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('skipped', 'failed')", arrayOf(appId, from.toString()))
+        "SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('generating', 'skipped', 'failed')", arrayOf(appId, from.toString()))
         .use { it.moveToFirst(); it.getInt(0) }
 
     private fun <T> transaction(body: (SQLiteDatabase) -> T): T {
