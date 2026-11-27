@@ -78,6 +78,17 @@ highlighting, for the 20 latest attempts it kept (rejected ones too): the consol
 Activity job detail. The owner sees each upload's record, and attempts that never uploaded, in the
 Generation tab's jobs.
 
+Each runner takes a **capability report** when a run starts and logs it (#813): the runner and its version, OS
+and device, whether the model is installed, the accelerator (the phones and desktop run sherpa-onnx on the CPU;
+the browser names WebGPU or WebAssembly, asked for and actually used, since WebGPU falls back), the AAC encoder,
+free storage, and battery, power and thermal state. **Copy diagnostics** (Android and iOS Contribute settings, the
+console Generate page's Settings, the desktop's Contribute) copies that report, how the last run ended and the 50
+latest jobs with their status, reasons and attempt records, for a bug report. It stays on the device until pasted,
+and holds no input text, audio, report notes or credentials. Attempts that end before any claim (no model, no
+apps, a condition holding) have no job, so the server never sees them; the run's end is in the diagnostics. The
+browser and desktop runners name an end with the SDK's `kokoroEndReason`: a model that fails to load or speak,
+or a model worker that crashes, is `model_error`, and an encoder failure is `encode_error`.
+
 ## API (base `https://api.freeappstore.online/v1`)
 
 Owner: the app owner's session (the app's own or a console session), or a GitHub Actions OIDC token

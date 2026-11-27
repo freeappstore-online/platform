@@ -167,7 +167,9 @@ in settings.
 - **Report a problem**: open an issue on [GitHub](https://github.com/freeappstore-online/platform/issues) or email
   support@freeappstore.online. Say which app and version. For a Contribute problem, attach the item's **Save record**
   (desktop), **Share record** (phones) or **Download record** (console) file. Check it first: it contains the job's
-  text, your device details and, if kept, the audio.
+  text, your device details and, if kept, the audio. For a problem with Contribute as a whole, paste **Copy
+  diagnostics** (Contribute settings on the phones and in the console, Contribute on the desktop): what the device can
+  run and the 50 latest jobs' reasons and records, with no text, audio or sign-in details.
 
 ## Moving data between browser and desktop
 

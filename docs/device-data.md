@@ -122,7 +122,8 @@ period Cloudflare sets.
 
 Desktop **Disconnect** / **Sign out** deletes the history, kept audio and opt-ins, but not the model (#848). The
 phones' **Disconnect** clears the opt-ins, the record and the kept audio. **Save record** (desktop), **Share record** (phones) and
-**Download record** (console) write a file only where you choose.
+**Download record** (console) write a file only where you choose. **Copy diagnostics** puts the capability report and
+the latest jobs' reasons and records on the clipboard (no text, audio, notes or credentials); nothing is sent.
 
 **Not covered here**: a private pilot with non-public artifacts (#786, #789) is planned, not built. It will be described
 before it runs.
