@@ -2,7 +2,7 @@
 // CI sets CURRENT_PROJECT_VERSION to the workflow run number, FAS_COMMIT to the short commit SHA and FAS_DEV_BUILD
 // to NO. A local build keeps build 1 and says "dev"; its commit comes from the untracked Commit.xcconfig, which the
 // scheme's build pre-action writes (scripts/write-commit.sh).
-MARKETING_VERSION = 0.1.0
+MARKETING_VERSION = 0.2.0
 CURRENT_PROJECT_VERSION = 1
 FAS_COMMIT = dev
 FAS_DEV_BUILD = YES
