@@ -98,7 +98,7 @@ jobs:
   # skipped cleanly while they are absent. The repo is private: they must be repo-level secrets, not org secrets.
   release-gate:
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/android-v')) && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:

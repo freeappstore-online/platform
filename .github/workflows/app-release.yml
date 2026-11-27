@@ -2,8 +2,8 @@ name: App release
 
 # Cuts a release of the Android or iOS app (#832, docs/versioning.md). It writes the version to the app's version
 # file on main (scripts/app-release.sh cut), tags that commit <app>-v<version>, publishes a GitHub release whose notes
-# list the app's commits since its previous release, and runs the app's build workflow on main, which builds that
-# version (Android: signed and uploaded to Play when its secrets and ANDROID_PLAY_PUBLISH_ENABLED are set).
+# list the app's commits since its previous release, and runs the app's build workflow on that tag (#846), so a commit
+# landing on main meanwhile never ships under this version (Android: signed and uploaded to Play when its secrets and ANDROID_PLAY_PUBLISH_ENABLED are set).
 # The desktop app has its own release workflow: desktop-release.yml.
 on:
   workflow_dispatch:
@@ -49,7 +49,7 @@ jobs:
       - name: Build the release
         run: |
           if [ "$APP" = android ]; then
-            gh workflow run android.yml --ref main -f publish=${{ vars.ANDROID_PLAY_PUBLISH_ENABLED == 'true' }} -f status=completed
+            gh workflow run android.yml --ref "$TAG" -f publish=${{ vars.ANDROID_PLAY_PUBLISH_ENABLED == 'true' }} -f status=completed
           else
-            gh workflow run ios.yml --ref main
+            gh workflow run ios.yml --ref "$TAG"
           fi
