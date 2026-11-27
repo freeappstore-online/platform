@@ -162,6 +162,7 @@ system applies it every time. **Best-effort**: it depends on a signal the device
 | CPU level (Light, Balanced, Full: threads and rests) | Hard | Hard | Hard | None (one Web Worker) |
 | Daily maximum (jobs, minutes), quiet hours | Hard: checked before each claim and between sentences; the system picks start times | Hard: same; iOS picks start times | Hard | None |
 | Jobs at once | One | One | One | One per browser profile |
+| Bandwidth limit | None | None | None | None |
 | Free storage for the voice model | Hard: the download waits for 1,751 MB free (the download, the unpacked model and 1 GB to spare) | Hard: same | Hard: same | Best-effort: the browser's storage estimate must hold the model; the browser may still evict it |
 | Audio kept for playback | The 20 latest attempts | Same | Same | Same |
 | Runs after you leave | When Android schedules it | Only when iOS starts it | While the app runs (tray) and the computer is awake | Only while the tab stays open and the computer is awake |
