@@ -8,6 +8,12 @@ We're rebuilding everyday apps for the web. The web is cheaper to build on and r
 
 For creators it is a free, open-source PWA platform. Every app gets its own subdomain (`yourapp.freeappstore.online`), GitHub repo, auto-deploy pipeline and storefront listing. Apps are MIT licensed and take no payments.
 
+## For users: desktop and phone apps
+
+- **[Desktop and phone apps](devices.md)** -- what the desktop, Android and iPhone apps do, how to start, what keeps running, and troubleshooting
+- **[Where data goes](device-data.md)** -- what those apps store, send and keep, and who sees it
+- **[Desktop and phone roadmap](roadmap.md)** -- product roles, release stages and the ordered backlog
+
 ## For developers
 
 **Start here: [Build your app on the Shell](getting-started.md#build-your-app-on-the-shell).**
@@ -31,6 +37,9 @@ work and recordings, install support, and explicit offline capabilities.
 - **[Limits](platform-limits.md)** -- server-enforced quotas and caps
 - **[Permissions](permissions.md)** -- declare what your app asks the browser for; it's shown on your listing
 - **[Browser Capabilities](capabilities.md)** -- which browser features (mic, camera, sensors, MIDI, USB, workers, wasm…) your app can use
+- **[Native companion](native-companion.md)** -- the phone apps' API: pairing, location grants, Contribute
+- **[Community generation](community-generation.md)** -- devices generate an app's narration; the server checks and publishes it
+- **[Versioning](versioning.md)** -- versions, build numbers and releases of the desktop, Android and iOS apps
 
 ## For AI agents
 

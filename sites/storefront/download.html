@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore</title>
-  <meta name="description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device. Preview builds for Mac, Windows and Linux." />
+  <meta name="description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Preview builds for Mac, Windows and Linux." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore" />
-  <meta property="og:description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device. Preview builds for Mac, Windows and Linux." />
+  <meta property="og:description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Preview builds for Mac, Windows and Linux." />
   <meta property="og:url" content="https://freeappstore.online/download" />
   <meta property="og:image" content="https://freeappstore.online/og-image.png?v=2026-11-18" />
   <meta property="og:image:width" content="1200" />
@@ -21,7 +21,7 @@
     "@id": "https://freeappstore.online/download#page",
     "url": "https://freeappstore.online/download",
     "name": "Download the FreeAppStore desktop app",
-    "description": "The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device.",
+    "description": "The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer.",
     "isPartOf": {
       "@id": "https://freeappstore.online/#website"
     },
@@ -45,7 +45,7 @@
   <main class="container">
     <div class="page-header">
       <h1>FreeAppStore for desktop</h1>
-      <p>Let AI apps like Claude Code work in your FreeAppStore apps, on your computer. Your data stays on your device.</p>
+      <p>Let AI apps like Claude Code work in your FreeAppStore apps, on your computer.</p>
     </div>
     <div class="page-content">
       <section class="dl-primary" aria-labelledby="dl-primary-title">
@@ -67,8 +67,9 @@
       <h2 id="what">What it does</h2>
       <ul>
         <li><strong>AI in your apps:</strong> apps that turn on <strong>Allow AI access</strong> offer tools (for example, the spreadsheet lets an AI read and edit your workbook). An AI app on your computer, such as Claude Code or Claude Desktop, uses those tools through the desktop app.</li>
-        <li><strong>Local only:</strong> the desktop app talks to AI apps on this computer only (127.0.0.1), protected by a key only you have. FreeAppStore keeps no copy of your app data.</li>
-        <li><strong>Apps in their own windows:</strong> open any FreeAppStore app from the desktop app's Store, or keep using it in your browser.</li>
+        <li><strong>Local connection:</strong> the desktop app talks to AI apps on this computer only (127.0.0.1), protected by a key only you have. FreeAppStore's servers never see these requests and keep no copy of your app data. Your AI app does receive what the tools return; if it uses a cloud model, it sends that to its provider.</li>
+        <li><strong>Apps in their own windows:</strong> open any FreeAppStore app from the desktop app's Store, or keep using it in your browser. Desktop windows and your browser keep separate copies of app data.</li>
+        <li><strong>Contribute (optional):</strong> connect this computer to your account and it can make narration for store apps that ask for it, with a voice model that runs on your computer. Nothing is generated until you choose apps and download the model (350 MB). <a href="/privacy#contribute">What it sends and who sees it</a>.</li>
       </ul>
 
       <h2 id="first-launch">First launch</h2>
@@ -100,7 +101,8 @@
       <p>FreeAppStore keeps running in the background from the menu bar (the system tray on Windows) after you close its window, and opens at login; you can turn that off on the Home screen. <strong>Pause AI access</strong>, on the Home screen or in the menu-bar menu, stops every AI call until you resume. To quit, choose <strong>Quit FreeAppStore</strong> from the menu-bar menu. Another AI app? Use <strong>Manual setup</strong> at the bottom of the Home screen.</p>
 
       <h2 id="preview">About this preview</h2>
-      <p>This is an early build for trying things out: it doesn't update itself yet, so come back here for new versions. Signed installers and automatic updates are coming. Found a problem? <a href="https://github.com/freeappstore-online/platform/issues">Open an issue</a>.</p>
+      <p>This is an early build for trying things out. On Windows and Linux it updates itself. On Mac it tells you when a new version is out and opens its download, because the Mac build isn't signed yet. Signed installers are coming. Your version is on the <strong>Account</strong> page. Found a problem? <a href="https://github.com/freeappstore-online/platform/issues">Open an issue</a> with that version.</p>
+      <p>What each app can and can't do, and what to do when something looks wrong: <a href="https://docs.freeappstore.online/devices/">Desktop and phone apps guide</a>. What it stores and sends: <a href="/privacy#desktop">privacy policy</a>.</p>
 
       <p><a href="/">Browse free apps</a> · <a href="/install">Install apps without the desktop app</a> · <a href="https://docs.freeappstore.online/mcp/">Docs: local AI access</a></p>
     </div>

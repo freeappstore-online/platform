@@ -1,6 +1,6 @@
 # FreeAppStore iOS companion
 
-Swift + SwiftUI client of the `/v1/native/*` API that keeps recording location with the iPhone locked, for the FAS apps you enable. Ported from the PAS iOS companion (`proappstore-online/platform` `ios/`).
+Swift + SwiftUI client of the `/v1/native/*` API: Store, location for the FAS apps you enable (kept recording with the iPhone locked), Contribute and Account. Ported from the PAS iOS companion (`proappstore-online/platform` `ios/`). User guide: [docs/devices.md](../docs/devices.md); protocol: [docs/native-companion.md](../docs/native-companion.md).
 
 ## Build and test
 

@@ -6,6 +6,11 @@ Accepted - 2026-11-23. Implements #616 (backend) and #617 (iOS). Adapted from
 [PAS ADR-015](https://github.com/proappstore-online/platform/blob/main/docs/adr/015-native-companion.md)
 and [PAS ADR-016](https://github.com/proappstore-online/platform/blob/main/docs/adr/016-ios-native-companion.md).
 
+Current status (2026-11-27): this record keeps the original, location-only
+decision. Since then the Android app was built (#621), both phone apps gained
+Store, Account and Contribute, and the desktop app pairs with the same protocol.
+See [Desktop and phone apps](../devices.md) and the [roadmap](../roadmap.md).
+
 ## Context
 
 FAS apps are web apps. When the phone locks, iOS Safari suspends the page, so
