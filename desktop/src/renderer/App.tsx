@@ -761,13 +761,16 @@ function HistoryDetail({ item }: { item: HistoryItem }) {
   const markRef = useRef<HTMLElement>(null);
   useEffect(() => {
     let url: string | null = null;
+    let closed = false;
     void desktop.contribute.audio(item.appId, item.jobId).then((kept) => {
+      if (closed) return;
       if (!kept) return setAudio(null);
       url = URL.createObjectURL(new Blob([kept.audio as BlobPart], { type: 'audio/mp4' }));
       const segments = (kept.meta as { segments?: Segment[] }).segments ?? [];
       setAudio({ url, segments });
     });
     return () => {
+      closed = true;
       if (url) URL.revokeObjectURL(url);
     };
   }, [item.appId, item.jobId]);
