@@ -286,6 +286,58 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     expect((await s.claim('u3'))?.key).toBe('a');
   });
 
+  it('a lease that lapsed by interruption gives the job back; a skip or an upload keeps it given up (#841)', async () => {
+    const s = await setup({ verify: false });
+    const setId = await s.createSet({ replicas: 2 });
+    await s.addJobs(
+      setId,
+      ['a', 'b', 'c', 'd'].map((key) => ({ key, input: { text: `${key}.` } })),
+    );
+    const record = (user: string, jobId: string, reason: string) =>
+      s.request('/events', {
+        method: 'POST',
+        user,
+        json: { events: [{ jobId, runner: 'android', reason }] },
+      });
+    // Stopped mid-job (the run ended): the next claim releases it and takes the same job again.
+    const a = (await s.claim('u2'))!;
+    expect(a.key).toBe('a');
+    await record('u2', a.id, 'background_expired');
+    const a2 = (await s.claim('u2'))!;
+    expect(a2.key).toBe('a');
+    expect(a2.leaseToken).not.toBe(a.leaseToken);
+    // The old token can neither extend nor upload; the new one does.
+    const extend = (token: string) =>
+      s.request(`/jobs/${a.id}/lease`, {
+        method: 'POST',
+        user: 'u2',
+        headers: { 'X-Lease-Token': token },
+      });
+    expect((await extend(a.leaseToken)).status).toBe(403);
+    expect((await extend(a2.leaseToken)).status).toBe(200);
+    expect((await s.submit('u2', a.id, a.leaseToken)).status).toBe(403);
+    await s.submissionId(await s.submit('u2', a2.id, a2.leaseToken));
+    // Uploaded: never given to u2 again, so u2 provides one replica at most.
+    const b = (await s.claim('u2'))!;
+    expect(b.key).toBe('b');
+    // Skipped (an unsupported voice), or released with no record: given up.
+    await record('u2', b.id, 'unsupported');
+    const c = (await s.claim('u2'))!;
+    expect(c.key).toBe('c');
+    const d = (await s.claim('u2'))!;
+    expect(d.key).toBe('d');
+    // Ran out unreleased with no record (the app was killed): given back once the lease is over,
+    // before the skipped b and c.
+    s.db.prepare('UPDATE generation_leases SET expires_at = 0 WHERE job_id = ?').run(d.id);
+    expect((await s.claim('u2', { runner: 'tablet-01' }))?.key).toBe('d');
+    // Its new attempt's record says it was too large: given up.
+    s.db.prepare('UPDATE generation_leases SET expires_at = 0 WHERE job_id = ?').run(d.id);
+    await record('u2', d.id, 'too_large');
+    expect(await s.claim('u2', { runner: 'tablet-01' })).toBeNull();
+    // The second replica still goes to another user.
+    expect((await s.claim('u3', { setId }))?.key).toBe('a');
+  });
+
   it("one open lease per runner: a user's devices keep theirs, up to 4 in all (#825)", async () => {
     const s = await setup();
     const setId = await s.createSet();

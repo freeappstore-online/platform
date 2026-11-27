@@ -124,8 +124,16 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   2 hours after the claim; at the cap the call is `409` with the final `leaseExpiresAt`. An invalid,
   used, released or expired lease is `403`. Clients extend when within 5 minutes of expiry
   ([#783](https://github.com/freeappstore-online/platform/issues/783)). Claims, replica counts and
-  uploads all use the extended expiry. A user is never given the same job twice (even after a
-  release or rejection).
+  uploads all use the extended expiry. A user who uploaded for a job is never given it again (even
+  after a rejection), so nobody provides two replicas. A lease that ended without an upload gives
+  the job back to that user only when it was interrupted
+  ([#841](https://github.com/freeappstore-online/platform/issues/841)): the attempt record sent after
+  that claim (`…/events`) says `user_stop`, `unplugged`, `thermal`, `background_expired`, `network`,
+  `lease_403` or `server_5xx`, or, with no record, the lease ran out without being released (the app
+  was closed or killed). Any other end (a skip such as `unsupported` or `too_large`, a failure, the
+  2-hour cap) or a lease released by the runner's next claim with no record keeps the job given up.
+  Taking it again reuses the user's lease on that job with a new token; the old token can no longer
+  extend or upload. A runner that still holds its lease just keeps extending it.
 - One open lease per *runner*, the device holding it
   ([#825](https://github.com/freeappstore-online/platform/issues/825)): claiming again releases
   only that runner's previous lease, so a user's phone, tablet and browsers each keep their own. A
@@ -145,7 +153,8 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 - `…/events` records how each attempt at a job the caller leased went
   ([#813](https://github.com/freeappstore-online/platform/issues/813),
   [#827](https://github.com/freeappstore-online/platform/issues/827)): one record per lease (a resend
-  replaces it; jobs the caller never leased are ignored). `runner` is `android`, `ios`, `browser` or
+  replaces it, and a job taken again after an interruption is one lease, so its next record replaces
+  the earlier one; jobs the caller never leased are ignored). `runner` is `android`, `ios`, `browser` or
   `desktop`; `reason` is the local end: `submitted`, `user_stop`, `unplugged`, `thermal`,
   `background_expired`, `network`, `lease_403`, `lease_cap`, `model_missing`, `model_error`,
   `encode_error`, `too_large`, `unsupported`, `server_4xx`, `server_5xx` or `other`. Optional fields,

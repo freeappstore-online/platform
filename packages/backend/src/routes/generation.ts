@@ -211,14 +211,38 @@ const setRow = (db: D1Database, appId: string, setId: string) =>
     .first<SetRow>();
 
 /**
+ * How an attempt that ended without an upload lets its user take the job again (#841): it was
+ * interrupted (the device's own end reason, #813), not refused. A job the device skipped
+ * (`unsupported`, `too_large`), failed on or ran past the 2-hour cap stays given up.
+ */
+const INTERRUPTED = [
+  'user_stop',
+  'unplugged',
+  'thermal',
+  'background_expired',
+  'network',
+  'lease_403',
+  'server_5xx',
+];
+
+/**
  * Jobs (`j`, of set `s`) the user may be given now: open, in a set that needs
- * no attestation (#732), in an app that has not blocked the user, never leased
- * to the user before, with a free replica slot. Claim and discovery (#794)
- * share it; `user` and `now` name the SQL parameters.
+ * no attestation (#732), in an app that has not blocked the user, with a free
+ * replica slot, and not held by the user. A user holds a job while their lease
+ * on it is open, and for good once it uploaded (so nobody provides two
+ * replicas) or once it ended otherwise than by an interruption (#841): the
+ * attempt's record, sent after this lease was claimed, says how it ended; with
+ * none, a lease that ran out unreleased (the app was closed or killed) was
+ * interrupted and one the runner released by claiming again was skipped.
+ * Claim and discovery (#794) share it; `user` and `now` name the SQL parameters.
  */
 const claimable = (user: string, now: string) => `j.status = 'open' AND s.require_attestation = 0
   AND NOT EXISTS (SELECT 1 FROM generation_blocks b WHERE b.app_id = j.app_id AND b.user_id = ${user})
-  AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.job_id = j.id AND l.user_id = ${user})
+  AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.job_id = j.id AND l.user_id = ${user}
+    AND (l.state = 'used' OR (l.state = 'open' AND l.expires_at > ${now})
+      OR NOT COALESCE((SELECT e.reason IN (${INTERRUPTED.map((r) => `'${r}'`).join(', ')})
+        FROM generation_events e WHERE e.job_id = l.job_id AND e.user_id = l.user_id AND e.created_at >= l.created_at),
+        l.state = 'open')))
   AND (SELECT COUNT(*) FROM generation_leases l WHERE l.job_id = j.id AND l.state = 'open' AND l.expires_at > ${now})
     + (SELECT COUNT(*) FROM generation_submissions x WHERE x.job_id = j.id AND x.status = 'pending') < s.replicas`;
 
@@ -708,8 +732,9 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
   }
   const token = `glt_${nativeRandom()}`;
   // One open lease per runner (#825): a new claim releases this runner's
-  // previous one, whose job that user can never be given again. The user's
-  // other devices keep theirs, up to `userLeases` open leases in all.
+  // previous one, whose job that user is given again only if its attempt record
+  // says it was interrupted (#841). The user's other devices keep theirs, up to
+  // `userLeases` open leases in all.
   await c.env.DB.prepare(
     "UPDATE generation_leases SET state = 'released' WHERE user_id = ? AND runner = ? AND state = 'open'",
   )
@@ -728,6 +753,8 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
   // One statement, so concurrent claims cannot over-assign a job's replicas
   // or exceed the user's lease cap.
   // Sets that require attestation are not claimable until it is verified (#732).
+  // A job taken again after an interruption (#841) reuses the user's lease row
+  // (one per user and job) with a new token: the old one can no longer extend or upload.
   const claimed = await c.env.DB.prepare(
     `INSERT INTO generation_leases (job_id, user_id, app_id, token_hash, state, created_at, expires_at, runner)
      SELECT j.id, ?1, ?2, ?3, 'open', ?4, ?5, ?8
@@ -738,6 +765,9 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
        AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.user_id = ?1 AND l.runner = ?8 AND l.state = 'open' AND l.expires_at > ?4)
        AND (SELECT COUNT(*) FROM generation_leases l WHERE l.user_id = ?1 AND l.state = 'open' AND l.expires_at > ?4) < ?9
      ORDER BY j.created_at, j.rowid LIMIT 1
+     ON CONFLICT (job_id, user_id) DO UPDATE SET token_hash = excluded.token_hash, state = 'open',
+       submission_id = NULL, created_at = excluded.created_at, expires_at = excluded.expires_at,
+       runner = excluded.runner
      RETURNING job_id`,
   )
     .bind(
