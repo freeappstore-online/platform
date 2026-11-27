@@ -443,6 +443,14 @@ private fun ContributeSettings(state: CompanionState, name: (String) -> String, 
                 Labeled("Activity record", storage?.let { byteSize(it.second) } ?: "…")
             }
         }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Troubleshooting", style = MaterialTheme.typography.titleLarge)
+                Text("Copies what this phone can run, how the last run ended and the latest $DIAGNOSTIC_JOBS jobs' records, for a bug report. No text, audio or sign-in details.",
+                    style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = actions.copyDiagnostics) { Text("Copy diagnostics") }
+            }
+        }
         Spacer(Modifier.height(24.dp))
     }
 }

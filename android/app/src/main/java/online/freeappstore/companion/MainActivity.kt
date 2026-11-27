@@ -1,6 +1,8 @@
 package online.freeappstore.companion
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -11,6 +13,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -96,6 +100,8 @@ data class CompanionActions(
     val sendReport: suspend (Contribution, Boolean, String) -> Unit = { _, _, _ -> },
     /** Shares a job's full record and its audio through the share sheet (#843). */
     val shareRecord: (Contribution) -> Unit = {},
+    /** Copies the capability report and the latest jobs' records to the clipboard for a bug report (#813). */
+    val copyDiagnostics: () -> Unit = {},
 )
 
 enum class Tab(val label: String, val icon: Int) {
@@ -200,6 +206,18 @@ class MainActivity : ComponentActivity() {
                     try { startActivity(Intent.createChooser(send, "Share record")) } catch (_: RuntimeException) { error = "Nothing on this phone can share the record." }
                 }
             },
+            copyDiagnostics = {
+                lifecycleScope.launch {
+                    val text = withContext(Dispatchers.IO) {
+                        val local = graph.local
+                        diagnosticsJson(capabilityReport(this@MainActivity, graph.kokoro, local.contributeSettings.cpu), local.contributeLastEnd,
+                            local.contributeSettings, local.contributions(DIAGNOSTIC_JOBS), System.currentTimeMillis()).toString(2)
+                    }
+                    getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("FreeAppStore diagnostics", text))
+                    // Android 13 and later confirm a copy themselves.
+                    if (Build.VERSION.SDK_INT < 33) Toast.makeText(this@MainActivity, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                }
+            },
         )
         // Sharing when any app has a grant or the connection expired, otherwise the Store.
         val initialTab = if (state.expired || state.apps.any { it.grantId != null }) Tab.SHARING else Tab.STORE
@@ -272,8 +290,9 @@ class MainActivity : ComponentActivity() {
         state.apps.find { it.id == id && !state.enabled(it) }?.let { consent = it }
     }
     /** The server's verdicts for every app this phone contributed to or is opted in to. Off the main thread. */
-    private fun refreshVerdicts() =
-        (graph.local.contributeApps() + graph.local.contributedApps()).forEach { runCatching { graph.generation.refresh(it, graph.local) } }
+    private fun refreshVerdicts() = (graph.local.contributeApps() + graph.local.contributedApps()).forEach { app ->
+        runCatching { graph.generation.refresh(app, graph.local) }.onFailure { Log.w("Contribute", "Verdicts for $app not refreshed", it) }
+    }
     private fun refresh() {
         val local = graph.local
         LocationService.notePermission(this, local)

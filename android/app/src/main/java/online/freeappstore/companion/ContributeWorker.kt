@@ -119,6 +119,7 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     count(it - counted); counted = it
                 }, keepGoing = keepGoing)
             }
+            Log.i(TAG, "Capabilities: ${runCatching { capabilityReport(applicationContext, graph.kokoro, settings.cpu) }.getOrElse { "unreadable: $it" }}")
             if (!graph.kokoro.installed) { end = "no_model"; return@withContext Result.success() }
             if (local.contributeApps().isEmpty()) { end = "no_apps"; return@withContext Result.success() }
             foreground = show("Looking for jobs")
@@ -134,7 +135,10 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     uploading = { done = 1.0; count(it) })
                 for (app in local.contributeApps()) {
                     if (!keepGoing()) break
-                    runCatching { contributor.refresh(app, keepGoing) }.onFailure { if (DeviceConnection.expired(it)) throw it }
+                    runCatching { contributor.refresh(app, keepGoing) }.onFailure {
+                        if (DeviceConnection.expired(it)) throw it
+                        Log.w(TAG, "Verdicts for $app not refreshed", it) // the run goes on; Activity refreshes them again
+                    }
                 }
                 // One job from each app in turn (#819), not one app drained before the next.
                 var job = ""
@@ -306,7 +310,9 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             val today = java.time.LocalDate.now().toString()
             val since = maxOf(local.summaryAt, now - 24 * 3_600_000L)
             if (!ContributeSummary.due(ContributeSummary.of(local.contributions(), since), java.time.LocalTime.now().hour, local.summaryDay == today)) return
-            (local.contributeApps() + local.contributedApps()).forEach { runCatching { graph.generation.refresh(it, local) } }
+            (local.contributeApps() + local.contributedApps()).forEach { app ->
+                runCatching { graph.generation.refresh(app, local) }.onFailure { Log.w(TAG, "Verdicts for $app not refreshed", it) }
+            }
             val summary = ContributeSummary.of(local.contributions(), since)
             val manager = context.getSystemService(NotificationManager::class.java)
             manager.createNotificationChannel(NotificationChannel(SUMMARY_CHANNEL, "Contribute summary", NotificationManager.IMPORTANCE_LOW))

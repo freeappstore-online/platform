@@ -389,7 +389,7 @@ class Contributor(
             val (segments, durationMs) = narration
             attempt.durationMs = durationMs; attempt.bytes = file.length()
             // Kept for playback (#827) as soon as it is complete (#835), uploaded or not; a stopped one is incomplete.
-            runCatching { kept?.save(job.id, file, job.text, segments) }
+            runCatching { kept?.save(job.id, file, job.text, segments) }.onFailure { System.err.println("Could not keep the audio for playback: $it") }
             val audio = kept?.audio(job.id) ?: file
             val meta = JSONObject().put("segments", segments)
             lease.renew()
