@@ -85,7 +85,7 @@ describe('the phones’ rules (#812, #837)', () => {
 
 describe('NativeRunner', () => {
   /** Speaks `seconds` of samples a sentence; records what the encoder got. */
-  function runner(seconds = 1) {
+  function runner(seconds = 1, rest?: (ms: number) => number) {
     const said: { text: string; mandarin: boolean }[] = [];
     const written: number[] = [];
     const events: string[] = [];
@@ -104,6 +104,7 @@ describe('NativeRunner', () => {
       },
       bitrate: 32_000,
       dispose: () => events.push('dispose'),
+      rest,
     });
     return { native, said, written, events };
   }
@@ -126,6 +127,29 @@ describe('NativeRunner', () => {
     expect([result.file.type, result.file.size]).toEqual(['audio/mp4', 100]);
     expect(progress).toEqual([1, 2]);
     expect(events).toEqual(['start 24000']);
+  });
+
+  it('rests between sentences as asked, not after the last, and a rest can be cut short (#830)', async () => {
+    const asked: number[] = [];
+    const { native, said } = runner(1, (ms) => {
+      asked.push(ms);
+      return 30;
+    });
+    const started = Date.now();
+    await native.generate(job('One. Two. Three.', 'af_heart'));
+    expect(asked).toHaveLength(2);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(55);
+    // Aborted while resting: it stops there
+    const controller = new AbortController();
+    const resting = runner(1, () => 60_000);
+    const going = resting.native.generate(job('One. Two.', 'af_heart'), {
+      signal: controller.signal,
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    controller.abort(new Error('Off'));
+    await expect(going).rejects.toThrow('Off');
+    expect(resting.said).toHaveLength(1);
+    expect(said).toHaveLength(3);
   });
 
   it('pads audio under a second with silence (#812)', async () => {

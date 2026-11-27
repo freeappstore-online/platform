@@ -34,8 +34,8 @@ windows, sorted Newest (default), Most popular, A–Z or by Category, with the c
 chips, a **Recent** row of apps opened on this computer and starred favourites pinned first (#840; both in userData
 `settings.json`, never on the server). **Vote** opens the app on freeappstore.online, since voting needs a storefront
 sign-in and the device credential isn't one; **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
-menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and Pause / Resume
-contributing while this computer is connected.
+menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and its mode (Auto,
+Run now, Off) while this computer is connected.
 
 **Account** (#829): once this computer is connected (Contribute's **Connect this computer**, also offered by the
 header's **Sign in**), the header shows the account's avatar and name and the tray menu its name and avatar. The
@@ -144,7 +144,23 @@ Mandarin), and keeps going while the window is closed, as long as FreeAppStore r
   `backgroundThrottling: false`, sandboxed, a preload that only relays encoder messages): samples go over a sentence
   at a time, the MP4 comes back as bytes (`src/main/engine.ts`). The TTS process ends after each run, freeing the
   model's memory. Electron 45 on macOS refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz there.
-- The **Contribute** page shows the status (running with app, job and sentence n of N, idle and why, or paused), the
+- **When it runs** (#830, `src/main/conditions.ts`), all decided on this computer, as on the phones. Modes: **Auto**
+  (the default) runs whenever every condition holds and pauses the moment one fails; **Run now** is one run that
+  ignores the conditions, then Auto; **Off** is the hard stop: it stops the job in hand, nothing starts again until it
+  is turned on, and it is kept in `settings.json` across restarts and updates ("Contribute is off. It will not start
+  again until you turn it on."; a Pause from before #830 is Off). Conditions, defaults in brackets: power, AC only or
+  also on battery from a minimum [AC only, 40%] (`powerMonitor.isOnBatteryPower`, the level from the hidden window's
+  `navigator.getBattery`; a computer without a battery is on AC); pause when hot [on] (macOS thermal state serious or
+  critical, or an advertised CPU speed limit under 100%); while the computer is in use, pause or run slower [pause]
+  (in use: `getSystemIdleState(120)` is active, so a key or the mouse in the last 2 minutes, screen unlocked); CPU
+  Light / Balanced / Full [Balanced] (sherpa-onnx threads 1 / 2 / up to 4, rests after each sentence of 100% / 25% /
+  none of its time; run slower rests at least 100%); daily maximum of jobs and minutes [none]; quiet hours [off]. A
+  metered connection can't be told on a computer, so there is no data condition. They are checked before each claim
+  and between sentences: a job at least 80% done finishes, any other stops and its attempt record says why
+  (`unplugged`, `thermal`, otherwise `user_stop`), so the server gives it back (#841). Held, it checks again every
+  minute and on power and heat changes, without asking the server for work.
+- The **Contribute** page shows the status (running with app, job and sentence n of N, waiting and why, paused and
+  the condition that holds it, or off), the mode, **When it runs**, the
   counts since the app started, the engine, its languages and the model, and the apps with their switches, and the
   **History** (#827): the job in hand as **In progress** from its claim (#838; its detail follows it live: engine,
   sentence n of N, elapsed and CPU time, computer, lease expiry, then the audio once encoded; a run cut off by a quit

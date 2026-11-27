@@ -22,6 +22,7 @@ import {
   type WebContents,
 } from 'electron';
 import electronUpdater from 'electron-updater';
+import { contributeWhen, cpuThreads, IDLE_SECONDS } from './conditions.js';
 import { Contribute, contributeStatus, type Engine } from './contribute.js';
 import {
   API_ORIGIN,
@@ -53,7 +54,7 @@ import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
 import { startServer } from './server.js';
 import { loadSettings, type Settings, saveSettings } from './settings.js';
 import { loadToken, regenerateToken } from './token.js';
-import { trayMenu, trayStatus } from './tray.js';
+import { type TrayContributeMode, trayMenu, trayStatus } from './tray.js';
 import { Updates } from './updates.js';
 import { loadBuildInfo, releaseNotesUrl, versionLabel } from './version.js';
 
@@ -329,7 +330,7 @@ function trayState() {
     openApps: hub.openApps().length,
     serverError,
     contribute: deviceToken
-      ? { status: contributeStatus(contribute.state), paused: settings.contributePaused }
+      ? { status: contributeStatus(contribute.state), mode: contributeMode() }
       : null,
     account: profile ? { name: profile.user.name, icon: avatarIcon } : null,
     update:
@@ -361,7 +362,7 @@ function updateTray(): void {
       trayMenu(current, {
         open: showHome,
         setPaused,
-        setContributePaused,
+        setContributeMode,
         update: applyUpdate,
         quit: () => app.quit(),
       }),
@@ -516,19 +517,29 @@ const contribute = new Contribute(
   {
     token: () => (accountVerified ? deviceToken : null),
     optedIn: () => settings.contributeApps,
-    paused: () => settings.contributePaused,
+    mode: () => settings.contributeMode,
+    when: () => settings.contributeWhen,
+    machine: () => ({
+      onBattery: powerMonitor.isOnBatteryPower(),
+      battery: batteryLevel,
+      thermal: process.platform === 'darwin' ? powerMonitor.getCurrentThermalState() : null,
+      speedLimit,
+      inUse: powerMonitor.getSystemIdleState(IDLE_SECONDS) === 'active',
+    }),
     modelReady: () => modelInstalled(modelDir()),
     installModel: (progress) => tts.install(progress, modelSource),
     engine: () => {
       engineWindowContents();
       return engineReady!;
     },
-    createRunner: (encoder) =>
+    createRunner: (encoder, rest) =>
       new NativeRunner({
-        say: (text, sid, speed, mandarin) => tts.say(text, sid, speed, mandarin),
+        say: (text, sid, speed, mandarin) =>
+          tts.say(text, sid, speed, mandarin, cpuThreads(settings.contributeWhen.cpu)),
         encode: (rate) => encoders.start(rate),
         bitrate: encoder.bitrate ?? 32_000,
         dispose: () => tts.close(),
+        rest,
       }),
     deleteModel: async () => {
       tts.close();
@@ -579,9 +590,21 @@ function contributeState() {
     pairing: pairing !== null,
     pairError,
     optedIn: accountVerified ? settings.contributeApps : [],
-    paused: settings.contributePaused,
+    mode: contributeMode(),
+    when: settings.contributeWhen,
   };
 }
+
+/** Auto, Off, or Auto running once regardless (Run now), as the window and the tray show it (#830). */
+const contributeMode = (): TrayContributeMode =>
+  settings.contributeMode === 'off' ? 'off' : contribute.state.runNow ? 'run-now' : 'auto';
+
+/**
+ * This computer's battery level, from the hidden window (Electron's main process has none), and
+ * the CPU speed limit the OS last advertised (#830). Null until told.
+ */
+let batteryLevel: number | null = null;
+let speedLimit: number | null = null;
 
 /**
  * The hidden window's contents: no throttling, since it does the work while every other window
@@ -630,6 +653,10 @@ ipcMain.on('contribute:from-encoder', (event, message: EncoderReply) => {
   if (!engineWindow || event.sender !== engineWindow.webContents) return;
   encoders.receive(message);
 });
+ipcMain.on('contribute:battery', (event, level: unknown) => {
+  if (!engineWindow || event.sender !== engineWindow.webContents) return;
+  batteryLevel = typeof level === 'number' && level >= 0 && level <= 100 ? Math.round(level) : null;
+});
 
 function saveContribute(changes: Partial<Settings>) {
   Object.assign(settings, changes);
@@ -637,9 +664,11 @@ function saveContribute(changes: Partial<Settings>) {
   pushState();
 }
 
-function setContributePaused(paused: boolean) {
-  saveContribute({ contributePaused: paused });
-  contribute.wake();
+/** Auto, Run now (one run regardless of the conditions, then Auto) or Off, the hard stop (#830). */
+function setContributeMode(mode: TrayContributeMode) {
+  saveContribute({ contributeMode: mode === 'off' ? 'off' : 'auto' });
+  if (mode === 'run-now') contribute.runNow();
+  else contribute.wake();
 }
 
 const deviceLabel = () =>
@@ -810,8 +839,14 @@ ipcMain.handle('home:contribute-opt-in', (event, appId: unknown, on: unknown) =>
   saveContribute({ contributeApps: on === true ? [...apps, appId] : apps });
   contribute.wake();
 });
-ipcMain.handle('home:contribute-paused', (event, paused: unknown) => {
-  if (fromHome(event) && typeof paused === 'boolean') setContributePaused(paused);
+ipcMain.handle('home:contribute-mode', (event, mode: unknown) => {
+  if (fromHome(event) && (mode === 'auto' || mode === 'run-now' || mode === 'off'))
+    setContributeMode(mode);
+});
+ipcMain.handle('home:contribute-when', (event, changes: unknown) => {
+  if (!fromHome(event) || !changes || typeof changes !== 'object') return;
+  saveContribute({ contributeWhen: contributeWhen({ ...settings.contributeWhen, ...changes }) });
+  contribute.wake();
 });
 ipcMain.handle('home:contribute-download', (event) => {
   if (fromHome(event) && deviceToken) void contribute.downloadModel();
@@ -879,6 +914,16 @@ if (!app.requestSingleInstanceLock()) {
     }
     createTray();
     updates.start();
+    // Power and heat changed: Contribute checks its conditions again now (#830)
+    const recheck = () => contribute.wake();
+    powerMonitor.on('on-ac', recheck);
+    powerMonitor.on('on-battery', recheck);
+    powerMonitor.on('thermal-state-change', recheck);
+    powerMonitor.on('resume', recheck);
+    powerMonitor.on('speed-limit-change', ({ limit }) => {
+      speedLimit = limit;
+      contribute.wake();
+    });
     if (deviceToken) {
       // Checked when it was connected; refreshProfile checks again
       if (settings.contributeAccount) {

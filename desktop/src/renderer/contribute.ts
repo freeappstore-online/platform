@@ -97,5 +97,18 @@ bridge.onMessage((message) => {
   void handle(message as EncoderRequest).then((reply) => reply && bridge.reply(reply));
 });
 bridge.engine({ encoder: config });
+// The battery level, for Contribute's battery floor (#830); a computer without one reports 100
+const battery = await (
+  navigator as Navigator & {
+    getBattery?: () => Promise<EventTarget & { level: number }>;
+  }
+)
+  .getBattery?.()
+  .catch(() => null);
+if (battery) {
+  const report = () => bridge.battery(Math.round(battery.level * 100));
+  report();
+  battery.addEventListener('levelchange', report);
+} else bridge.battery(null);
 // The browser runner's model (kokoro-js, before #837) is no longer used: free its storage
 void deleteKokoroModel();

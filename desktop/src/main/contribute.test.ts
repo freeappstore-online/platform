@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_WHEN, OFF } from './conditions.js';
 import { Contribute, type ContributeHost, contributeStatus, type Reading } from './contribute.js';
 import {
   clientHeaders,
@@ -52,6 +53,9 @@ const job = {
   leaseExpiresAt: Date.now() + 15 * 60_000,
 };
 
+/** A computer on AC power, cool and not in use: nothing holds Contribute (#830). */
+const idle = { onBattery: false, battery: null, thermal: null, speedLimit: null, inUse: false };
+
 /** Waits until `check` holds, letting the loop's promises run. */
 async function until(check: () => boolean) {
   for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 1));
@@ -72,8 +76,9 @@ describe('Contribute', () => {
     // The TTS process speaks a second of samples per sentence (loading the model first); the
     // hidden window's encoder returns 8 bytes
     let loaded = false;
-    const createRunner = () =>
+    const createRunner = (_encoder: unknown, rest: (ms: number) => number) =>
       new NativeRunner({
+        rest,
         say: async (text, sid, speed, mandarin) => {
           spoken.push({ text, sid, speed, mandarin });
           const loadMs = loaded ? 0 : 700;
@@ -93,7 +98,9 @@ describe('Contribute', () => {
     const host: ContributeHost = {
       token: () => 'ndev_x',
       optedIn: () => ['books'],
-      paused: () => false,
+      mode: () => 'auto',
+      when: () => DEFAULT_WHEN,
+      machine: () => idle,
       modelReady: () => true,
       installModel: vi.fn(async () => {}),
       engine: async () => ({ encoder }),
@@ -257,9 +264,10 @@ describe('Contribute', () => {
       'fetch',
       vi.fn(async () => json({ apps: [] })),
     );
-    const paused = setup({ paused: () => true }).contribute;
+    const paused = setup({ mode: () => 'off' }).contribute;
     paused.wake();
-    await until(() => paused.state.status === 'paused');
+    await until(() => paused.state.status === 'off');
+    expect(paused.state.message).toBe(OFF);
 
     const noModel = setup({ modelReady: () => false }).contribute;
     noModel.wake();
@@ -301,7 +309,7 @@ describe('Contribute', () => {
     let paused = false;
     let loaded: (() => void) | null = null;
     const { contribute } = setup({
-      paused: () => paused,
+      mode: () => (paused ? 'off' : 'auto'),
       engine: () =>
         new Promise((resolve) => {
           loaded = () => resolve({ encoder });
@@ -312,7 +320,7 @@ describe('Contribute', () => {
     paused = true;
     contribute.wake();
     loaded!();
-    await until(() => contribute.state.status === 'paused');
+    await until(() => contribute.state.status === 'off');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/claim'))).toBe(false);
     contribute.stop();
   });
@@ -527,10 +535,164 @@ describe('Contribute', () => {
     held.stop();
   });
 
+  /** The stand-in API for #830: books has `jobs` to claim, in turn; it records what was claimed and sent. */
+  function serve(jobs: (typeof job)[]) {
+    const queue = [...jobs];
+    const sent = { claims: 0, events: [] as { reason: string }[], uploads: 0, opens: 0 };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/generation/open')) {
+          sent.opens++;
+          return json({
+            apps: [
+              {
+                appId: 'books',
+                oneliner: null,
+                sets: [kokoroSet('s1', { voice: 'af_heart' }, null)],
+              },
+            ],
+          });
+        }
+        if (url.endsWith('/claim')) {
+          sent.claims++;
+          const next = queue.shift();
+          return next ? json({ job: next }) : new Response(null, { status: 204 });
+        }
+        if (url.endsWith('/result')) {
+          sent.uploads++;
+          return json({ submissionId: 'x', status: 'pending' }, 202);
+        }
+        if (url.endsWith('/events')) {
+          sent.events.push(...JSON.parse(String(init!.body)).events);
+          return json({ recorded: 1 });
+        }
+        return json({ submissions: [] });
+      }),
+    );
+    return sent;
+  }
+  const five = { ...job, input: { text: 'One. Two. Three. Four. Five.' } };
+
+  it('stops a job under 80% when a condition fails between sentences, and gives it back (#830)', async () => {
+    const sent = serve([job, { ...job, id: 'j2' }]);
+    // Unplugged once the first of two sentences is spoken
+    const { contribute } = setup({ machine: () => ({ ...idle, onBattery: spoken.length >= 1 }) });
+    contribute.wake();
+    await until(() => history[0]?.outcome === 'stopped' && contribute.state.status === 'paused');
+    expect(contribute.state.message).toBe('On battery. It runs on AC power only.');
+    expect(history[0]).toMatchObject({
+      jobId: 'j1',
+      reason: 'Paused: On battery. It runs on AC power only.',
+      record: { reason: 'unplugged' },
+    });
+    await until(() => sent.events.length === 1);
+    expect(sent.events[0]).toMatchObject({ jobId: 'j1', reason: 'unplugged' });
+    expect([sent.claims, sent.uploads]).toEqual([1, 0]);
+    contribute.stop();
+  });
+
+  it('finishes a job 80% done when a condition fails, then claims nothing more (#830)', async () => {
+    const sent = serve([five, { ...five, id: 'j2' }]);
+    // Hot once four of five sentences are spoken
+    const { contribute } = setup({
+      machine: () => ({ ...idle, thermal: spoken.length >= 4 ? 'serious' : 'nominal' }),
+    });
+    contribute.wake();
+    await until(() => contribute.state.submitted === 1 && contribute.state.status === 'paused');
+    expect(contribute.state.message).toBe('The computer is hot.');
+    expect(history.map((i) => [i.jobId, i.outcome])).toEqual([['j1', 'submitted']]);
+    expect(sent.claims).toBe(1);
+    contribute.stop();
+  });
+
+  it('Off stops the job in hand however far it got, and nothing starts again (#830)', async () => {
+    const sent = serve([five]);
+    let mode: 'auto' | 'off' = 'auto';
+    let off: Contribute | null = null;
+    // Turned Off while the last sentence is being spoken
+    off = setup({
+      mode: () => mode,
+      createRunner: () =>
+        new NativeRunner({
+          say: async (text) => {
+            if (text === 'Five.') {
+              mode = 'off';
+              off!.wake();
+            }
+            return { samples: new Float32Array(24_000), sampleRate: 24_000, loadMs: 0 };
+          },
+          encode: () => ({
+            write: () => {},
+            finish: async () => new Uint8Array(8),
+            cancel: () => {},
+          }),
+          bitrate: 32_000,
+          dispose: () => {},
+        }),
+    }).contribute;
+    off.wake();
+    await until(() => history[0]?.outcome === 'stopped' && off.state.status === 'off');
+    expect(off.state.message).toBe(OFF);
+    expect(history[0]).toMatchObject({ record: { reason: 'user_stop' } });
+    expect([sent.claims, sent.uploads]).toEqual([1, 0]);
+    // Woken again (a setting, power), it still looks for nothing
+    const opens = sent.opens;
+    off.wake();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent.opens).toBe(opens);
+    expect(off.state.status).toBe('off');
+    off.stop();
+  });
+
+  it('waits without looking for work while held, and says why (#830)', async () => {
+    const sent = serve([job]);
+    let machine = { ...idle, inUse: true };
+    const { contribute } = setup({ machine: () => machine });
+    contribute.wake();
+    await until(() => contribute.state.status === 'paused');
+    expect(contribute.state.message).toBe('Computer in use.');
+    expect(sent.opens).toBe(0);
+    // No longer in use: it runs
+    machine = idle;
+    contribute.wake();
+    await until(() => contribute.state.submitted === 1);
+    contribute.stop();
+  });
+
+  it('Run now runs once regardless of the conditions, then is Auto again and says why it waits (#830)', async () => {
+    const sent = serve([job]);
+    const { contribute } = setup({ machine: () => ({ ...idle, onBattery: true }) });
+    contribute.wake();
+    await until(() => contribute.state.status === 'paused');
+    contribute.runNow();
+    expect(contribute.state.runNow).toBe(true);
+    await until(() => contribute.state.submitted === 1 && !contribute.state.runNow);
+    await until(() => contribute.state.status === 'paused');
+    expect(contribute.state.message).toBe('On battery. It runs on AC power only.');
+    expect(sent.uploads).toBe(1);
+    contribute.stop();
+  });
+
+  it('rests between sentences as the CPU setting says, longer while in use (#830)', () => {
+    let when = DEFAULT_WHEN;
+    let machine = idle;
+    const { contribute } = setup({ when: () => when, machine: () => machine });
+    expect(contribute.rest(1000)).toBe(250);
+    when = { ...DEFAULT_WHEN, cpu: 'full' };
+    expect(contribute.rest(1000)).toBe(0);
+    when = { ...DEFAULT_WHEN, cpu: 'full', inUse: 'slower' };
+    machine = { ...idle, inUse: true };
+    expect(contribute.rest(1000)).toBe(1000);
+  });
+
   it('describes itself in one tray line', () => {
     const state = new Contribute(setup().host).state;
-    expect(contributeStatus(state)).toBe('Contribute: idle');
-    expect(contributeStatus({ ...state, status: 'paused' })).toBe('Contribute: paused');
+    expect(contributeStatus(state)).toBe('Contribute: waiting');
+    expect(contributeStatus({ ...state, status: 'off', message: OFF })).toBe('Contribute: off');
+    expect(contributeStatus({ ...state, status: 'paused', message: 'Computer in use.' })).toBe(
+      'Contribute: paused. Computer in use.',
+    );
     const current = {
       appId: 'books',
       jobId: 'j',

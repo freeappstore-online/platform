@@ -42,16 +42,16 @@ describe('TtsProcess', () => {
     const progress: unknown[] = [];
     await tts.install((stage, fraction) => progress.push([stage, fraction]), 'http://x/m.tar.bz2');
     expect(progress).toEqual([['download', 0.5]]);
-    const speech = await tts.say('你好。', 47, 1, true);
+    const speech = await tts.say('你好。', 47, 1, true, 2);
     expect([speech.sampleRate, speech.loadMs]).toEqual([24_000, 5]);
     expect(fake.sent).toEqual([
       { type: 'install', source: 'http://x/m.tar.bz2' },
-      { type: 'say', id: 1, text: '你好。', sid: 47, speed: 1, mandarin: true },
+      { type: 'say', id: 1, text: '你好。', sid: 47, speed: 1, mandarin: true, threads: 2 },
     ]);
     expect(forks).toBe(1);
     // A request in flight fails when the process goes
     fake.port.postMessage = () => {};
-    const pending = tts.say('x', 0, 1, false);
+    const pending = tts.say('x', 0, 1, false, 1);
     tts.close();
     await expect(pending).rejects.toThrow();
   });

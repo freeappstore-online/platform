@@ -153,6 +153,8 @@ export interface NativeRunnerOptions {
   bitrate: number;
   /** Frees the model's memory (ends the TTS process). */
   dispose(): void;
+  /** How long to rest after a sentence that took `ms` to speak (#830); none when absent. */
+  rest?(ms: number): number;
 }
 
 /** An AAC encoding in progress: samples go in as they are spoken; `finish` returns the MP4. */
@@ -212,8 +214,9 @@ export class NativeRunner {
           this.opts.say(text.slice(start, end), VOICES.indexOf(voice), speed, language === 'zh'),
           signal,
         );
+        const sentenceMs = Date.now() - t - speech.loadMs;
         timing.loadMs += speech.loadMs;
-        timing.synthMs += Date.now() - t - speech.loadMs;
+        timing.synthMs += sentenceMs;
         if (speech.samples.length) {
           t = Date.now();
           if (!encoding) {
@@ -247,6 +250,9 @@ export class NativeRunner {
         // At this pace it would run past the lease's cap: give it back now rather than at the end
         if (elapsed > 2 * 60_000 && Date.now() + (elapsed * (text.length - end)) / end > capAt)
           throw new KokoroSkip(job, 'too slow to finish within the lease');
+        const rest = n < parts.length - 1 ? (this.opts.rest?.(sentenceMs) ?? 0) : 0;
+        if (rest > 0)
+          await unlessAborted(new Promise((resolve) => setTimeout(resolve, rest)), signal);
       }
       if (!encoding) throw new KokoroSkip(job, 'nothing to say in the text');
       const t = Date.now();

@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULT_WHEN } from './conditions.js';
 import {
   claudeCodeProfiles,
   Integrations,
@@ -262,7 +263,8 @@ describe('Integrations', () => {
 describe('settings', () => {
   const contribute = {
     contributeApps: [],
-    contributePaused: false,
+    contributeMode: 'auto',
+    contributeWhen: DEFAULT_WHEN,
     contributeAccount: null,
     autoUpdate: true,
     recentApps: [],
@@ -277,7 +279,8 @@ describe('settings', () => {
       paused: true,
       openAtLogin: false,
       contributeApps: ['books'],
-      contributePaused: true,
+      contributeMode: 'off' as const,
+      contributeWhen: { ...DEFAULT_WHEN, onBattery: true, minBattery: 60, cpu: 'full' as const },
       contributeAccount: 'gh:1',
       autoUpdate: false,
       recentApps: ['notes', 'books'],
@@ -293,6 +296,19 @@ describe('settings', () => {
       openAtLogin: true,
       contributeApps: ['books'],
     });
+    // Pause before #830 is Off; conditions saved wrong keep their defaults
+    writeFileSync(
+      join(tmp, 'settings.json'),
+      JSON.stringify({
+        contributePaused: true,
+        contributeWhen: { minBattery: 'x', inUse: 'slower' },
+      }),
+    );
+    expect(loadSettings(tmp).settings).toMatchObject({
+      contributeMode: 'off',
+      contributeWhen: { ...DEFAULT_WHEN, inUse: 'slower' },
+    });
+    expect(loadSettings(tmp).settings).not.toHaveProperty('contributePaused');
     writeFileSync(join(tmp, 'settings.json'), 'garbage');
     expect(loadSettings(tmp).settings).toEqual({ paused: false, openAtLogin: true, ...contribute });
   });

@@ -1,5 +1,11 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  type ContributeMode,
+  type ContributeWhen,
+  contributeWhen,
+  DEFAULT_WHEN,
+} from './conditions.js';
 
 /** What the user chose on Home or in the tray, kept in userData/settings.json across restarts. */
 export interface Settings {
@@ -7,9 +13,12 @@ export interface Settings {
   paused: boolean;
   /** Start FreeAppStore when the user logs in. On by default (#815). */
   openAtLogin: boolean;
-  /** Contribute (#826): the apps this computer generates for, and whether it is paused. */
+  /** Contribute (#826): the apps this computer generates for. */
   contributeApps: string[];
-  contributePaused: boolean;
+  /** Auto, or Off: the hard stop, kept across restarts and updates (#830). */
+  contributeMode: ContributeMode;
+  /** When it runs in Auto (#830). */
+  contributeWhen: ContributeWhen;
   /**
    * The account (user id) the Contribute history and opt-ins belong to (#848), checked against
    * `/native/me` before any of it is shown or used. Null once cleared by a sign-out.
@@ -27,7 +36,8 @@ const DEFAULTS: Settings = {
   paused: false,
   openAtLogin: true,
   contributeApps: [],
-  contributePaused: false,
+  contributeMode: 'auto',
+  contributeWhen: DEFAULT_WHEN,
   contributeAccount: null,
   autoUpdate: true,
   recentApps: [],
@@ -41,7 +51,8 @@ const strings = (value: unknown) =>
 export function loadSettings(dir: string): { settings: Settings; firstRun: boolean } {
   const path = join(dir, FILE);
   if (!existsSync(path)) return { settings: { ...DEFAULTS }, firstRun: true };
-  let saved: Partial<Settings> = {};
+  // `contributePaused`: before #830, Pause; it is Off now
+  let saved: Partial<Settings> & { contributePaused?: unknown } = {};
   try {
     saved = JSON.parse(readFileSync(path, 'utf8'));
   } catch {
@@ -52,7 +63,13 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
       paused: bool(saved.paused, DEFAULTS.paused),
       openAtLogin: bool(saved.openAtLogin, DEFAULTS.openAtLogin),
       contributeApps: strings(saved.contributeApps),
-      contributePaused: bool(saved.contributePaused, DEFAULTS.contributePaused),
+      contributeMode:
+        saved.contributeMode === 'off' || saved.contributeMode === 'auto'
+          ? saved.contributeMode
+          : saved.contributePaused === true
+            ? 'off'
+            : DEFAULTS.contributeMode,
+      contributeWhen: contributeWhen(saved.contributeWhen),
       contributeAccount:
         typeof saved.contributeAccount === 'string' ? saved.contributeAccount : null,
       autoUpdate: bool(saved.autoUpdate, DEFAULTS.autoUpdate),

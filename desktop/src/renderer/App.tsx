@@ -13,6 +13,8 @@ import type { PairCode } from '../main/device.js';
 import type {
   ClientId,
   ClientStatus,
+  ContributeMode,
+  ContributeWhen,
   DesktopContribute,
   DesktopState,
   HistoryItem,
@@ -636,6 +638,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
     >
       {intro}
       <ContributeStatus state={state} />
+      <ContributeConditions when={state.when} />
       <ContributeModel state={state} />
       <ContributeApps state={state} />
       <ContributeHistory state={state} />
@@ -643,10 +646,32 @@ function Contribute({ state }: { state: DesktopContribute }) {
   );
 }
 
+const MODES: { mode: ContributeMode; label: string }[] = [
+  { mode: 'auto', label: 'Auto' },
+  { mode: 'run-now', label: 'Run now' },
+  { mode: 'off', label: 'Off' },
+];
+const STATUS: Record<DesktopContribute['status'], string> = {
+  running: 'Running',
+  idle: 'Waiting',
+  paused: 'Paused',
+  off: 'Off',
+};
+const modeChip = (on: boolean) =>
+  `rounded-full border px-3 py-1 text-sm font-semibold cursor-pointer ${
+    on
+      ? 'border-accent bg-accent-soft text-accent'
+      : 'border-line bg-panel text-muted hover:text-ink'
+  }`;
+
+/**
+ * What Contribute is doing, and why not (#830), with its mode: Auto runs whenever the conditions
+ * hold, Run now once regardless, Off never until turned on again.
+ */
 function ContributeStatus({ state }: { state: DesktopContribute }) {
   const { current } = state;
   const label =
-    state.status === 'running' ? 'Running' : state.status === 'paused' ? 'Paused' : 'Idle';
+    state.status === 'running' && state.runNow ? 'Running (Run now)' : STATUS[state.status];
   return (
     <section className={`${card} mb-6 p-5`} aria-label="Contribute status">
       <div className="flex flex-wrap items-center gap-4">
@@ -655,30 +680,33 @@ function ContributeStatus({ state }: { state: DesktopContribute }) {
           className={`h-3 w-3 shrink-0 rounded-full ${
             state.status === 'running'
               ? 'bg-success'
-              : state.status === 'paused'
-                ? 'bg-warning'
-                : 'bg-line-strong'
+              : state.status === 'idle'
+                ? 'bg-line-strong'
+                : 'bg-warning'
           }`}
         />
         <div className="min-w-0 flex-1">
           <div data-testid="contribute-status" className="text-lg font-bold text-ink-strong">
             {label}
           </div>
-          <div className="text-sm text-muted">
-            {current
-              ? `${current.appId} · ${current.key}`
-              : state.status === 'paused'
-                ? 'Resume to go on generating.'
-                : (state.message ?? 'Looking for work…')}
+          <div data-testid="contribute-why" className="text-sm text-muted">
+            {current ? `${current.appId} · ${current.key}` : (state.message ?? 'Looking for work…')}
           </div>
         </div>
-        <button
-          type="button"
-          className={state.paused ? primary : secondary}
-          onClick={() => desktop.contribute.setPaused(!state.paused)}
-        >
-          {state.paused ? 'Resume' : 'Pause'}
-        </button>
+        <fieldset className="m-0 flex gap-2 border-0 p-0">
+          <legend className="sr-only">Mode</legend>
+          {MODES.map(({ mode, label }) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={state.mode === mode}
+              className={modeChip(state.mode === mode)}
+              onClick={() => desktop.contribute.setMode(mode)}
+            >
+              {label}
+            </button>
+          ))}
+        </fieldset>
       </div>
       {current && current.sentences > 0 && (
         <div className="mt-4">
@@ -697,6 +725,187 @@ function ContributeStatus({ state }: { state: DesktopContribute }) {
         computer couldn't do them exactly), {state.failed} failed. Each job is checked by the
         platform before anyone hears it.
       </p>
+    </section>
+  );
+}
+
+const field = 'rounded-control border border-line bg-panel px-2 py-1 text-sm text-ink';
+const hhmm = (minute: number) =>
+  `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+const minuteOf = (value: string) => {
+  const [h, m] = value.split(':').map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+};
+
+/** A number input that saves once edited (on leaving it), so a half-typed number is never applied. */
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      type="number"
+      aria-label={label}
+      className={`${field} w-20`}
+      value={draft ?? value}
+      min={min}
+      max={max}
+      step={step}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (draft !== null) onChange(Number(draft) || 0);
+        setDraft(null);
+      }}
+    />
+  );
+}
+
+/**
+ * When Contribute runs in Auto (#830): power, heat, use, CPU, a daily maximum and quiet hours, all
+ * decided on this computer. Checked before each job and between sentences.
+ */
+function ContributeConditions({ when }: { when: ContributeWhen }) {
+  const set = (changes: Partial<ContributeWhen>) => void desktop.contribute.setWhen(changes);
+  const row = 'flex flex-wrap items-center gap-3 py-3';
+  const name = 'w-44 shrink-0 text-sm font-semibold text-ink';
+  const radio = 'flex items-center gap-2 text-sm cursor-pointer';
+  const box = 'h-4 w-4 accent-[var(--accent)] cursor-pointer';
+  return (
+    <section className={`${card} mb-6 p-5`} aria-label="When it runs">
+      <h3 className="mt-0 mb-1 text-base font-bold">When it runs</h3>
+      <p className="mt-0 mb-2 text-sm text-muted">
+        In Auto it runs whenever all of these hold and pauses the moment one does not. A job at
+        least 80% done is finished; any other is stopped and given back.
+      </p>
+      <div className="divide-y divide-line">
+        <div className={row} role="radiogroup" aria-label="Power">
+          <span className={name}>Power</span>
+          <label className={radio}>
+            <input
+              type="radio"
+              className={box}
+              checked={!when.onBattery}
+              onChange={() => set({ onBattery: false })}
+            />
+            On AC power only
+          </label>
+          <label className={radio}>
+            <input
+              type="radio"
+              className={box}
+              checked={when.onBattery}
+              onChange={() => set({ onBattery: true })}
+            />
+            Also on battery, from
+          </label>
+          <NumberField
+            label="Minimum battery (%)"
+            value={when.minBattery}
+            min={5}
+            max={100}
+            step={5}
+            onChange={(minBattery) => set({ minBattery })}
+          />
+          <span className="text-sm text-muted">%</span>
+        </div>
+        <label className={`${row} cursor-pointer`}>
+          <span className={name}>Heat</span>
+          <input
+            type="checkbox"
+            className={box}
+            checked={when.thermalPause}
+            onChange={(event) => set({ thermalPause: event.target.checked })}
+          />
+          <span className="text-sm">Pause when the computer is hot</span>
+        </label>
+        <label className={row}>
+          <span className={name}>While the computer is in use</span>
+          <select
+            className={`${field} cursor-pointer`}
+            value={when.inUse}
+            onChange={(event) => set({ inUse: event.target.value as ContributeWhen['inUse'] })}
+          >
+            <option value="pause">Pause</option>
+            <option value="slower">Run slower</option>
+          </select>
+          <span className="text-xs text-muted">
+            In use: a key or the mouse touched in the last 2 minutes.
+          </span>
+        </label>
+        <label className={row}>
+          <span className={name}>CPU</span>
+          <select
+            className={`${field} cursor-pointer`}
+            value={when.cpu}
+            onChange={(event) => set({ cpu: event.target.value as ContributeWhen['cpu'] })}
+          >
+            <option value="light">Light (1 thread, long rests)</option>
+            <option value="balanced">Balanced (2 threads, short rests)</option>
+            <option value="full">Full (up to 4 threads, no rests)</option>
+          </select>
+        </label>
+        <div className={row}>
+          <span className={name}>Daily maximum</span>
+          <NumberField
+            label="Daily maximum jobs"
+            value={when.dailyJobs}
+            min={0}
+            max={10_000}
+            step={10}
+            onChange={(dailyJobs) => set({ dailyJobs })}
+          />
+          <span className="text-sm text-muted">jobs</span>
+          <NumberField
+            label="Daily maximum minutes"
+            value={when.dailyMinutes}
+            min={0}
+            max={1440}
+            step={15}
+            onChange={(dailyMinutes) => set({ dailyMinutes })}
+          />
+          <span className="text-sm text-muted">minutes (0: no maximum)</span>
+        </div>
+        <div className={row}>
+          <label className={`${name} flex items-center gap-2 cursor-pointer`}>
+            <input
+              type="checkbox"
+              className={box}
+              checked={when.quietHours}
+              onChange={(event) => set({ quietHours: event.target.checked })}
+            />
+            Quiet hours
+          </label>
+          <input
+            type="time"
+            aria-label="Quiet hours from"
+            className={field}
+            value={hhmm(when.quietFrom)}
+            disabled={!when.quietHours}
+            onChange={(event) => set({ quietFrom: minuteOf(event.target.value) })}
+          />
+          <span className="text-sm text-muted">to</span>
+          <input
+            type="time"
+            aria-label="Quiet hours to"
+            className={field}
+            value={hhmm(when.quietTo)}
+            disabled={!when.quietHours}
+            onChange={(event) => set({ quietTo: minuteOf(event.target.value) })}
+          />
+        </div>
+      </div>
     </section>
   );
 }

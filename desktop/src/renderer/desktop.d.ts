@@ -1,4 +1,5 @@
 // The API the home window's preload (src/preload/home.cts) exposes.
+import type { ContributeWhen } from '../main/conditions.js';
 import type { ContributeState } from '../main/contribute.js';
 import type { PairCode, Profile } from '../main/device.js';
 import type { HistoryItem } from '../main/history.js';
@@ -6,7 +7,10 @@ import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
 import type { UpdateState } from '../main/updates.js';
 
-export type { ClientId, ClientStatus, HistoryItem, LogEntry, OpenApp };
+export type { ClientId, ClientStatus, ContributeWhen, HistoryItem, LogEntry, OpenApp };
+
+/** Auto, Run now (one run that ignores the conditions) or Off (#830). */
+export type ContributeMode = 'auto' | 'run-now' | 'off';
 
 /** Contribute (#826) as the home window sees it. */
 export interface DesktopContribute extends ContributeState {
@@ -16,7 +20,9 @@ export interface DesktopContribute extends ContributeState {
   pairing: boolean;
   pairError: string | null;
   optedIn: string[];
-  paused: boolean;
+  mode: ContributeMode;
+  /** When it runs in Auto (#830). */
+  when: ContributeWhen;
 }
 
 export interface DesktopState {
@@ -61,6 +67,7 @@ declare global {
       reply(message: unknown): void;
       /** Whether this computer can encode AAC: the encoder settings, or null. */
       engine(engine: { encoder: AudioEncoderConfig | null }): void;
+      battery(level: number | null): void;
     };
     fasDesktop: {
       state(): Promise<DesktopState>;
@@ -89,7 +96,9 @@ declare global {
         cancel(): Promise<void>;
         disconnect(): Promise<void>;
         setOptIn(appId: string, on: boolean): Promise<void>;
-        setPaused(paused: boolean): Promise<void>;
+        setMode(mode: ContributeMode): Promise<void>;
+        /** Changes some of the conditions; the rest stay. */
+        setWhen(changes: Partial<ContributeWhen>): Promise<void>;
         downloadModel(): Promise<void>;
         deleteModel(): Promise<void>;
         refresh(): Promise<void>;

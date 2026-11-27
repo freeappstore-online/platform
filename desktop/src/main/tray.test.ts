@@ -6,7 +6,7 @@ describe('tray menu', () => {
     const actions = {
       open: vi.fn(),
       setPaused: vi.fn(),
-      setContributePaused: vi.fn(),
+      setContributeMode: vi.fn(),
       update: vi.fn(),
       quit: vi.fn(),
     };
@@ -44,17 +44,17 @@ describe('tray menu', () => {
     );
   });
 
-  it('adds Contribute’s status and Pause / Resume while connected (#826)', () => {
+  it('adds Contribute’s status and its mode, Auto / Run now / Off, while connected (#826, #830)', () => {
     const actions = {
       open: vi.fn(),
       setPaused: vi.fn(),
-      setContributePaused: vi.fn(),
+      setContributeMode: vi.fn(),
       update: vi.fn(),
       quit: vi.fn(),
     };
     const base = { paused: false, openApps: 0, serverError: null };
     const status = 'Contribute: books, sentence 3 of 40';
-    const running = trayMenu({ ...base, contribute: { status, paused: false } }, actions);
+    const running = trayMenu({ ...base, contribute: { status, mode: 'auto' } }, actions);
     expect(running.map((item) => item.label ?? item.type)).toEqual([
       'FreeAppStore: On, 0 apps connected',
       'separator',
@@ -62,22 +62,35 @@ describe('tray menu', () => {
       'Pause AI access',
       'separator',
       status,
-      'Pause contributing',
+      'Contribute: Auto',
+      'Contribute: Run now',
+      'Contribute: Off',
       'separator',
       'Quit FreeAppStore',
     ]);
-    running[6]!.click!(undefined as never, undefined, undefined as never);
-    expect(actions.setContributePaused).toHaveBeenCalledWith(true);
-    const paused = trayMenu({ ...base, contribute: { status, paused: true } }, actions);
-    paused[6]!.click!(undefined as never, undefined, undefined as never);
-    expect(actions.setContributePaused).toHaveBeenLastCalledWith(false);
+    expect(running.slice(6, 9).map((item) => [item.type, item.checked])).toEqual([
+      ['radio', true],
+      ['radio', false],
+      ['radio', false],
+    ]);
+    running[8]!.click!(undefined as never, undefined, undefined as never);
+    expect(actions.setContributeMode).toHaveBeenCalledWith('off');
+    const off = trayMenu(
+      { ...base, contribute: { status: 'Contribute: off', mode: 'off' } },
+      actions,
+    );
+    expect(off[8]!.checked).toBe(true);
+    off[7]!.click!(undefined as never, undefined, undefined as never);
+    expect(actions.setContributeMode).toHaveBeenLastCalledWith('run-now');
+    const once = trayMenu({ ...base, contribute: { status, mode: 'run-now' } }, actions);
+    expect(once[7]!.checked).toBe(true);
   });
 
   it('shows the signed-in account, which opens the window (#829)', () => {
     const actions = {
       open: vi.fn(),
       setPaused: vi.fn(),
-      setContributePaused: vi.fn(),
+      setContributeMode: vi.fn(),
       update: vi.fn(),
       quit: vi.fn(),
     };
@@ -105,7 +118,7 @@ describe('tray menu', () => {
     const actions = {
       open: vi.fn(),
       setPaused: vi.fn(),
-      setContributePaused: vi.fn(),
+      setContributeMode: vi.fn(),
       update: vi.fn(),
       quit: vi.fn(),
     };

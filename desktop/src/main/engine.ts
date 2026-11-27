@@ -73,11 +73,17 @@ export class TtsProcess {
     });
   }
 
-  say(text: string, sid: number, speed: number, mandarin: boolean): Promise<Speech> {
+  say(
+    text: string,
+    sid: number,
+    speed: number,
+    mandarin: boolean,
+    threads: number,
+  ): Promise<Speech> {
     const id = ++this.ids;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
-      this.started().postMessage({ type: 'say', id, text, sid, speed, mandarin });
+      this.started().postMessage({ type: 'say', id, text, sid, speed, mandarin, threads });
     });
   }
 

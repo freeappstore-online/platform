@@ -1,6 +1,7 @@
 import {
   Generation,
   type GenerationAttemptRecord,
+  type GenerationEndReason,
   type GenerationJob,
   type GenerationOpenApp,
   type GenerationReport,
@@ -12,6 +13,17 @@ import {
   type KokoroRunner,
   type KokoroRunnerOptions,
 } from '@freeappstore/sdk/generation-kokoro';
+import {
+  type ContributeMode,
+  type ContributeWhen,
+  contributeHold,
+  finishes,
+  type Hold,
+  holdReason,
+  type Machine,
+  restMs,
+  usage,
+} from './conditions.js';
 import { API_ORIGIN, clientHeaders } from './device.js';
 import { endReason, type HistoryItem, TEXT_CHARS } from './history.js';
 import { ENGINE, kokoroProblem, LANGUAGES, type NativeRunner } from './kokoro.js';
@@ -24,10 +36,22 @@ import { type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
  * so no timer is throttled and the credential never reaches a page. The voice is the phones' own
  * (#837): Kokoro through sherpa-onnx in a utility process; AAC encoding runs in a hidden window
  * (the main process has no WebCodecs). With nothing to do it looks again every 15 minutes.
+ * When it runs is this computer's choice (#830, `conditions.ts`): checked before each claim and
+ * between sentences.
  */
 
 /** How long the loop waits after a run, or with nothing to do, before looking for work again. */
 export const IDLE_MS = 15 * 60_000;
+/** How long it waits, held by a condition (#830), before checking again: no network on the way. */
+export const HOLD_MS = 60_000;
+
+/** Aborts a run: a condition failed, or Contribute was turned Off. */
+class Held extends Error {
+  constructor(readonly hold: Hold) {
+    super(hold.text);
+  }
+}
+const heldBy = (reason: unknown) => (reason instanceof Held ? reason.hold : null);
 
 /** WebCodecs AAC settings (the main process has no DOM types). */
 type EncoderConfig = KokoroRunnerOptions['encoder'];
@@ -41,15 +65,19 @@ export interface Engine {
 export interface ContributeHost {
   token(): string | null;
   optedIn(): string[];
-  paused(): boolean;
+  /** Auto or Off (#830), and the conditions Auto runs under. */
+  mode(): ContributeMode;
+  when(): ContributeWhen;
+  /** Power, heat and use of this computer now. */
+  machine(): Omit<Machine, 'minuteOfDay' | 'jobsToday' | 'msToday'>;
   /** The model package is downloaded and unpacked (`model.ts`). */
   modelReady(): boolean;
   /** Downloads, verifies and unpacks it, off the main thread. */
   installModel(progress: InstallProgress): Promise<void>;
   /** The hidden window's encoder, waiting for it to load. */
   engine(): Promise<Engine>;
-  /** A runner with the TTS process and the hidden window's encoder. */
-  createRunner(encoder: EncoderConfig): NativeRunner;
+  /** A runner with the TTS process and the hidden window's encoder, resting `rest(ms)` after each sentence. */
+  createRunner(encoder: EncoderConfig, rest: (ms: number) => number): NativeRunner;
   deleteModel(): Promise<void>;
   /** The device credential was refused (expired or revoked). */
   signedOut(): void;
@@ -106,9 +134,12 @@ export interface ContributeApp {
 }
 
 export interface ContributeState {
-  status: 'running' | 'idle' | 'paused';
-  /** Why it is idle, or how the last run ended. */
+  /** `paused`: held by a condition (#830), `message` says which; `off`: turned Off. */
+  status: 'running' | 'idle' | 'paused' | 'off';
+  /** Why it is idle or paused, or how the last run ended. */
   message: string | null;
+  /** This run ignores the conditions (Run now); Auto again once it ends. */
+  runNow: boolean;
   /** Apps with open work, from discovery; null until it has been asked. */
   apps: ContributeApp[] | null;
   model: {
@@ -153,6 +184,7 @@ export class Contribute {
   state: ContributeState = {
     status: 'idle',
     message: null,
+    runNow: false,
     apps: null,
     model: null,
     encoder: null,
@@ -173,6 +205,7 @@ export class Contribute {
     private readonly host: ContributeHost,
     private readonly origin = API_ORIGIN,
     private readonly idleMs = IDLE_MS,
+    private readonly holdMs = HOLD_MS,
   ) {}
 
   private set(next: Partial<ContributeState>) {
@@ -180,11 +213,57 @@ export class Contribute {
     this.host.changed();
   }
 
-  /** Start the loop, or look for work now (after a setting changed). Pausing stops the job in hand. */
+  /**
+   * The first condition that holds Contribute (#830), or null. Off always holds; Run now ignores
+   * every other condition.
+   */
+  hold(): Hold | null {
+    const mode = this.host.mode();
+    if (this.state.runNow && mode !== 'off') return null;
+    const now = new Date();
+    return contributeHold(mode, this.host.when(), {
+      ...this.host.machine(),
+      minuteOfDay: now.getHours() * 60 + now.getMinutes(),
+      ...usage(this.host.history(), now),
+    });
+  }
+
+  /** The rest after a sentence that took `ms` (#830): the CPU setting's, longer while in use. */
+  rest(ms: number): number {
+    const when = this.host.when();
+    return restMs(ms, when.cpu, when.inUse === 'slower' && this.host.machine().inUse);
+  }
+
+  /** Not running: why, as the status shows it; no longer held, it waits. */
+  private held(hold: Hold | null) {
+    if (hold)
+      this.set({
+        status: hold.code === 'off' ? 'off' : 'paused',
+        message: hold.text,
+        current: null,
+      });
+    else if (this.state.status === 'paused' || this.state.status === 'off')
+      this.set({ status: 'idle', message: null });
+    return hold;
+  }
+
+  /**
+   * Start the loop, or look again now (a setting or this computer's power changed). Off stops the
+   * job in hand, however far it got.
+   */
   wake(): void {
-    if (this.host.paused()) this.controller?.abort(new Error('Paused'));
+    if (this.host.mode() === 'off') {
+      this.set({ runNow: false });
+      this.controller?.abort(new Held(this.hold()!));
+    }
     if (!this.looping) void this.loop();
     else this.wakeUp();
+  }
+
+  /** One run that ignores the conditions (not Off: the caller turns it to Auto first), then Auto. */
+  runNow(): void {
+    this.set({ runNow: true });
+    this.wake();
   }
 
   /** Stop the loop for good (quit, disconnect). */
@@ -220,11 +299,14 @@ export class Contribute {
         });
         await this.once();
         if (!this.host.token()) break;
+        // Run now was one run; back on Auto, it says what holds it
+        if (this.state.runNow) this.set({ runNow: false });
+        const held = this.held(this.hold());
         let timer: ReturnType<typeof setTimeout> | undefined;
         await Promise.race([
           woken,
           new Promise<void>((resolve) => {
-            timer = setTimeout(resolve, this.idleMs);
+            timer = setTimeout(resolve, held && held.code !== 'off' ? this.holdMs : this.idleMs);
           }),
         ]);
         clearTimeout(timer);
@@ -266,7 +348,7 @@ export class Contribute {
   private async once() {
     const token = this.host.token();
     if (!token) return;
-    if (this.host.paused()) return this.set({ status: 'paused', message: null, current: null });
+    if (this.held(this.hold())) return;
     let discovered: GenerationOpenApp[];
     try {
       discovered = await this.fetchApps(token);
@@ -310,9 +392,9 @@ export class Contribute {
         : 'Choose the apps to generate for.';
       return this.set({ status: 'idle', message });
     }
-    // Paused or disconnected while looking for work: there was no run to stop yet
+    // Held or disconnected while looking for work: there was no run to stop yet
     if (this.host.token() !== token) return;
-    if (this.host.paused()) return this.set({ status: 'paused', message: null, current: null });
+    if (this.held(this.hold())) return;
     const epoch = this.epoch;
     await this.run(engine, chosen);
     await this.verdicts(apps, epoch);
@@ -438,6 +520,7 @@ export class Contribute {
     outcome: HistoryItem['outcome'],
     reason: string | null,
     err?: unknown,
+    endAs?: GenerationEndReason,
   ) {
     if (!a) return;
     const end = this.host.probe();
@@ -447,7 +530,7 @@ export class Contribute {
     const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined;
     const record: GenerationAttemptRecord = {
       runner: 'desktop',
-      reason: endReason(outcome, reason, err),
+      reason: endAs ?? endReason(outcome, reason, err),
       ...(outcome !== 'submitted' && reason && { error: reason.slice(0, 300) }),
       ...this.host.context(),
       background: a.background || !end.foreground,
@@ -483,10 +566,18 @@ export class Contribute {
   private async run(engine: Engine, apps: Parameters<typeof contributeKokoroApps>[0]['apps']) {
     const controller = new AbortController();
     this.controller = controller;
-    const runner = this.host.createRunner(engine.encoder!);
+    const runner = this.host.createRunner(engine.encoder!, (ms) => this.rest(ms));
     const epoch = this.epoch;
     this.set({ status: 'running', message: null, current: null });
     let attempt: Attempt | null = null;
+    /** A condition failed with the job in hand nearly done: it finishes, nothing more is claimed. */
+    let finishing: Hold | null = null;
+    /** Before each claim: a condition that holds ends the run there. */
+    const claimable = () => {
+      const hold = finishing ?? this.hold();
+      if (hold && !controller.signal.aborted) controller.abort(new Held(hold));
+      return apps();
+    };
     const sample = () => {
       const r = this.host.probe();
       if (attempt) {
@@ -510,9 +601,20 @@ export class Contribute {
         generatedAt: null,
       };
     };
-    const end = (outcome: HistoryItem['outcome'], reason: string | null, err?: unknown) => {
-      this.finish(attempt, outcome, reason, err);
+    const end = (
+      outcome: HistoryItem['outcome'],
+      reason: string | null,
+      err?: unknown,
+      endAs?: GenerationEndReason,
+    ) => {
+      this.finish(attempt, outcome, reason, err, endAs);
       attempt = null;
+    };
+    /** Ends the job in hand as stopped: by a condition (given back, #841), or by the user. */
+    const stopped = () => {
+      const hold = heldBy(controller.signal.reason);
+      if (hold) end('stopped', `Paused: ${hold.text}`, undefined, holdReason(hold));
+      else end('stopped', 'stopped before it finished');
     };
     const onEvent = (e: KokoroEvent, appId: string) => {
       // Signed out since this run started: nothing more of it is shown or kept
@@ -536,6 +638,10 @@ export class Contribute {
         const r = sample();
         const a = attempt as Attempt | null;
         if (a?.job.id !== e.job.id) return;
+        // Between sentences: a job nearly done finishes, any other stops and is given back
+        const hold = controller.signal.aborted ? null : this.hold();
+        if (hold && finishes(e.progress.sentence, e.progress.sentences)) finishing ??= hold;
+        else if (hold) controller.abort(new Held(hold));
         this.live(a, {
           sentence: e.progress.sentence,
           sentences: e.progress.sentences,
@@ -560,30 +666,27 @@ export class Contribute {
       await contributeKokoroApps({
         runner: runner as unknown as KokoroRunner,
         signal: controller.signal,
-        apps,
+        apps: claimable,
         onEvent,
       });
       // A job still in hand when the run ends by itself ran out of lease (no event says so)
-      end(
-        'stopped',
-        controller.signal.aborted
-          ? 'stopped before it finished'
-          : 'the lease ran out before it finished',
-      );
+      if (controller.signal.aborted) stopped();
+      else end('stopped', 'the lease ran out before it finished');
       this.set({
         message: controller.signal.aborted
           ? null
           : 'No more work for now. FreeAppStore looks again every 15 minutes.',
       });
     } catch (err) {
-      if (controller.signal.aborted) end('stopped', 'stopped before it finished');
+      if (controller.signal.aborted) stopped();
       else end('failed', errorText(err), err);
       if (errorText(err) === 'Not signed in.') this.host.signedOut();
       else this.set({ message: `Stopped on an error: ${errorText(err)}` });
     } finally {
       runner.dispose(); // frees the model's memory until the next run
       this.controller = null;
-      this.set({ status: this.host.paused() ? 'paused' : 'idle', current: null });
+      this.set({ status: 'idle', current: null });
+      this.held(heldBy(controller.signal.reason) ?? this.hold());
     }
   }
 
@@ -621,13 +724,14 @@ export class Contribute {
   }
 }
 
-/** One line for the tray: what Contribute is doing. */
+/** One line for the tray: what Contribute is doing, and why not when it is held (#830). */
 export function contributeStatus(state: ContributeState): string {
-  if (state.status === 'paused') return 'Contribute: paused';
+  if (state.status === 'off') return 'Contribute: off';
+  if (state.status === 'paused') return `Contribute: paused. ${state.message ?? ''}`.trim();
   if (state.current)
     return state.current.sentences
       ? `Contribute: ${state.current.appId}, sentence ${state.current.sentence} of ${state.current.sentences}`
       : `Contribute: ${state.current.appId}, starting`;
   if (state.status === 'running') return 'Contribute: looking for a job';
-  return 'Contribute: idle';
+  return 'Contribute: waiting';
 }

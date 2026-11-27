@@ -1,5 +1,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createReadStream, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  createReadStream,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -7,12 +14,12 @@ import { join } from 'node:path';
 import { _electron, type ElectronApplication, expect, test } from '@playwright/test';
 import { homeWindow } from './home.js';
 
-// Contribute (#826, #837) with the real model, against a stand-in API: downloads the phones' Kokoro
-// package (350 MB from sherpa-onnx's GitHub release, or FAS_E2E_MODEL_FILE served by the stand-in),
-// so it runs only with FAS_E2E_MODEL=1. It closes the window before the jobs are claimed, so they
-// are generated with no window open, as in the tray: one English, one Mandarin (`dialogue`, zh).
-test.skip(!process.env.FAS_E2E_MODEL, 'set FAS_E2E_MODEL=1 to download and run the real model');
-test.setTimeout(15 * 60_000);
+// Contribute against a stand-in API. Its modes (#830): Off survives a restart and starts nothing,
+// Run now turns it back on, and a condition says why it is paused; no model is needed.
+// With the real model (#826, #837): downloads the phones' Kokoro package (350 MB from
+// sherpa-onnx's GitHub release, or FAS_E2E_MODEL_FILE served by the stand-in), so it runs only
+// with FAS_E2E_MODEL=1. It closes the window before the jobs are claimed, so they are generated
+// with no window open, as in the tray: one English, one Mandarin (`dialogue`, zh).
 
 const here = new URL('.', import.meta.url);
 const SHOTS = process.env.FAS_SHOTS_DIR ?? 'test-results/shots';
@@ -26,7 +33,9 @@ const APPS = {
 } as const;
 let api: Server;
 let userData: string;
-let electron: ElectronApplication;
+let electron: ElectronApplication | null = null;
+/** Requests the stand-in got, `METHOD path`. */
+const seen: string[] = [];
 const uploads: {
   appId: string;
   contentType: string;
@@ -39,6 +48,7 @@ const claims: Record<string, number> = { books: 0, dialogue: 0 };
 function serveApi(): Promise<Server> {
   const server = createServer(async (req, res) => {
     const path = new URL(req.url ?? '/', 'http://x').pathname;
+    seen.push(`${req.method} ${path}`);
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
     const send = (status: number, body?: unknown) =>
@@ -47,6 +57,12 @@ function serveApi(): Promise<Server> {
         .end(body === undefined ? undefined : JSON.stringify(body));
     if (path === '/model.tar.bz2' && MODEL_FILE) return createReadStream(MODEL_FILE).pipe(res);
     if (req.headers.authorization !== 'Bearer ndev_e2e') return send(401, { error: 'no' });
+    if (path === '/v1/native/me')
+      return send(200, {
+        user: { id: 'gh:1', name: 'e2e', login: 'e2e', provider: 'github', avatarUrl: null },
+        device: { id: 'd1', label: 'FreeAppStore desktop', createdAt: 0, expiresAt: 0 },
+        apps: [],
+      });
     const set = (appId: keyof typeof APPS) => ({
       setId: `s-${appId}`,
       kind: 'tts',
@@ -104,14 +120,15 @@ function serveApi(): Promise<Server> {
   return new Promise((resolve) => server.listen(0, '127.0.0.1', () => resolve(server)));
 }
 
-test.beforeAll(async () => {
-  api = await serveApi();
-  userData = mkdtempSync(join(tmpdir(), 'fas-contribute-e2e-'));
+/** Starts the app (again) on `userData`, signed in as gh:1, with `settings` when given. */
+async function launch(settings?: Record<string, unknown>) {
+  await electron?.close();
   writeFileSync(join(userData, 'device-token'), 'ndev_e2e', { mode: 0o600 });
-  writeFileSync(
-    join(userData, 'settings.json'),
-    JSON.stringify({ paused: false, openAtLogin: false, contributeApps: ['books', 'dialogue'] }),
-  );
+  if (settings)
+    writeFileSync(
+      join(userData, 'settings.json'),
+      JSON.stringify({ paused: false, openAtLogin: false, contributeAccount: 'gh:1', ...settings }),
+    );
   electron = await _electron.launch({
     args: ['.'],
     cwd: new URL('..', here).pathname,
@@ -125,38 +142,111 @@ test.beforeAll(async () => {
       }),
     } as Record<string, string>,
   });
+  const home = await homeWindow(electron);
+  await home.getByRole('button', { name: 'Contribute', exact: true }).click();
+  return home;
+}
+const savedSettings = () => JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'));
+const OFF = 'Contribute is off. It will not start again until you turn it on.';
+
+test.beforeAll(async () => {
+  api = await serveApi();
 });
 
-test.afterAll(async () => {
+test.beforeEach(() => {
+  userData = mkdtempSync(join(tmpdir(), 'fas-contribute-e2e-'));
+  seen.length = 0;
+});
+
+test.afterEach(async () => {
   await electron?.close();
-  api?.close();
+  electron = null;
   rmSync(userData, { recursive: true, force: true });
 });
 
+test.afterAll(() => {
+  api?.close();
+});
+
+test('Off is a hard stop that survives a restart; Run now turns it back on; a condition says why it is paused (#830)', async () => {
+  // Conditions this computer meets whatever its power, heat or use
+  const always = { onBattery: true, minBattery: 5, thermalPause: false, inUse: 'slower' };
+  let home = await launch({ contributeApps: ['books'], contributeWhen: always });
+  const mode = (label: string) => home.getByRole('button', { name: label, exact: true });
+  await expect(mode('Auto')).toHaveAttribute('aria-pressed', 'true');
+  await expect(home.getByTestId('contribute-status')).toHaveText('Waiting');
+  await expect(home.getByTestId('contribute-why')).toHaveText('Download the voice model to start.');
+  await home.screenshot({ path: join(SHOTS, 'contribute-auto.png'), fullPage: true });
+
+  await mode('Off').click();
+  await expect(home.getByTestId('contribute-status')).toHaveText('Off');
+  await expect(home.getByTestId('contribute-why')).toHaveText(OFF);
+  await expect(mode('Off')).toHaveAttribute('aria-pressed', 'true');
+  expect(savedSettings().contributeMode).toBe('off');
+
+  // A restart (or an update) keeps it Off, and nothing looks for work
+  seen.length = 0;
+  home = await launch();
+  await expect(home.getByTestId('contribute-status')).toHaveText('Off');
+  await expect(home.getByTestId('contribute-why')).toHaveText(OFF);
+  await expect(mode('Off')).toHaveAttribute('aria-pressed', 'true');
+  await home.waitForTimeout(1500);
+  expect(seen.filter((r) => r.includes('/generation/'))).toEqual([]);
+
+  // Run now: one run regardless of the conditions, then Auto
+  await mode('Run now').click();
+  await expect.poll(() => seen.includes('GET /v1/generation/open')).toBe(true);
+  await expect(mode('Auto')).toHaveAttribute('aria-pressed', 'true');
+  await expect(home.getByTestId('contribute-status')).toHaveText('Waiting');
+  expect(savedSettings().contributeMode).toBe('auto');
+
+  // Quiet hours all day: paused, and it says why
+  const card = home.getByRole('region', { name: 'When it runs' });
+  // The box follows the saved setting, so it is clicked, then seen checked
+  await card.getByRole('checkbox', { name: 'Quiet hours' }).click();
+  await expect(card.getByRole('checkbox', { name: 'Quiet hours' })).toBeChecked();
+  await card.getByLabel('Quiet hours from').fill('00:00');
+  await card.getByLabel('Quiet hours to').fill('23:59');
+  await expect(home.getByTestId('contribute-status')).toHaveText('Paused');
+  await expect(home.getByTestId('contribute-why')).toHaveText('Quiet hours until 23:59.');
+  expect(savedSettings().contributeWhen).toMatchObject({
+    ...always,
+    quietHours: true,
+    quietFrom: 0,
+    quietTo: 23 * 60 + 59,
+  });
+  await home.screenshot({ path: join(SHOTS, 'contribute-paused.png'), fullPage: true });
+});
+
 test('downloads the model on request, then generates English and Mandarin with the window closed', async () => {
-  const home = await homeWindow(electron);
-  await home.getByRole('button', { name: 'Contribute', exact: true }).click();
+  test.skip(!process.env.FAS_E2E_MODEL, 'set FAS_E2E_MODEL=1 to download and run the real model');
+  test.setTimeout(15 * 60_000);
+  // Runs whatever this computer's power, heat or use (#830)
+  const home = await launch({
+    contributeApps: ['books', 'dialogue'],
+    contributeWhen: { onBattery: true, minBattery: 5, thermalPause: false, inUse: 'slower' },
+  });
   await expect(home.getByLabel('Generate for books')).toBeChecked();
   // Mandarin is tickable: the phones' engine speaks it (#837)
   await expect(home.getByLabel('Generate for dialogue')).toBeEnabled();
   await expect(
     home.getByText('Kokoro v1.0 (sherpa-onnx, CPU) · speaks English, Spanish, Mandarin'),
   ).toBeVisible();
-  await expect(home.getByTestId('contribute-status')).toHaveText('Idle');
+  await expect(home.getByTestId('contribute-status')).toHaveText('Waiting');
   await expect(home.getByText('Download the voice model to start.')).toBeVisible();
   expect(claims).toEqual({ books: 0, dialogue: 0 }); // nothing is claimed before the model is there
   await home.screenshot({ path: join(SHOTS, 'contribute.png') });
   await home.getByRole('button', { name: /^Download the model/ }).click();
   // Close the window as soon as the download starts: the rest happens in the background
   await expect(home.getByText(/^(Downloading|Unpacking) the model/)).toBeVisible();
-  await electron.evaluate(({ BrowserWindow }) =>
+  await electron!.evaluate(({ BrowserWindow }) =>
     BrowserWindow.getAllWindows()
       .find((w) => w.isVisible())!
       .close(),
   );
   await expect.poll(() => uploads.length, { timeout: 14 * 60_000, intervals: [2000] }).toBe(2);
   expect(
-    await electron.evaluate(({ BrowserWindow }) =>
+    await electron!.evaluate(({ BrowserWindow }) =>
       BrowserWindow.getAllWindows().some((w) => w.isVisible()),
     ),
   ).toBe(false);

@@ -25,7 +25,8 @@ contextBridge.exposeInMainWorld('fasDesktop', {
     disconnect: () => ipcRenderer.invoke('home:contribute-disconnect'),
     setOptIn: (appId: string, on: boolean) =>
       ipcRenderer.invoke('home:contribute-opt-in', appId, on),
-    setPaused: (paused: boolean) => ipcRenderer.invoke('home:contribute-paused', paused),
+    setMode: (mode: 'auto' | 'run-now' | 'off') => ipcRenderer.invoke('home:contribute-mode', mode),
+    setWhen: (changes: object) => ipcRenderer.invoke('home:contribute-when', changes),
     downloadModel: () => ipcRenderer.invoke('home:contribute-download'),
     deleteModel: () => ipcRenderer.invoke('home:contribute-delete-model'),
     refresh: () => ipcRenderer.invoke('home:contribute-refresh'),
