@@ -23,6 +23,11 @@ open class FasApi {
             v.toLongOrNull()?.let { return if (it >= 0) it * 1000 else null }
             return try { maxOf(0, ZonedDateTime.parse(v, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - now) } catch (_: Exception) { null }
         }
+        /**
+         * Sent on every request (#833): the backend keeps each device's last-seen version and kind for the console's
+         * device list. Pairing carries them too, so a new device row starts with them.
+         */
+        val CLIENT_HEADERS = mapOf("X-FAS-App-Version" to AppInfo.current.label, "X-FAS-Client" to "android")
     }
     /** Only the platform origin receives the narrow native credential; redirects are refused. */
     open fun request(method: String, path: String, token: String? = null, body: JSONObject? = null): JSONObject =
@@ -55,14 +60,17 @@ open class FasApi {
                 out.write("--$boundary--\r\n".toByteArray())
             }
         }
+    /** The connection for one request; unit tests answer here instead of the network. */
+    protected open fun open(url: URL): HttpURLConnection = url.openConnection() as HttpURLConnection
     private fun send(method: String, path: String, token: String?, headers: Map<String, String>, write: (HttpURLConnection) -> Unit): JSONObject {
         require(ALLOWED.containsMatchIn(path))
-        val connection = URL("$ORIGIN/v1$path").openConnection() as HttpURLConnection
+        val connection = open(URL("$ORIGIN/v1$path"))
         try {
             connection.requestMethod = method
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000; connection.readTimeout = 20_000
             connection.setRequestProperty("Accept", "application/json")
+            CLIENT_HEADERS.forEach { (k, v) -> connection.setRequestProperty(k, v) }
             if (token != null) connection.setRequestProperty("Authorization", "Bearer $token")
             headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
             write(connection)

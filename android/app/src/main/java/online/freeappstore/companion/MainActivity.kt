@@ -70,7 +70,10 @@ data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale:
 
 /** Everything the screens can ask for. Defaults are no-ops so tests pass only what they check. */
 data class CompanionActions(
-    val connect: () -> Unit = {}, val reconnect: () -> Unit = {}, val enable: (ConnectedApp) -> Unit = {}, val disable: (ConnectedApp) -> Unit = {},
+    val connect: () -> Unit = {}, val reconnect: () -> Unit = {},
+    /** Pairs with a scanned, typed or linked code (#845), only after the user said yes. */
+    val connectCode: (String) -> Unit = {},
+    val enable: (ConnectedApp) -> Unit = {}, val disable: (ConnectedApp) -> Unit = {},
     val pauseApp: (ConnectedApp) -> Unit = {}, val resumeApp: (ConnectedApp) -> Unit = {},
     val pause: () -> Unit = {}, val resume: () -> Unit = {}, val permissions: () -> Unit = {}, val sync: () -> Unit = {},
     val disconnect: () -> Unit = {}, val privacy: () -> Unit = {}, val account: () -> Unit = {},
@@ -113,6 +116,10 @@ class MainActivity : ComponentActivity() {
     private var linkedContribute by mutableStateOf<String?>(null)
     /** Where the overnight summary's tap goes (#844): Contribute's Activity. */
     private var contributeLink by mutableStateOf<ContributePage?>(null)
+    /** A `freeappstore://native/pair` link's code (#845), held in memory only until the user answers. */
+    private var linkedPairCode by mutableStateOf<String?>(null)
+    /** A pair link opened while this phone is already connected. */
+    private var alreadyConnected by mutableStateOf(false)
     private var refreshJob: Job? = null
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh(); maybeStart() }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -126,6 +133,8 @@ class MainActivity : ComponentActivity() {
             connect = { act { open(graph.repository.startSignIn()) } },
             // Pairs again keeping the history (#638): after an expiry, or early from the expiry note.
             reconnect = { act { graph.repository.renew(); stopService(Intent(this@MainActivity, LocationService::class.java)); open(graph.repository.startSignIn()) } },
+            // After an expiry this reconnects like Reconnect: the same account keeps its history.
+            connectCode = { code -> act { graph.repository.signIn(code) } },
             enable = { app -> act { graph.repository.enable(app); refresh(); if (LocationService.allowed(this@MainActivity)) maybeStart() else permissionExplanation = true } },
             disable = { app -> act { graph.repository.disable(app) } },
             // Local writes, not `act`: pausing works offline and instantly.
@@ -210,6 +219,11 @@ class MainActivity : ComponentActivity() {
                         linkedContribute = null; actions.contribute(id, true)
                     }
                 }
+                linkedPairCode?.let { code -> ConfirmPairDialog({ linkedPairCode = null }) { linkedPairCode = null; actions.connectCode(code) } }
+                if (alreadyConnected) AlertDialog(onDismissRequest = { alreadyConnected = false },
+                    title = { Text("Already connected") },
+                    text = { Text("This phone is already connected to FreeAppStore. Sign out first to connect it to another account.") },
+                    confirmButton = { TextButton(onClick = { alreadyConnected = false }) { Text("OK") } })
             }
         }
     }
@@ -235,10 +249,18 @@ class MainActivity : ComponentActivity() {
     }
     override fun onPause() { refreshJob?.cancel(); super.onPause() }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handleLink(intent) }
-    /** `freeappstore://native/apps/<id>` selects a disclosure to show. It carries no credential and never grants. */
+    /**
+     * `freeappstore://native/apps/<id>` selects a disclosure to show. It carries no credential and never grants.
+     * `freeappstore://native/pair?code=…` (#845) only asks before pairing; reopened from Recents it is ignored.
+     */
     private fun handleLink(intent: Intent?) {
         val uri = intent?.data ?: return
         if (uri.scheme != "freeappstore" || uri.host != "native") return
+        PairCode.fromLink(uri.toString())?.let { code ->
+            if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+            if (graph.repository.token() != null) alreadyConnected = true else linkedPairCode = code
+            return
+        }
         val parts = uri.pathSegments
         if (parts.size == 2 && parts[0] == "apps") linkedApp = parts[1]
         if (uri.toString() == ContributeSummary.LINK) contributeLink = ContributePage.Activity()
@@ -391,7 +413,7 @@ internal fun FasScreen(
                         SharingDashboard(state, tracks, actions.connect, askConsent, actions.disable, actions.pauseApp, actions.resumeApp,
                             actions.pause, actions.resume, actions.permissions, actions.sync, openApp,
                             showApp = { sharingPage = SharingPage.App(it.id) }, showActivity = { sharingPage = SharingPage.Activity(null, page) },
-                            showMap = { sharingPage = SharingPage.Map }, reconnect = actions.reconnect)
+                            showMap = { sharingPage = SharingPage.Map }, reconnect = actions.reconnect, connectCode = actions.connectCode)
                     }
                     SharingPage.Map -> Column(Modifier.padding(horizontal = 16.dp).fillMaxSize()) {
                         BackRow("Sharing") { sharingPage = SharingPage.Dashboard }
@@ -407,7 +429,7 @@ internal fun FasScreen(
                 }
                 Tab.CONTRIBUTE -> ContributeScreen(state, catalogue, actions, contributePage) { contributePage = it }
                 Tab.SETTINGS -> SettingsScreen(state, actions.connect, actions.permissions, actions.disconnect, actions.privacy, actions.account,
-                    actions.clearHistory, actions.open, actions.reconnect)
+                    actions.clearHistory, actions.open, actions.reconnect, actions.connectCode)
             }
         }
     }
@@ -435,7 +457,7 @@ internal const val DELETE_ACCOUNT_URL = "https://freeappstore.online/app/setting
 @Composable
 private fun SettingsScreen(
     state: CompanionState, connect: () -> Unit, permissions: () -> Unit, disconnect: () -> Unit, privacy: () -> Unit, account: () -> Unit,
-    clearHistory: () -> Unit, openUrl: (String) -> Unit, reconnect: () -> Unit,
+    clearHistory: () -> Unit, openUrl: (String) -> Unit, reconnect: () -> Unit, connectCode: (String) -> Unit,
 ) {
     var disconnectPrompt by remember { mutableStateOf(false) }
     var clearPrompt by remember { mutableStateOf(false) }
@@ -443,7 +465,7 @@ private fun SettingsScreen(
         Spacer(Modifier.height(8.dp))
         Text("Settings", style = MaterialTheme.typography.headlineLarge)
         StatusMessages(state)
-        if (state.expired) ExpiredCard(state, reconnect)
+        if (state.expired) ExpiredCard(state, reconnect, connectCode)
         if (state.signedIn || state.expired) {
             state.profile?.let { ProfileCard(it, openUrl) } ?: Text(state.name, style = MaterialTheme.typography.titleMedium)
             state.expiresInDays?.let { days ->
@@ -462,7 +484,10 @@ private fun SettingsScreen(
             TextButton(onClick = { openUrl(DELETE_ACCOUNT_URL) }) { Text("Delete account", color = MaterialTheme.colorScheme.error) }
             TextButton(onClick = { clearPrompt = true }) { Text("Clear sharing history") }
             TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Sign out") }
-        } else Button(onClick = connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
+        } else {
+            Button(onClick = connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
+            PairByCode(state.busy, connectCode)
+        }
         Text("About", style = MaterialTheme.typography.titleLarge)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -9,6 +9,10 @@
     <!-- Contribute (#731): WorkManager's foreground service while generating and uploading. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scan a code (#845): asked only when scanning. A phone without a camera types the code. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <application android:name=".FasApplication" android:label="FreeAppStore"
         android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/Theme.FreeAppStore"
         android:allowBackup="false" android:fullBackupContent="false"
@@ -19,7 +23,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Carries no credential. App IDs only select a disclosure; never grant permission. -->
+            <!-- App IDs only select a disclosure; never grant permission. A pair link's code (#845) only asks before pairing. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -219,6 +220,40 @@ class CompanionTest {
         compose.onNodeWithText("12 open jobs").assertExists()
         compose.onNodeWithText("Storage used").performScrollTo()
         assertEquals("settings", emptyList<String>(), brokenWords())
+    }
+    /** #845: Scan a code and Type the code sit next to Sign in and on the expired card, and never break a word at large fonts. */
+    @Test fun pairByCodeSitsNextToSignInAtLargeFonts() {
+        var tab by mutableStateOf(Tab.SHARING)
+        var state by mutableStateOf(CompanionState())
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                MaterialTheme { key(tab, state) { FasScreen(state, catalogue, CompanionActions(), null, {}, tab) } }
+            }
+        }
+        for ((t, s) in listOf(Tab.SHARING to CompanionState(), Tab.CONTRIBUTE to CompanionState(), Tab.SETTINGS to CompanionState(),
+            Tab.SHARING to CompanionState(expired = true), Tab.SETTINGS to CompanionState(expired = true))) {
+            tab = t; state = s
+            compose.onNodeWithText("Scan a code").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("Type the code").performScrollTo().assertIsDisplayed()
+            assertEquals("$t expired=${s.expired}", emptyList<String>(), brokenWords())
+        }
+        tab = Tab.SHARING; state = CompanionState(signedIn = true)
+        compose.onNodeWithText("Scan a code").assertDoesNotExist()
+    }
+    /** A typed code asks first and is sent only on Connect. */
+    @Test fun aTypedCodeConnectsOnlyAfterYes() {
+        val codes = mutableListOf<String>()
+        screen(CompanionState(), CompanionActions(connectCode = { codes += it }))
+        compose.onNodeWithText("Type the code").performClick()
+        compose.onNodeWithText(PairCode.QUESTION, substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Connect").assertIsNotEnabled()
+        compose.onNode(hasSetTextAction()).performTextInput("abcd-efgh-jkmn-pqrs")
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(emptyList<String>(), codes)
+        compose.onNodeWithText("Type the code").performClick()
+        compose.onNode(hasSetTextAction()).performTextInput("abcd-efgh-jkmn-pqrs")
+        compose.onNodeWithText("Connect").performClick()
+        assertEquals(listOf("abcd-efgh-jkmn-pqrs"), codes)
     }
     @Test fun signedOutDetailOffersSignInInsteadOfTheToggle() {
         var connects = 0
@@ -565,6 +600,78 @@ class CompanionTest {
         assertEquals(listOf("/native/auth/complete", "/native/me", "/native/me"), calls)
         assertEquals("ndev_once", repository.token())
         repository.local.clear(); secure.clear()
+    }
+
+    // Pairing by code (#845), as on iOS.
+    private class CodeServer(var code: () -> JSONObject, var me: () -> JSONObject = {
+        JSONObject().put("user", JSONObject().put("id", "u1").put("name", "Alex")).put("apps", JSONArray())
+    }) : FasApi() {
+        val calls = mutableListOf<Triple<String, String?, JSONObject?>>()
+        override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
+            calls += Triple("$method $path", token, body)
+            return when (path) { "/native/auth/code" -> code(); "/native/me" -> me(); else -> throw ApiFailure(404, "Not found") }
+        }
+    }
+    @Test fun aCodeSignsInLikeTheBrowserFlow() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context).apply { clear() }
+        val server = CodeServer({ JSONObject().put("token", "ndev_code").put("deviceId", "d2") })
+        val repository = CompanionRepository(LocalStore(context), secure, server)
+        assertTrue(repository.signIn(" abcd-efgh-jkmn-pqrs\n"))
+        assertEquals("ndev_code", repository.token())
+        assertEquals("the code is never kept", setOf("token", "userId"), secure.read().keys().asSequence().toSet())
+        assertEquals("Alex", repository.local.userName)
+        assertEquals(listOf("POST /native/auth/code", "GET /native/me"), server.calls.map { it.first })
+        val (_, token, body) = server.calls[0]
+        assertNull(token)
+        assertEquals("abcd-efgh-jkmn-pqrs", body!!.getString("code"))
+        assertEquals("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".take(80), body.getString("label"))
+        assertEquals("ndev_code", server.calls[1].second)
+        repository.local.clear(); secure.clear()
+    }
+    @Test fun rejectedCodesSayWhatToDo() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context).apply { clear() }
+        var status = 0
+        val server = CodeServer({ throw ApiFailure(status, "server text") })
+        val repository = CompanionRepository(LocalStore(context), secure, server)
+        for (s in listOf(400, 401, 403, 429)) {
+            status = s
+            val failure = runCatching { repository.signIn("ABCDEFGHJKMNPQRS") }.exceptionOrNull()!!
+            assertEquals(PairCode.failure(s), failure.message)
+            assertFalse("a rejected code never expires the connection", DeviceConnection.expired(failure))
+            assertEquals(0, secure.read().length())
+        }
+        server.calls.clear()
+        assertTrue(runCatching { repository.signIn("  ") }.isFailure)
+        assertEquals("an empty code is not sent", 0, server.calls.size)
+        repository.local.clear(); secure.clear()
+    }
+    /** The code is spent once redeemed, so a failed `/native/me` must not lose the credential: the next resume finishes. */
+    @Test fun aCodeCredentialSurvivesAFailedMe() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context).apply { clear() }
+        val ok = CodeServer({ JSONObject() }).me
+        val server = CodeServer({ JSONObject().put("token", "ndev_code") }, { throw java.io.IOException("offline") })
+        val repository = CompanionRepository(LocalStore(context), secure, server)
+        assertTrue(runCatching { repository.signIn("ABCDEFGHJKMNPQRS") }.isFailure)
+        assertNull(repository.token())
+        assertEquals("ndev_code", secure.read().getString("issued"))
+        server.code = { throw ApiFailure(403, "used") }; server.me = ok
+        assertTrue(repository.finishSignIn())
+        assertEquals("ndev_code", repository.token())
+        assertEquals("the code is not sent again", listOf("POST /native/auth/code", "GET /native/me", "GET /native/me"), server.calls.map { it.first })
+        repository.local.clear(); secure.clear()
+    }
+    @Test fun aCodeNeverReplacesAConnection() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context).apply { write(JSONObject().put("token", "ndev_test").put("userId", "u1")) }
+        val server = CodeServer({ JSONObject().put("token", "ndev_code") })
+        val repository = CompanionRepository(LocalStore(context), secure, server)
+        assertTrue(runCatching { repository.signIn("ABCDEFGHJKMNPQRS") }.isFailure)
+        assertEquals(0, server.calls.size)
+        assertEquals("ndev_test", repository.token())
+        secure.clear()
     }
 
     /** #660: re-enabling an app that is still turning off keeps the new grant when `/native/me` fails after the PUT. */

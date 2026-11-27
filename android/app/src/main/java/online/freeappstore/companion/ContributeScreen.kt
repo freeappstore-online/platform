@@ -144,6 +144,7 @@ private fun ContributeStatus(state: CompanionState, actions: CompanionActions, s
         Text("Help apps you use by generating their audio on this phone, such as narration for Books. Apps publish the jobs; your phone does the work while it's plugged in.")
         if (!state.signedIn) {
             Button(onClick = actions.connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
+            PairByCode(state.busy, actions.connectCode)
             return@Column
         }
         Card(Modifier.fillMaxWidth()) {

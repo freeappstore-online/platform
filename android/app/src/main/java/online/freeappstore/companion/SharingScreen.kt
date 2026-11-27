@@ -109,6 +109,7 @@ internal fun SharingDashboard(
     pauseApp: (ConnectedApp) -> Unit, resumeApp: (ConnectedApp) -> Unit, pause: () -> Unit, resume: () -> Unit,
     permissions: () -> Unit, sync: () -> Unit, openApp: (ConnectedApp) -> Unit,
     showApp: (ConnectedApp) -> Unit, showActivity: () -> Unit, showMap: () -> Unit, reconnect: () -> Unit = {},
+    connectCode: (String) -> Unit = {},
 ) {
     Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
@@ -117,11 +118,12 @@ internal fun SharingDashboard(
             if (state.signedIn || state.expired) TextButton(onClick = showActivity) { Text("Activity") }
         }
         StatusMessages(state)
-        if (state.expired) ExpiredCard(state, reconnect)
+        if (state.expired) ExpiredCard(state, reconnect, connectCode)
         if (!state.signedIn && !state.expired) {
             Text("Your apps, connected to your phone", style = MaterialTheme.typography.titleMedium)
             Text("Enable background features for the FAS apps you use. You stay in control of what each app can access.")
             Button(onClick = connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
+            PairByCode(state.busy, connectCode)
             if (state.pairingCode.isNotBlank()) Text("Match this code in your browser: ${state.pairingCode}")
         } else {
             val granted = state.apps.filter { it.grantId != null }
@@ -153,13 +155,14 @@ internal fun SharingDashboard(
 
 /** The expired connection (#638): one way back that keeps the history. */
 @Composable
-internal fun ExpiredCard(state: CompanionState, reconnect: () -> Unit) {
+internal fun ExpiredCard(state: CompanionState, reconnect: () -> Unit, connectCode: (String) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connection expired", style = MaterialTheme.typography.titleLarge)
             Text("This phone is no longer connected to FreeAppStore, so location sharing has stopped. Your sharing history stays on this phone. Reconnect, then turn sharing back on for each app.",
                 style = MaterialTheme.typography.bodyMedium)
             Button(onClick = reconnect, enabled = !state.busy) { Text("Reconnect") }
+            PairByCode(state.busy, connectCode)
             if (state.pairingCode.isNotBlank()) Text("Match this code in your browser: ${state.pairingCode}", style = MaterialTheme.typography.bodySmall)
         }
     }

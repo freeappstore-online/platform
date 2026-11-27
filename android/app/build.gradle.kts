@@ -90,6 +90,12 @@ dependencies {
     implementation("androidx.core:core-ktx:1.17.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.9.4")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    // Scan a code (#845): CameraX frames decoded by ZXing's QR reader, all on the phone. No ML Kit, no Play services.
+    val cameraX = "1.4.2"
+    implementation("androidx.camera:camera-camera2:$cameraX")
+    implementation("androidx.camera:camera-lifecycle:$cameraX")
+    implementation("androidx.camera:camera-view:$cameraX")
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     // The real org.json for JVM unit tests (android.jar only has stubs). Test-only.
     testImplementation("org.json:json:20250517")
