@@ -105,7 +105,10 @@ final class ContributeRunner: ObservableObject {
         request.requiresExternalPower = prefs.chargingOnly
         request.requiresNetworkConnectivity = true
         request.earliestBeginDate = soon ? nil : Date(timeIntervalSinceNow: 15 * 60)
-        try? BGTaskScheduler.shared.submit(request)
+        do { try BGTaskScheduler.shared.submit(request) } catch {
+            // Not fatal (the simulator always refuses; too many pending requests): the next schedule() asks again
+            Self.logger.error("Background run not requested: \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     /// Saves the mode and conditions (#830). Off stops the job in hand and cancels the background request; nothing starts
