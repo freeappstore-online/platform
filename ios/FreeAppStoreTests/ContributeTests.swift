@@ -1020,6 +1020,21 @@ final class ContributeTests: XCTestCase {
 
 /// The contribution record in the real store (#733).
 final class ContributionStoreTests: XCTestCase {
+    func testDisconnectDeletesTheKeptAudio() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let kept = AttemptAudio(dir: directory.appendingPathComponent("kept"))
+        let local = try LocalStore(directory: directory, attemptAudio: kept)
+        defer { local.close() }
+        let file = directory.appendingPathComponent("j1.tmp")
+        try Data("a".utf8).write(to: file)
+        try kept.save("j1", file: file, segments: [[0, 1, 0.0, 0.5]])
+        try local.clearForReconnect()
+        XCTAssertNotNil(kept.load("j1"), "the same account keeps its history")
+        try local.clear()
+        XCTAssertNil(kept.load("j1"), "Disconnect, or another account: the audio goes with the record")
+    }
+
     func testRecordsJobsAndCountsToday() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }

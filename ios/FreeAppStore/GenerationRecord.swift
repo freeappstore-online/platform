@@ -242,6 +242,8 @@ struct AttemptAudio {
     }
 
     func audio(_ jobId: String) -> URL { dir.appendingPathComponent("\(jobId).m4a") }
+    /// Disconnect, or pairing a different account: all of it.
+    func clear() { try? FileManager.default.removeItem(at: dir) }
     private func meta(_ jobId: String) -> URL { dir.appendingPathComponent("\(jobId).json") }
 
     /// Moves `file` in as the job's audio, with its `[charStart, charEnd, startSec, endSec]` segments.

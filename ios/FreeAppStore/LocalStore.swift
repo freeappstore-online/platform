@@ -13,10 +13,13 @@ final class LocalStore: @unchecked Sendable {
     }
 
     let fileURL: URL
+    /// This phone's kept attempt audio (#827): cleared with the record.
+    private let attemptAudio: AttemptAudio
     private var db: OpaquePointer?
     private let lock = NSRecursiveLock()
 
-    init(directory: URL = LocalStore.defaultDirectory) throws {
+    init(directory: URL = LocalStore.defaultDirectory, attemptAudio: AttemptAudio = AttemptAudio(dir: AttemptAudio.defaultDirectory)) throws {
+        self.attemptAudio = attemptAudio
         let protection: [FileAttributeKey: Any] = [.protectionKey: Self.fileProtection]
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: protection)
         var dir = directory
@@ -311,6 +314,7 @@ final class LocalStore: @unchecked Sendable {
             try exec("DELETE FROM share_points")
             try exec("DELETE FROM generation_jobs")
         }
+        attemptAudio.clear()
     }
 
     /// Pairing the same account after an expiry (#638): the queue and the settings, which hold the old device's
