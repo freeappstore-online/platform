@@ -269,10 +269,10 @@ class ContributeTest {
         assertEquals(1, contributor().run(books, { true }))
         assertEquals(listOf(7_000L), sleeps)
         api.jobs += job("j2")
-        api.uploadFailure = ApiFailure(429, "daily contribution limit reached; try tomorrow")
+        api.uploadFailure = ApiFailure(429, "this app's daily generation budget is used up; try tomorrow")
         assertEquals(0, contributor().run(books, { true }))
         assertEquals(3, api.uploadAttempts)
-        assertEquals("429 daily contribution limit reached; try tomorrow", log.rows["j2"]!!.reason)
+        assertEquals("429 this app's daily generation budget is used up; try tomorrow", log.rows["j2"]!!.reason)
         assertEquals(1_000L, FasApi.retryAfterMs("1", 0))
         assertEquals(90_000L, FasApi.retryAfterMs("Thu, 26 Nov 2026 12:01:30 GMT", java.time.Instant.parse("2026-11-26T12:00:00Z").toEpochMilli()))
         assertNull(FasApi.retryAfterMs("soon", 0))
@@ -588,10 +588,18 @@ class ContributeTest {
         assertFalse(ContributeWorker.withinBudget(foreground = false, elapsedMs = ContributeWorker.PLAIN_CLAIM_MS))
         assertTrue("foreground", ContributeWorker.withinBudget(foreground = true, elapsedMs = 60 * 60_000L))
     }
+    /** #827: a plain job that stops itself at PLAIN_RUN_MS records the system's time budget, not the user. */
+    @Test fun aPlainJobOutOfTimeIsNotAUserStop() {
+        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = true, outOfTime = true))
+        assertEquals("user_stop", ContributeWorker.stopReason(cancelled = true, systemStop = true, power = true, outOfTime = true))
+        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = true, power = true, outOfTime = false))
+        assertEquals("unplugged", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = false, outOfTime = false))
+        assertEquals("the app was turned off", "user_stop", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = true, outOfTime = false))
+    }
     /** #828: the daily limit's 429 (no Retry-After) at the claim ends the run without generating anything. */
     @Test fun theDailyLimitAtTheClaimEndsTheRun() {
         api.jobs += job("j1")
-        api.claimFailures += ApiFailure(429, "daily contribution limit reached; try tomorrow")
+        api.claimFailures += ApiFailure(429, "this app's daily generation budget is used up; try tomorrow")
         val failure = runCatching { contributor().run(books, { true }) }.exceptionOrNull()
         assertEquals(429, (failure as ApiFailure).status)
         assertTrue("not retried", sleeps.isEmpty())

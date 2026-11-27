@@ -110,8 +110,9 @@ and verifies every upload; the phone is never trusted.
   stops running work part-way. The connected constraint is needed (#828): Android 17 blocks the network of an app in the
   background (`blocked=APP_BACKGROUND`) except for a job that asked for one. Unplugged, it stops without uploading. A run
   in progress is never replaced by **Run now** or a settings change; otherwise the hourly work takes the current
-  constraints. If Android refuses the foreground service, the run is a plain job and claims only in its first 5 minutes.
-  The daily limit's `429` at the claim ends the run. Each run logs `ContributeWorker: Run ended: <reason>`. A job stopped
+  constraints. If Android refuses the foreground service, the run is a plain job: it claims only in its first 5 minutes
+  and ends itself at 9, before the system times it out, recording the job in hand `stopped` (`background_expired`).
+  A `429` at the claim (the app's daily budget, or 4 open leases) ends the run. Each run logs `ContributeWorker: Run ended: <reason>`. A job stopped
   part-way is recorded and never retried on this phone, which Activity says.
   The run takes one job from each opted-in app in turn (#819), skipping apps with no open job, rather than finishing one
   app's jobs before the next; an app turned off mid-run is left out from its next turn.

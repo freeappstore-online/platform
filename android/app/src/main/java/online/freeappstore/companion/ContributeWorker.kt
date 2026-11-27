@@ -37,8 +37,9 @@ import kotlinx.coroutines.withContext
  * job, which the system stops after about ten minutes (on the Pixel 10a, Android 17, the refusal is
  * `ForegroundServiceStartNotAllowedException`), so it claims only within [ContributeWorker.PLAIN_CLAIM_MS] of its start and
  * ends itself at [ContributeWorker.PLAIN_RUN_MS], before the system times it out; the job in hand is then recorded
- * `stopped` and its lease lapses. The server refuses a claim once the
- * day's contribution limit is reached (`429`); the run then ends until the next one. Each run logs how it ended.
+ * `stopped` (`background_expired`) and its lease lapses. The server refuses a claim once the app's daily generation
+ * budget is used up or the user holds 4 open leases (`429`); the run then ends until the next one. Each run logs how it
+ * ended.
  */
 class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -84,12 +85,8 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             KokoroSynthesizer(graph.kokoro).use { synth ->
                 // Why keepGoing turned false, for the attempt record (#827): the notification's Stop cancels the work.
                 val whyStopped = {
-                    when {
-                        stopRequested || isStopped && Build.VERSION.SDK_INT >= 31 && stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP -> "user_stop"
-                        isStopped -> "background_expired"
-                        !power -> "unplugged"
-                        else -> "user_stop" // the app was turned off
-                    }
+                    stopReason(cancelled = stopRequested || isStopped && Build.VERSION.SDK_INT >= 31 && stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP,
+                        systemStop = isStopped, power = power, outOfTime = !foreground && SystemClock.elapsedRealtime() - started >= PLAIN_RUN_MS)
                 }
                 val contributor = Contributor(graph.generation, local, synth, ::AacEncoder, applicationContext.cacheDir,
                     probes = androidProbes(applicationContext, whyStopped), kept = graph.kept)
@@ -155,6 +152,13 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         internal const val PLAIN_RUN_MS = 9 * 60_000L
         /** Whether a run may claim another job [elapsedMs] after it started (#828). */
         internal fun withinBudget(foreground: Boolean, elapsedMs: Long) = foreground || elapsedMs < PLAIN_CLAIM_MS
+        /** The #813 reason a run stopped the job in hand: [outOfTime] is a plain job past [PLAIN_RUN_MS] (#827). */
+        internal fun stopReason(cancelled: Boolean, systemStop: Boolean, power: Boolean, outOfTime: Boolean) = when {
+            cancelled -> "user_stop"
+            systemStop || outOfTime -> "background_expired"
+            !power -> "unplugged"
+            else -> "user_stop" // the app was turned off
+        }
         private val lock = Mutex()
         /** What the running work is doing, in memory only; null while idle. */
         @Volatile var status: String? = null
