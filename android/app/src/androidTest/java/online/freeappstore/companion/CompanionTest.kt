@@ -220,6 +220,8 @@ class CompanionTest {
         compose.onNodeWithText("12 open jobs").assertExists()
         compose.onNodeWithText("Storage used").performScrollTo()
         assertEquals("settings", emptyList<String>(), brokenWords())
+        compose.onNodeWithText("Copy diagnostics").performScrollTo() // #813
+        assertEquals("diagnostics", emptyList<String>(), brokenWords())
     }
     /** #845: Scan a code and Type the code sit next to Sign in and on the expired card, and never break a word at large fonts. */
     @Test fun pairByCodeSitsNextToSignInAtLargeFonts() {
