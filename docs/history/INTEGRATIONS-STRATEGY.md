@@ -43,7 +43,7 @@ Dev or user brings their own API key. Platform stores it encrypted (AES-256-GCM 
 
 Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier, Make, n8n, and any HTTP endpoint work natively.
 
-**Events at the time of this proposal** (shipped; the live list of 12, including `friend.*`, is `SUPPORTED_EVENTS` in `packages/backend/src/routes/webhooks.ts`):
+**Events at the time of this proposal** (never dispatched and removed in #763; only the `friend.*` events are live, see `SUPPORTED_EVENTS` in `packages/backend/src/routes/webhooks.ts`):
 
 | Event | Payload | Use case |
 |---|---|---|
@@ -86,5 +86,5 @@ Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier,
 ## Implementation priority for FAS
 
 1. ~~**Transactional email**~~ — **Shipped.** `fas.email.send()` live, 100/day per app.
-2. ~~**Outbound webhooks**~~ — **Shipped.** `fas.webhooks` CRUD + HMAC-SHA256, 5 per app, 12 events.
+2. ~~**Outbound webhooks**~~ — **Shipped.** `fas.webhooks` CRUD + HMAC-SHA256, 5 per app, 4 `friend.*` events (#763).
 3. **Full-text search** -- D1 FTS5 on the shared database. Low effort, useful for apps with collections.

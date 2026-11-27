@@ -52,7 +52,7 @@ describe('webhook routes', () => {
     const webhooks = [
       {
         id: 'w1',
-        event: 'kv.changed',
+        event: 'friend.accepted',
         url: 'https://example.com/hook',
         active: 1,
         created_at: 1000,
@@ -84,18 +84,26 @@ describe('webhook routes', () => {
     expect(res.status).toBe(400);
   });
 
-  it('POST /v1/apps/:appId/webhooks returns 400 for unsupported event', async () => {
-    const res = await app.request(
-      '/v1/apps/timer/webhooks',
-      {
-        method: 'POST',
-        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'invalid.event', url: 'https://example.com/hook' }),
-      },
-      env(fakeDB({ user })),
-    );
-    expect(res.status).toBe(400);
-  });
+  // kv.changed etc. were advertised but never dispatched; they are refused now (#763).
+  it.each(['invalid.event', 'kv.changed', 'user.first_visit', 'role.assigned'])(
+    'POST /v1/apps/:appId/webhooks returns 400 for unsupported event %s',
+    async (event) => {
+      const res = await app.request(
+        '/v1/apps/timer/webhooks',
+        {
+          method: 'POST',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event, url: 'https://example.com/hook' }),
+        },
+        env(fakeDB({ user })),
+      );
+      expect(res.status).toBe(400);
+      const data = (await res.json()) as { error: string };
+      expect(data.error).toBe(
+        `Unsupported event '${event}'. Supported: friend.requested, friend.accepted, friend.removed, friend.blocked`,
+      );
+    },
+  );
 
   it('POST /v1/apps/:appId/webhooks returns 400 for non-HTTPS URL', async () => {
     const res = await app.request(
@@ -103,7 +111,7 @@ describe('webhook routes', () => {
       {
         method: 'POST',
         headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'kv.changed', url: 'http://example.com/hook' }),
+        body: JSON.stringify({ event: 'friend.accepted', url: 'http://example.com/hook' }),
       },
       env(fakeDB({ user })),
     );
@@ -116,7 +124,7 @@ describe('webhook routes', () => {
       {
         method: 'POST',
         headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'kv.changed', url: 'https://example.com/hook' }),
+        body: JSON.stringify({ event: 'friend.accepted', url: 'https://example.com/hook' }),
       },
       env(fakeDB({ user, count: 5 })),
     );
@@ -129,7 +137,7 @@ describe('webhook routes', () => {
       {
         method: 'POST',
         headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: 'kv.changed', url: 'https://example.com/hook' }),
+        body: JSON.stringify({ event: 'friend.accepted', url: 'https://example.com/hook' }),
       },
       env(fakeDB({ user, count: 0 })),
     );
@@ -171,14 +179,18 @@ describe('webhook routes', () => {
         {
           method: 'POST',
           headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ event: 'kv.changed', url }),
+          body: JSON.stringify({ event: 'friend.accepted', url }),
         },
         env(fakeDB({ user })),
       );
       expect(res.status).toBe(400);
     });
 
-    const hook = { url: 'https://hooks.example.com/in', secret: 's3cret', event: 'kv.changed' };
+    const hook = {
+      url: 'https://hooks.example.com/in',
+      secret: 's3cret',
+      event: 'friend.accepted',
+    };
     const test = async () =>
       app.request(
         '/v1/apps/timer/webhooks/w1/test',

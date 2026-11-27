@@ -2,8 +2,8 @@ import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
  * Outbound webhook management for the app owner. Devs register URLs to
- * receive HTTP POST when events fire (user.first_visit, kv.changed,
- * collection.created, etc.).
+ * receive HTTP POST when events fire: friend.requested, friend.accepted,
+ * friend.removed, friend.blocked (delivered only to apps both users joined).
  *
  * Registering a webhook is an app setting, so it is console-only (Creator
  * Console → app → Webhooks; the API rejects app sessions, #495). From the app

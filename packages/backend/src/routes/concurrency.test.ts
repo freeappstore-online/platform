@@ -113,7 +113,7 @@ describe.skipIf(!hasSqlite)('caps under concurrency (#277)', () => {
   it('webhooks: 10 parallel creates at 4/5, exactly one lands', async () => {
     const { db, d1, auth } = await setup();
     const ins = db.prepare(
-      "INSERT INTO app_webhooks (id, app_id, event, url, secret) VALUES (?, 'timer', 'kv.changed', 'https://example.com/h', 's')",
+      "INSERT INTO app_webhooks (id, app_id, event, url, secret) VALUES (?, 'timer', 'friend.accepted', 'https://example.com/h', 's')",
     );
     for (let i = 0; i < 4; i++) ins.run(`w${i}`);
     const statuses = await race(
@@ -124,7 +124,7 @@ describe.skipIf(!hasSqlite)('caps under concurrency (#277)', () => {
         new Request(url('/webhooks'), {
           method: 'POST',
           headers: { ...auth, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ event: 'kv.changed', url: 'https://example.com/hook' }),
+          body: JSON.stringify({ event: 'friend.accepted', url: 'https://example.com/hook' }),
         }),
     );
     expect(statuses.filter((s) => s === 200)).toHaveLength(1);

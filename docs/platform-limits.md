@@ -141,7 +141,7 @@ KV and document data (both deprecated for app data, ADR-004) share the platform 
 | Limit | Value |
 |-------|-------|
 | Webhooks per app | 5 |
-| Event types | 12 |
+| Event types | 4 |
 | Signing | HMAC-SHA256 |
 
 ## Push subscriptions (`fas.push`)

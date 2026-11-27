@@ -29,9 +29,9 @@ describe('Webhooks', () => {
   });
 
   it('lists with the bearer token', async () => {
-    const fetchMock = mockFetch(200, { webhooks: [], supported_events: ['kv.changed'] });
+    const fetchMock = mockFetch(200, { webhooks: [], supported_events: ['friend.accepted'] });
     const result = await new Webhooks('a', 'https://api.example', fakeAuth('tok')).list();
-    expect(result.supported_events).toEqual(['kv.changed']);
+    expect(result.supported_events).toEqual(['friend.accepted']);
     expect(fetchMock.mock.calls[0]![1].headers.Authorization).toBe('Bearer tok');
   });
 

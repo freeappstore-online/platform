@@ -347,7 +347,10 @@ const { status } = await fas.webhooks.test(webhooks[0].id); // the receiver's HT
 await fas.webhooks.delete(webhooks[0].id);
 ```
 
-**Limits:** 5 webhooks per app, 12 event types. Management requires app ownership. Read `supported_events` from `list()` rather than inventing event names.
+**Events:** `friend.requested`, `friend.accepted`, `friend.removed`, `friend.blocked`, delivered only to
+apps both users joined. Registering any other event returns 400.
+
+**Limits:** 5 webhooks per app, 4 event types. Management requires app ownership. Read `supported_events` from `list()` rather than inventing event names.
 
 ## Logging (`fas.log`)
 

@@ -4,7 +4,10 @@
  *
  * CRUD: /v1/apps/:appId/webhooks
  * Test: /v1/apps/:appId/webhooks/:id/test
- * Dispatch: dispatchWebhook() called by other routes when events fire
+ * Dispatch: dispatchWebhookPlatform() called by friends.ts for the friend.* events
+ *
+ * Only events the platform actually dispatches are accepted (#763). FAS keeps
+ * no app data on the server (ADR-004), so there are no kv/collection events.
  */
 
 import { Hono } from 'hono';
@@ -15,14 +18,6 @@ import type { Env } from '../types.js';
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
 
 const SUPPORTED_EVENTS = [
-  'user.first_visit',
-  'user.deleted',
-  'kv.changed',
-  'collection.created',
-  'collection.deleted',
-  'counter.threshold',
-  'role.assigned',
-  'role.revoked',
   'friend.requested',
   'friend.accepted',
   'friend.removed',
@@ -57,7 +52,10 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   }
   if (!SUPPORTED_EVENTS.includes(body.event)) {
     return c.json(
-      { ok: false, error: `Unsupported event. Supported: ${SUPPORTED_EVENTS.join(', ')}` },
+      {
+        ok: false,
+        error: `Unsupported event '${body.event}'. Supported: ${SUPPORTED_EVENTS.join(', ')}`,
+      },
       400,
     );
   }
@@ -141,43 +139,7 @@ webhookRoutes.post('/apps/:appId/webhooks/:id/test', async (c) => {
   return c.json({ status: result.status });
 });
 
-// ── Dispatcher (called by other routes) ─────────────────────────
-
-export async function dispatchWebhook(
-  db: D1Database,
-  appId: string,
-  event: string,
-  payload: Record<string, unknown>,
-): Promise<void> {
-  const hooks = await db
-    .prepare(
-      'SELECT id, url, secret FROM app_webhooks WHERE app_id = ? AND event = ? AND active = 1',
-    )
-    .bind(appId, event)
-    .all<{ id: string; url: string; secret: string }>();
-
-  for (const hook of hooks.results ?? []) {
-    const deliveryId = crypto.randomUUID();
-    const body = JSON.stringify({ ...payload, event, appId, timestamp: Date.now() });
-
-    // Record the delivery attempt
-    await db
-      .prepare(
-        'INSERT INTO webhook_deliveries (id, webhook_id, event, payload, attempts, created_at) VALUES (?, ?, ?, ?, 1, ?)',
-      )
-      .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
-      .run();
-
-    // The recorded id is the X-FAS-Delivery-Id the receiver sees (#764).
-    const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body), deliveryId);
-
-    // Update delivery status
-    await db
-      .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
-      .bind(result.status, Math.floor(Date.now() / 1000), deliveryId)
-      .run();
-  }
-}
+// ── Dispatcher (called by friends.ts) ───────────────────────────
 
 /**
  * Dispatch a webhook for platform-level events (friends).
