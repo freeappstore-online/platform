@@ -40,11 +40,11 @@ the committed one or a tag that exists. The committed version may be released as
 # Desktop: also builds the installers and refreshes desktop-latest (the download page's links).
 gh workflow run desktop-release.yml --repo freeappstore-online/platform --ref main -f version=0.3.0
 
-# Android: then runs android.yml on main, which builds the signed release (and uploads it to Play's internal track
+# Android: then runs android.yml on the release tag, which builds the signed release (and uploads it to Play's internal track
 # when ANDROID_PLAY_PUBLISH_ENABLED is set and the signing secrets exist; android/README.md, Release).
 gh workflow run app-release.yml --repo freeappstore-online/platform --ref main -f app=android -f version=0.2.0
 
-# iOS: then runs ios.yml on main. There is no TestFlight upload until signing exists.
+# iOS: then runs ios.yml on the release tag. There is no TestFlight upload until signing exists.
 gh workflow run app-release.yml --repo freeappstore-online/platform --ref main -f app=ios -f version=0.2.0
 ```
 
