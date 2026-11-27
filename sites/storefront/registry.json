@@ -3550,6 +3550,22 @@
       "discoveryRequestedAt": "2026-11-26T02:39:45.145Z",
       "creatorGithub": "reeyansh404",
       "permissions": []
+    },
+    {
+      "id": "csvguard-lite",
+      "name": "csvguard-lite",
+      "category": "Productivity",
+      "icon": "📤",
+      "iconBg": "#e0e7ff",
+      "description": "Upload CSV files, preview datasets, and detect missing values instantly in your browser.",
+      "appUrl": "https://csvguard-lite.freeappstore.online",
+      "repo": "freeappstore-online/csvguard-lite",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-27T05:20:55.598Z",
+      "creatorGithub": "Thanekachalamjagan"
     }
   ]
 }
