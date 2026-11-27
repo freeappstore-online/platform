@@ -7,8 +7,22 @@ import type { Env } from '../types.js';
 
 export const publishRoutes = new Hono<{ Bindings: Env }>();
 
+/** The listing name: the publisher's display name, else the id title-cased (`moon-tides` → `Moon Tides`, #823). */
+function displayName(body: PublishBody): string {
+  const given = typeof body.displayName === 'string' ? body.displayName.trim().slice(0, 60) : '';
+  return (
+    given ||
+    body.name
+      .split('-')
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ')
+  );
+}
+
 interface PublishBody {
   name: string;
+  /** The store listing's display name, such as "Moon & Tides" (#823); defaults to the id title-cased. */
+  displayName?: string;
   /** "apps" only — FAS platform now serves only FreeAppStore. FGS publishes go
    *  through api.freegamestore.online (FGS admin Worker). */
   store?: 'apps';
@@ -167,7 +181,7 @@ publishRoutes.post('/publish', async (c) => {
     },
     body: JSON.stringify({
       id: body.name,
-      name: body.name,
+      name: displayName(body),
       category: body.category,
       ...pickAppIcon(body.name, body.oneliner, body.category),
       description: body.oneliner,

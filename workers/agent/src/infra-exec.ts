@@ -522,6 +522,7 @@ async function publishStoreListing(appId: string, appName: string, tc: ToolCall,
       },
       body: JSON.stringify({
         name: appId,
+        displayName: appName,
         store: "apps",
         category: normalizePublishCategory(String(tc.input.category || "Utilities")),
         type: appTypeOf(tc),

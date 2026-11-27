@@ -186,6 +186,8 @@ describe('POST /v1/publish', () => {
     expect(sentBody.githubLogin).toBe('me');
     expect(sentBody.store).toBe('apps');
     expect(sentBody.type).toBe('standalone');
+    // No display name given: the id title-cased (#823).
+    expect(sentBody.name).toBe('My App');
     // No CF-Access-* headers — service binding bypasses the gate.
     const headers = call.init.headers as Record<string, string>;
     expect(headers['CF-Access-Client-Id']).toBeUndefined();
@@ -281,6 +283,30 @@ describe('POST /v1/publish', () => {
     );
     expect(res.status).toBe(200);
     expect(JSON.parse(calls[0]!.init.body as string).crossOriginIsolated).toBe(true);
+  });
+
+  it('forwards the display name as the listing name (#823)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, displayName: '  Moon & Tides ' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+    );
+    const sent = JSON.parse(calls[0]!.init.body as string);
+    expect(sent.id).toBe('my-app');
+    expect(sent.name).toBe('Moon & Tides');
   });
 
   it('lets an admin attribute the app to a different creator (contributor onboarding)', async () => {

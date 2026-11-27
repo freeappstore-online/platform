@@ -13,6 +13,7 @@ import {
   legacyWorkflowReasons,
   publishCommand,
   readCrossOriginIsolatedFlag,
+  readDisplayName,
   resolveCategory,
   resolveFromFlags,
   resolveType,
@@ -256,6 +257,37 @@ describe('summarizeWorkflowDrift', () => {
     expect(summarizeWorkflowDrift(customised, DEPLOY_YML)).toEqual([
       '1 line(s) would be removed, 1 added',
     ]);
+  });
+});
+
+describe('readDisplayName (#823)', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = join(import.meta.dirname, '..', '..', 'node_modules', '.cache', `title-${Date.now()}`);
+    mkdirSync(join(tmpDir, 'web'), { recursive: true });
+  });
+
+  afterEach(() => {
+    const { rmSync } = require('node:fs');
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const title = (t: string) =>
+    writeFileSync(
+      join(tmpDir, 'web', 'index.html'),
+      `<html><head><title>${t}</title></head></html>`,
+    );
+
+  it('takes the title without the store suffix, decoding entities', async () => {
+    title('Moon &amp; Tides — FreeAppStore');
+    expect(await readDisplayName('tides', tmpDir)).toBe('Moon & Tides');
+  });
+
+  it('is undefined when the title is just the id or missing', async () => {
+    title('tides — FreeAppStore');
+    expect(await readDisplayName('tides', tmpDir)).toBeUndefined();
+    expect(await readDisplayName('tides', join(tmpDir, 'nowhere'))).toBeUndefined();
   });
 });
 

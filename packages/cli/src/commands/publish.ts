@@ -318,6 +318,29 @@ export async function readCrossOriginIsolatedFlag(
   }
 }
 
+/**
+ * The app's display name from its `<title>` ("Moon &amp; Tides — FreeAppStore" → "Moon & Tides"), for the store
+ * listing (#823). Undefined when there is none or it is just the id; the server then title-cases the id.
+ */
+export async function readDisplayName(
+  appId: string,
+  root = process.cwd(),
+): Promise<string | undefined> {
+  try {
+    const html = await readFile(join(root, 'web', 'index.html'), 'utf8');
+    const title = /<title>([^<]*)<\/title>/i.exec(html)?.[1] ?? '';
+    const name = title
+      .replace(/\s*[—–-]\s*FreeAppStore\s*$/, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&quot;/g, '"')
+      .trim();
+    return name && name.toLowerCase() !== appId ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionResult> {
   const config = await readConfig();
   const sessionToken = config.session?.token;
@@ -325,6 +348,7 @@ async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionRe
 
   const typeShort = input.type.startsWith('Standalone') ? 'standalone' : 'connected';
   const crossOriginIsolated = await readCrossOriginIsolatedFlag();
+  const displayName = await readDisplayName(input.name);
   const res = await fetch(`${config.apiBase}/v1/publish`, {
     method: 'POST',
     headers: {
@@ -333,6 +357,7 @@ async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionRe
     },
     body: JSON.stringify({
       name: input.name,
+      ...(displayName ? { displayName } : {}),
       store: 'apps',
       category: input.category,
       type: typeShort,
