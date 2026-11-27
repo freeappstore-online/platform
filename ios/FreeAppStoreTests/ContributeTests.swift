@@ -390,7 +390,9 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(record.encodeMs, 150, "a sentence, a pause and a sentence")
         XCTAssertEqual(record.uploadMs, 200)
         XCTAssertEqual(record.wallMs, 2_650)
-        XCTAssertEqual(record.cpuMs, 300)
+        XCTAssertEqual(record.cpuMs, 1_500, "300 a reading: the start, four progress records (#835) and the end")
+        XCTAssertEqual(record.model, "kokoro v1.0")
+        XCTAssertEqual([record.sentencesDone, record.sentencesTotal], [2, 2])
         XCTAssertEqual(record.durationMs, 2_400)
         XCTAssertEqual(record.rtf ?? 0, 2_000.0 / 2_400, accuracy: 0.0001)
         XCTAssertEqual(record.bytes, Int64(server.uploads[0].file.count))
@@ -419,6 +421,33 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: own.audio), server.uploads[0].file)
         XCTAssertEqual(own.segments.map(\.range), [NSRange(location: 0, length: 4), NSRange(location: 5, length: 4)])
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path))
+    }
+
+    /// #835: the job is on the record as `generating` from the claim, its record updated at each sentence, then it ends as
+    /// before; its audio is playable from the moment it is encoded, before the upload.
+    func testAJobIsInProgressFromTheClaimAndUpdatedAtEachSentence() async throws {
+        server.jobs = [job("j1", text: "One. Two. Three.")]
+        let kept = AttemptAudio(dir: dir.appendingPathComponent("kept"))
+        var seen: [(String?, Int?, Int?)] = []
+        synth.say = { [unowned self] text, _ in
+            let row = log.rows["j1"]
+            seen.append((row?.status, row?.record?.sentencesDone, row?.record?.sentencesTotal))
+            XCTAssertEqual(row?.record?.model, "kokoro v1.0")
+            XCTAssertEqual(row?.record?.leaseExpiresAt, now + 15 * 60_000)
+            XCTAssertEqual(row?.input, "One. Two. Three.")
+            return Audio(samples: [Float](repeating: 0, count: text.utf16.count), sampleRate: 24_000)
+        }
+        StubProtocol.handler = { [server] request in
+            if request.url!.path.hasSuffix("/result") { XCTAssertNotNil(kept.load("j1"), "playable once encoded") }
+            return server!.handle(request)
+        }
+        _ = try await contributor(audio: kept).run(["books"], keepGoing: { true })
+        XCTAssertEqual(seen.map(\.0), ["generating", "generating", "generating"])
+        XCTAssertEqual(seen.map(\.1), [0, 1, 2])
+        XCTAssertEqual(seen.map(\.2), [3, 3, 3])
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+        XCTAssertEqual(log.rows["j1"]?.record?.reason, "submitted")
+        XCTAssertNil(server.events.first?["model"], "device-only fields are never sent")
     }
 
     func testASynthesisErrorIsModelErrorAndAFailedPostNeverFailsTheJob() async throws {
@@ -848,8 +877,22 @@ final class ContributeTests: XCTestCase {
     }
 
     func testActivityFiltersAndStatusCard() {
-        XCTAssertEqual(["accepted", "uploading", "pending", "rejected", "skipped", "failed", "superseded"].map(ContributeFilter.of),
-                       [.accepted, .checking, .checking, .rejected, .notDone, .notDone, .notDone])
+        XCTAssertEqual(["generating", "accepted", "uploading", "pending", "rejected", "skipped", "failed", "superseded"].map(ContributeFilter.of),
+                       [.inProgress, .accepted, .checking, .checking, .rejected, .notDone, .notDone, .notDone])
+        XCTAssertFalse(ContributeFilter.checking.shows("generating"), "#835: In progress is apart from Checking")
+        // #835: a job in progress shows the time so far and its lease, not how it ended.
+        let running = AttemptRecord(device: "iPhone15,3", startedAt: 10_000, wallMs: 2_000, cpuMs: 1_500, model: "kokoro v1.0", sentencesDone: 3,
+                                    sentencesTotal: 12, leaseExpiresAt: 900_000)
+        let live = Dictionary(uniqueKeysWithValues: ContributionDetailView.facts(running, now: 15_000).map { ($0.label, $0.value) })
+        XCTAssertNil(live["Ended"])
+        XCTAssertEqual(live["Elapsed"], 5.0.formatted(.number.precision(.fractionLength(1))) + " s")
+        XCTAssertEqual(live["Model"], "kokoro v1.0")
+        XCTAssertNotNil(live["Lease expires"])
+        XCTAssertTrue(live["Ran on"]?.contains("iPhone15,3") == true)
+        let done = Dictionary(uniqueKeysWithValues: ContributionDetailView.facts(running).map { ($0.label, $0.value) })
+        XCTAssertEqual(done["Ended"], "other")
+        XCTAssertNil(done["Lease expires"])
+        XCTAssertEqual(ContributionDetailView.progress(done: 3, total: 12), "Sentence 4 of 12 · 25%")
         XCTAssertTrue(ContributeFilter.all.shows("failed"))
         XCTAssertFalse(ContributeFilter.accepted.shows("pending"))
         func state(running: Bool = false, cooling: Bool = false, hasApps: Bool = true, model: ModelState = .installed, lastStop: String? = nil,
@@ -1076,6 +1119,14 @@ final class ContributionStoreTests: XCTestCase {
         try local.saveAttempt("j3", attempt)
         try local.updateStatus("j3", status: "accepted", reason: "")
         XCTAssertEqual(try local.contributions().first?.record, attempt)
+        XCTAssertEqual(try local.contributions(limit: 1, jobId: "j1").map(\.jobId), ["j1"])
+        // #835: a job left in progress (a crash or a kill) is closed as not done, interrupted; others are left as they are.
+        try local.record(Contribution(jobId: "j4", appId: "books", key: "book/4", at: 400, status: "generating"))
+        XCTAssertEqual(try local.contributionCounts(since: 350), ["generating": 1])
+        XCTAssertEqual(try local.contributedSince("books", from: 350), 0, "not done yet")
+        try local.closeInterrupted()
+        XCTAssertEqual(try local.contributions(limit: 1, jobId: "j4").first.map { [$0.status, $0.reason] }, ["skipped", "interrupted"])
+        XCTAssertEqual(try local.contributions(limit: 1, jobId: "j3").first?.status, "accepted")
         XCTAssertTrue(local.chargingOnly)
         local.chargingOnly = false
         XCTAssertFalse(local.chargingOnly)

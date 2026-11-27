@@ -166,9 +166,13 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
 
 - **Where** (#820): the **Contribute** tab is one status card (running, paused while hot, idle or stopped and why, the
   app and job in hand, sentence n of N with speed as audio seconds per second, **Run now** / **Stop**) and today's counts
-  as chips (Accepted, Checking, Rejected, Not done) that open **Activity** filtered. **Activity** lists every job this
-  phone tried, newest first, grouped by day, filtered by status (All · Accepted · Checking · Rejected · Not done) and by
-  app; pull to refresh reads the server's verdicts for every app on the record. A row opens the job: app, key, when, the
+  as chips (In progress, Accepted, Checking, Rejected, Not done) that open **Activity** filtered. **Activity** lists every job this
+  phone tried, newest first, grouped by day, filtered by status (All · In progress · Accepted · Checking · Rejected · Not done) and by
+  app; pull to refresh reads the server's verdicts for every app on the record. **In progress** (#835): a job is on the
+  record as `generating` from its claim, its attempt record updated at each sentence with the model, sentences done of
+  all, wall and CPU time so far and the lease's expiry (kept on the phone only, never sent with the attempt event); its
+  detail follows it live and plays its audio once encoded. A `generating` row with no live run (a crash or a kill) is
+  closed as `skipped` with reason `interrupted` when the app starts and when a run starts or ends. A row opens the job: app, key, when, the
   audio's length and size, this phone's reason or the server's verdict and reason, the job's text, and **Play** for an accepted job (or, on a superseded one, the winning audio) from the public artifact URL, marking each sentence from the
   public meta's `segments` as it plays. For a job this phone uploaded, **Your report** (#831): **Good** / **Not good** with an
   optional note (at most 500 characters) and **Send**, which calls `PUT /v1/apps/:appId/generation/submissions/:submissionId/report`

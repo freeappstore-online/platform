@@ -16,7 +16,7 @@ enum ContributeText {
 
     /// The labels of `Contribution.status`.
     static let labels = [
-        "uploading": "Uploading", "pending": "Being checked", "accepted": "Accepted", "rejected": "Rejected",
+        "generating": "In progress", "uploading": "Uploading", "pending": "Being checked", "accepted": "Accepted", "rejected": "Rejected",
         "superseded": "Not needed", "skipped": "Skipped", "failed": "Failed",
     ]
 
@@ -27,6 +27,7 @@ enum ContributeText {
         "unplugged": "the phone was unplugged", "opted_out": "the app was turned off", "lease_expired": "the job's time ran out",
         "stopped": "stopped", "language": "this phone can't speak the set's language in that voice",
         "network": "no connection to FreeAppStore before the job's time ran out",
+        "interrupted": "FreeAppStore was closed or stopped before the job finished",
     ]
 
     /// The status card's headline and why (#820). `downloading`: the run is fetching the voice model.
@@ -49,13 +50,14 @@ enum ContributeText {
     }
 }
 
-/// The Activity filter (#820), and which statuses each one shows.
+/// The Activity filter (#820), and which statuses each one shows. In progress (#835): the job being generated now.
 enum ContributeFilter: String, CaseIterable, Identifiable {
-    case all = "All", accepted = "Accepted", checking = "Checking", rejected = "Rejected", notDone = "Not done"
+    case all = "All", inProgress = "In progress", accepted = "Accepted", checking = "Checking", rejected = "Rejected", notDone = "Not done"
     var id: Self { self }
 
     static func of(_ status: String) -> ContributeFilter {
         switch status {
+        case "generating": .inProgress
         case "accepted": .accepted
         case "uploading", "pending": .checking
         case "rejected": .rejected

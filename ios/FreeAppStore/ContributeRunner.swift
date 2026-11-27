@@ -138,6 +138,9 @@ final class ContributeRunner: ObservableObject {
         stopFlag = flag
         lastError = ""
         lastStop = nil
+        // No job is in progress outside a run (#835): one left `generating` is closed as interrupted, now and at the end.
+        try? local.closeInterrupted()
+        defer { try? local.closeInterrupted() }
         let began = Date()
         var submitted = 0
         var failed: String?

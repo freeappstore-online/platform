@@ -33,10 +33,17 @@ struct AttemptRecord: Codable, Equatable {
     var rtf: Double?
     var bytes: Int64?
     var durationMs: Int64?
+    /// Kept with the row only, never sent (#835): the model, sentences done of all and the lease's expiry (ms epoch).
+    var model: String?
+    var sentencesDone: Int?
+    var sentencesTotal: Int?
+    var leaseExpiresAt: Int64?
+    static let deviceOnly = ["model", "sentencesDone", "sentencesTotal", "leaseExpiresAt"]
 
-    /// The event `POST …/generation/events` takes for `jobId`.
+    /// The event `POST …/generation/events` takes for `jobId`: the server refuses any field it does not know.
     func event(_ jobId: String) throws -> [String: Any] {
         var out = try JSONSerialization.jsonObject(with: JSONEncoder().encode(self)) as? [String: Any] ?? [:]
+        Self.deviceOnly.forEach { out[$0] = nil }
         out["jobId"] = jobId
         return out
     }
@@ -213,6 +220,19 @@ final class AttemptMeter {
         record.bytes = bytes
         record.durationMs = durationMs
         if durationMs > 0, let synth = record.synthMs { record.rtf = Double(synth) / Double(durationMs) }
+    }
+
+    /// The record so far while the attempt runs (#835), kept with the job's `generating` row: wall and CPU time up to
+    /// now, the model, sentences done of all and the lease's expiry.
+    func progress(model: ModelId, done: Int, total: Int, leaseExpiresAt: Int64) -> AttemptRecord {
+        record.model = "\(model.model) \(model.version)"
+        record.sentencesDone = done
+        record.sentencesTotal = total
+        record.leaseExpiresAt = leaseExpiresAt
+        var now = record
+        now.wallMs = max(probes.clock() - wallStart, 0)
+        now.cpuMs = max(probes.cpuMs() - cpuStart, 0)
+        return now
     }
 
     /// The finished record: `reason` (or `other`), `error` when it ended in one.

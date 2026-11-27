@@ -26,8 +26,8 @@ struct GenerationJob {
     let leaseExpiresAt: Int64
 }
 
-/// One job on this phone's contribution record. `status`: uploading, then the server's pending/accepted/rejected/superseded;
-/// or skipped/failed locally.
+/// One job on this phone's contribution record. `status`: generating from the claim (#835), uploading, then the server's
+/// pending/accepted/rejected/superseded; or skipped/failed locally.
 struct Contribution: Equatable {
     let jobId: String
     let appId: String
@@ -475,20 +475,16 @@ final class Contributor {
         return submitted
     }
 
-    /// One attempt at `job`, measured (#827): when it ends its record is kept with the job's row, its finished audio is
-    /// kept for playback, and the record is sent to the server, best effort.
+    /// One attempt at `job`, measured (#827): when it ends its record is kept with the job's row and sent to the server,
+    /// best effort.
     private func process(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool) async throws -> Bool {
         let meter = await AttemptMeter(probes: probes, startedAt: now())
         let file = workDir.appendingPathComponent("contribution.m4a")
         defer { try? FileManager.default.removeItem(at: file) }
-        var segments: [[Any]]?
-        let submitted = try await attempt(appId, job, keepGoing, optedIn: optedIn, meter: meter, file: file, segments: &segments)
+        let submitted = try await attempt(appId, job, keepGoing, optedIn: optedIn, meter: meter, file: file)
         if meter.skip { return submitted }
         let record = await meter.finish()
         do { try log.saveAttempt(job.id, record) } catch { Self.logger.error("attempt record not kept: \(error.localizedDescription, privacy: .public)") }
-        if let audio, let segments, FileManager.default.fileExists(atPath: file.path) {
-            do { try audio.save(job.id, file: file, segments: segments) } catch { Self.logger.error("audio not kept: \(error.localizedDescription, privacy: .public)") }
-        }
         // Best effort and short (#828): after iOS ends a background run only seconds are left before the task must
         // complete, so a slow network can't hold it; the record stays with the job's row either way.
         do { try await client.events(appId, records: [(job.id, record)], timeout: keepGoing() ? 5 : 2) }
@@ -497,7 +493,7 @@ final class Contributor {
     }
 
     private func attempt(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool,
-                         meter: AttemptMeter, file: URL, segments: inout [[Any]]?) async throws -> Bool {
+                         meter: AttemptMeter, file: URL) async throws -> Bool {
         let handled = log.handled(job.id)
         func row(_ status: String, _ reason: String = "") -> Contribution {
             Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: status, reason: reason, input: job.text, setId: job.setId)
@@ -509,6 +505,10 @@ final class Contributor {
         let stopped = { optedIn() ? self.stopReason() : "opted_out" }
         let lease = Lease(client: client, appId: appId, job: job, now: now)
         var retried = false
+        // In progress from the claim (#835), so Activity shows the job while it is generated.
+        var started = row("generating")
+        started.record = meter.progress(model: job.model, done: 0, total: 0, leaseExpiresAt: lease.expiry)
+        try log.record(started)
         do {
             guard let (narrated, durationMs) = try await narrate(job, file, lease, keepGoing, meter) else {
                 let reason = keepGoing() ? "lease_expired" : stopped()
@@ -516,7 +516,7 @@ final class Contributor {
                 try log.record(row("skipped", reason))
                 return false
             }
-            segments = narrated
+            keep(job.id, file: file, segments: narrated)
             let meta: [String: Any] = ["segments": narrated]
             meter.stage = .start
             try await lease.renew()
@@ -559,12 +559,27 @@ final class Contributor {
             meter.failure = error
             let reason = GenerationPolicy.retryDelay(error, attempt: 0) != nil ? "network"
                 : String((((error as? ApiFailure).map { "\($0.status) " } ?? "") + error.localizedDescription).prefix(120))
-            if log.handled(job.id) { try log.updateStatus(job.id, status: "failed", reason: reason) }
-            else { try log.record(row("failed", reason)) }
+            try log.updateStatus(job.id, status: "failed", reason: reason)
             // An upload whose answer was lost may have arrived (a retry then finds the lease used): the server's record says.
             if retried { try? await client.refresh(appId, log: log) }
             return false
         }
+    }
+
+    /// Keeps a copy of the encoded audio and its segments for playback (#827), playable from here on (#835).
+    private func keep(_ jobId: String, file: URL, segments: [[Any]]) {
+        guard let audio else { return }
+        let copy = workDir.appendingPathComponent("kept.m4a")
+        try? FileManager.default.removeItem(at: copy)
+        do {
+            try FileManager.default.copyItem(at: file, to: copy)
+            try audio.save(jobId, file: copy, segments: segments)
+        } catch { Self.logger.error("audio not kept: \(error.localizedDescription, privacy: .public)") }
+    }
+
+    /// The `generating` row's record so far (#835), best effort.
+    private func progress(_ job: GenerationJob, _ meter: AttemptMeter, _ lease: Lease, done: Int, total: Int) {
+        try? log.saveAttempt(job.id, meter.progress(model: job.model, done: done, total: total, leaseExpiresAt: lease.expiry))
     }
 
     /// The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
@@ -585,8 +600,13 @@ final class Contributor {
         meter.stage = .synth
         try meter.load { try synth.load(language) }
         sentence(0, sentences.count, 0)
+        progress(job, meter, lease, done: 0, total: sentences.count)
         for (i, s) in sentences.enumerated() {
-            defer { meter.sample(); sentence(i + 1, sentences.count, Double(length) / Double(rate)) }
+            defer {
+                meter.sample()
+                sentence(i + 1, sentences.count, Double(length) / Double(rate))
+                progress(job, meter, lease, done: i + 1, total: sentences.count)
+            }
             while hot() && keepGoing() && lease.held {
                 try await lease.renew()
                 try await Task.sleep(for: coolDown)
@@ -640,6 +660,9 @@ private final class Lease: @unchecked Sendable {
 
     /// Whether there is still time to finish and upload.
     var held: Bool { held(after: 0) }
+
+    /// When it runs out, ms epoch; 0 once revoked.
+    var expiry: Int64 { lock.withLock { expiresAt } }
 
     /// The server refused to extend it (`403`).
     var revoked: Bool { lock.withLock { expiresAt == 0 } }

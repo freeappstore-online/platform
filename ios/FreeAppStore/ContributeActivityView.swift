@@ -54,7 +54,11 @@ struct ContributeActivityView: View {
             ForEach(days, id: \.day) { group in
                 Section(group.day.formatted(date: .complete, time: .omitted)) {
                     ForEach(group.rows, id: \.jobId) { row in
-                        NavigationLink { ContributionDetailView(contribution: row, appName: catalogue.name(row.appId)) { try await model.report(row, good: $0, note: $1) } } label: {
+                        NavigationLink {
+                            ContributionDetailView(contribution: row, appName: catalogue.name(row.appId), reload: model.contribution) {
+                                try await model.report(row, good: $0, note: $1)
+                            }
+                        } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(catalogue.name(row.appId)) · \(row.key)").font(.subheadline.weight(.semibold))
                                 Text((ContributeText.labels[row.status] ?? row.status) + " · "
@@ -87,11 +91,14 @@ struct ContributeActivityView: View {
 
 /// One job (#820): what it was, what this phone made, why it was not done or what the server said, how this phone's
 /// attempt went (#827), its audio: this phone's own while kept, else the accepted audio, and for an upload this phone's
-/// Good / Not good report on it (#831).
+/// Good / Not good report on it (#831). While it is generated (#835) it follows the job live: sentences done, elapsed
+/// and CPU time, the lease's expiry, and the audio once encoded.
 struct ContributionDetailView: View {
-    let contribution: Contribution
+    @State private var contribution: Contribution
     let appName: String
-    var kept = AttemptAudio(dir: AttemptAudio.defaultDirectory)
+    let kept: AttemptAudio
+    /// The job's row as it is now, read every second while it is in progress.
+    let reload: (String) -> Contribution?
     /// Sends the report and answers the one the server kept.
     let send: (_ good: Bool, _ note: String) async throws -> SubmissionReport
     @StateObject private var player = ArtifactPlayer()
@@ -101,7 +108,14 @@ struct ContributionDetailView: View {
     @State private var sending = false
     @State private var sendError = ""
 
-    private var device: Bool { ["skipped", "failed"].contains(contribution.status) }
+    init(contribution: Contribution, appName: String, kept: AttemptAudio = AttemptAudio(dir: AttemptAudio.defaultDirectory),
+         reload: @escaping (String) -> Contribution? = { _ in nil }, send: @escaping (_ good: Bool, _ note: String) async throws -> SubmissionReport) {
+        _contribution = State(initialValue: contribution)
+        self.appName = appName; self.kept = kept; self.reload = reload; self.send = send
+    }
+
+    private var generating: Bool { contribution.status == "generating" }
+    private var device: Bool { ["generating", "skipped", "failed"].contains(contribution.status) }
     private var playable: Bool { kept.load(contribution.jobId) != nil || ["accepted", "superseded"].contains(contribution.status) }
 
     var body: some View {
@@ -135,7 +149,19 @@ struct ContributionDetailView: View {
                 if !contribution.submissionId.isEmpty { reportControls }
                 if let record = contribution.record {
                     Text("On this phone").font(.headline)
-                    ForEach(Self.facts(record), id: \.label) { field($0.label, $0.value) }
+                    if generating {
+                        if let done = record.sentencesDone, let total = record.sentencesTotal, total > 0 {
+                            ProgressView(value: Double(done), total: Double(total)) { Text(Self.progress(done: done, total: total)) }
+                        }
+                        // Elapsed time ticks between the record's updates, at each sentence.
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(Self.facts(record, now: Int64(context.date.timeIntervalSince1970 * 1000)), id: \.label) { field($0.label, $0.value) }
+                            }
+                        }
+                    } else {
+                        ForEach(Self.facts(record), id: \.label) { field($0.label, $0.value) }
+                    }
                 }
             }
             .padding(20)
@@ -144,6 +170,12 @@ struct ContributionDetailView: View {
         .navigationTitle(contribution.key)
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
+        .task {
+            while ["generating", "uploading"].contains(contribution.status), !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                if let now = reload(contribution.jobId) { contribution = now }
+            }
+        }
         .onAppear {
             guard report == nil, let saved = contribution.report else { return }
             report = saved; good = saved.good; note = saved.note ?? ""
@@ -182,8 +214,14 @@ struct ContributionDetailView: View {
         if !sendError.isEmpty { Text(sendError).foregroundStyle(.red) }
     }
 
-    /// The attempt's record (#827), as label and value, leaving out what it did not measure.
-    static func facts(_ r: AttemptRecord) -> [(label: String, value: String)] {
+    /// "Sentence 3 of 12 · 17%": the one being spoken (#835).
+    static func progress(done: Int, total: Int) -> String {
+        "Sentence \(min(done + 1, total)) of \(total) · \(done * 100 / max(total, 1))%"
+    }
+
+    /// The attempt's record (#827), as label and value, leaving out what it did not measure. `now` while it is in progress
+    /// (#835): the time so far instead of how it ended, and the lease's expiry.
+    static func facts(_ r: AttemptRecord, now: Int64? = nil) -> [(label: String, value: String)] {
         func s(_ ms: Int64?) -> String? { ms.map { (Double($0) / 1000).formatted(.number.precision(.fractionLength(1))) + " s" } }
         func power(_ level: Int?, _ charging: Bool?) -> String? {
             let parts = [level.map { "\($0)%" }, charging.map { $0 ? "charging" : "on battery" }].compactMap { $0 }
@@ -195,12 +233,15 @@ struct ContributionDetailView: View {
         }
         let stages = [("load", r.loadMs), ("speech", r.synthMs), ("encode", r.encodeMs), ("upload", r.uploadMs)]
             .compactMap { name, ms in s(ms).map { "\(name) \($0)" } }.joined(separator: " · ")
+        let elapsed = now.flatMap { now in r.startedAt.map { now - $0 } } ?? r.wallMs
         let rows: [(String, String?)] = [
-            ("Ended", r.reason), ("Error", r.error),
+            ("Ended", now == nil ? r.reason : nil), ("Error", r.error),
+            ("Model", r.model),
             ("Ran on", [r.runner, r.appVersion, r.os, r.device].compactMap { $0 }.joined(separator: " · ")),
             ("Conditions", [r.network, r.background.map { $0 ? "in the background" : "in the foreground" }].compactMap { $0 }.joined(separator: " · ")),
-            ("Time", s(r.wallMs).map { stages.isEmpty ? $0 : "\($0) (\(stages))" }),
+            (now == nil ? "Time" : "Elapsed", s(elapsed).map { stages.isEmpty ? $0 : "\($0) (\(stages))" }),
             ("CPU time", s(r.cpuMs)),
+            ("Lease expires", now == nil ? nil : r.leaseExpiresAt.map { Date(timeIntervalSince1970: Double($0) / 1000).formatted(date: .omitted, time: .standard) }),
             ("Real-time factor", r.rtf.map { $0.formatted(.number.precision(.fractionLength(2))) }),
             ("Peak memory", r.peakMemMb.map { "\($0) MB" }),
             ("Battery", span(power(r.batteryStart, r.chargingStart), power(r.batteryEnd, r.chargingEnd))),

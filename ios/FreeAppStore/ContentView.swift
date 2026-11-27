@@ -64,6 +64,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         self.contribute = contribute ?? ContributeRunner(repository: repository)
         super.init()
         if repository.token() != nil { try? local.seedIfEmpty() }
+        try? local.closeInterrupted() // a job left in progress by a crash or a kill (#835): no run is live at launch
         refresh()
     }
 
@@ -199,6 +200,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     func contributeNow() { contribute.runNow(); refresh() }
     /// Every job on this phone's record, newest first (#820).
     func allContributions() -> [Contribution] { (try? local.contributions(limit: 100_000)) ?? [] }
+    func contribution(_ jobId: String) -> Contribution? { (try? local.contributions(limit: 1, jobId: jobId))?.first }
     /// Pull to refresh on Activity: the server's verdicts on this phone's submissions.
     func refreshVerdicts() async { await contribute.refreshVerdicts(); refresh() }
     /// Good / Not good on one of this phone's uploads (#831).

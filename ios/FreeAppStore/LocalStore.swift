@@ -448,13 +448,13 @@ final class LocalStore: @unchecked Sendable {
         set { try? setSetting("chargingOnly", newValue ? "1" : "0") }
     }
 
-    /// Newest first.
-    func contributions(limit: Int = 30) throws -> [Contribution] {
+    /// Newest first; only `jobId`'s row when given.
+    func contributions(limit: Int = 30, jobId: String? = nil) throws -> [Contribution] {
         try query("""
             SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, record, submission_id,
               report_good, report_note, reported_at FROM generation_jobs
-            ORDER BY at DESC LIMIT ?
-            """, [Int64(limit)]) { row in
+            WHERE ?1 IS NULL OR job_id = ?1 ORDER BY at DESC LIMIT ?2
+            """, [jobId ?? NSNull(), Int64(limit)]) { row in
             Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
                          key: String(cString: sqlite3_column_text(row, 2)), at: sqlite3_column_int64(row, 3),
                          status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)),
@@ -467,6 +467,12 @@ final class LocalStore: @unchecked Sendable {
                                                note: sqlite3_column_type(row, 13) == SQLITE_NULL ? nil : String(cString: sqlite3_column_text(row, 13)),
                                                at: sqlite3_column_int64(row, 14)))
         }
+    }
+
+    /// Closes every job left `generating` as not done, `skipped` with reason `interrupted` (#835). Called when the app
+    /// starts and when a run starts or ends, when no run is live: such a row was left by a crash, a kill or a thrown error.
+    func closeInterrupted() throws {
+        try exec("UPDATE generation_jobs SET status = 'skipped', reason = 'interrupted' WHERE status = 'generating'")
     }
 
     /// How many jobs since `from` are in each status.
@@ -483,7 +489,7 @@ final class LocalStore: @unchecked Sendable {
 
     /// Jobs this phone generated for the app since `from`, uploaded or on their way.
     func contributedSince(_ appId: String, from: Int64) throws -> Int {
-        try query("SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('skipped', 'failed')", [appId, from]) {
+        try query("SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('generating', 'skipped', 'failed')", [appId, from]) {
             Int(sqlite3_column_int64($0, 0))
         }.first ?? 0
     }
