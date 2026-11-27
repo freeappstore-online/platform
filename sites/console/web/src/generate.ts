@@ -79,7 +79,8 @@ export interface RunRecord {
   key: string
   /** When the job was claimed (ms epoch). */
   at: number
-  outcome: 'submitted' | 'skipped' | 'stopped' | 'failed'
+  /** `generating` from the claim until it ends (#838); one left by a closed page ends `stopped`. */
+  outcome: 'generating' | 'submitted' | 'skipped' | 'stopped' | 'failed'
   reason: string | null
   /** Wall time from claim to upload or give-up. */
   ms: number
@@ -97,12 +98,29 @@ function loadRuns(): RunRecord[] {
   } catch { return [] }
 }
 
+/** The job in hand (#838), for its live detail. */
+export interface InProgress {
+  appId: string
+  setId: string
+  jobId: string
+  key: string
+  /** When it was claimed. */
+  at: number
+  model: string
+  voice: string | null
+  /** Moves on as the lease is extended. */
+  leaseExpiresAt: number
+  progress: KokoroProgress | null
+  /** The encoded audio and its sentence timings as object URLs, once ready. */
+  audio: { url: string; metaUrl: string } | null
+}
+
 export interface GenerateState {
   running: boolean
   /** Model download progress (0-1) while loading, else null. */
   loading: number | null
   /** The job being generated. */
-  current: { appId: string; key: string; progress: KokoroProgress | null } | null
+  current: InProgress | null
   submitted: number
   skipped: number
   /** How the last run ended, or why it failed. */
@@ -116,13 +134,37 @@ let state: GenerateState = {
 }
 const listeners = new Set<() => void>()
 function set(next: Partial<GenerateState>) {
+  const audio = state.current?.audio
+  if (audio && 'current' in next && next.current?.audio !== audio) {
+    URL.revokeObjectURL(audio.url)
+    URL.revokeObjectURL(audio.metaUrl)
+  }
   state = { ...state, ...next }
   for (const listener of listeners) listener()
 }
 
-/** Re-read the run records (another console tab may have added some). */
-export function reloadRuns() {
-  if (!state.running) set({ runs: loadRuns() })
+const sameRun = (a: RunRecord, b: RunRecord) => a.appId === b.appId && a.jobId === b.jobId && a.at === b.at
+
+/** Keep `run` first, in place of its own earlier state. */
+function saveRun(run: RunRecord) {
+  const runs = [run, ...state.runs.filter(r => !sameRun(r, run))].slice(0, MAX_RUNS)
+  write(RUNS_KEY, JSON.stringify(runs))
+  set({ runs })
+}
+
+/**
+ * Re-read the run records (another console tab may have added some). A job still `generating`
+ * while no tab of this browser runs (none holds the lock) was cut off by a closed page (#838).
+ */
+export async function reloadRuns() {
+  if (state.running) return
+  const held = await navigator.locks?.query?.().then(q => q.held?.some(l => l.name === LOCK), () => false)
+  if (state.running) return
+  const runs = loadRuns()
+  const cut = held ? [] : runs.filter(r => r.outcome === 'generating')
+  for (const r of cut) Object.assign(r, { outcome: 'stopped', reason: 'interrupted: the console closed before it finished' })
+  if (cut.length) write(RUNS_KEY, JSON.stringify(runs))
+  set({ runs })
 }
 
 export function useGenerate(): GenerateState {
@@ -171,7 +213,7 @@ async function power(): Promise<Power> {
 }
 
 /** The browser and OS this runs in, and the network type where the browser tells it. */
-function context(): Pick<GenerationAttemptRecord, 'os' | 'device' | 'network'> {
+export function context(): Pick<GenerationAttemptRecord, 'os' | 'device' | 'network'> {
   const nav = navigator as Navigator & {
     userAgentData?: { platform: string; brands: { brand: string; version: string }[] }
     connection?: { effectiveType?: string; type?: string }
@@ -226,7 +268,7 @@ export async function keptOutput(appId: string, jobId: string): Promise<{ url: s
 }
 
 function record(p: Pending, outcome: RunRecord['outcome'], reason: string | null, err?: unknown) {
-  const { appId, job, at, result } = p
+  const { job, at, result } = p
   const now = Date.now()
   const segments = result?.meta.segments
   const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined
@@ -245,19 +287,27 @@ function record(p: Pending, outcome: RunRecord['outcome'], reason: string | null
     ...(durationMs && { durationMs }),
     ...(durationMs && result?.timing && { rtf: Math.round((result.timing.synthMs / durationMs) * 1000) / 1000 }),
   }
-  const run: RunRecord = {
-    appId, setId: job.setId, jobId: job.id, key: job.key, at, outcome, reason, ms: now - at,
-    text: job.input.text.slice(0, RUN_TEXT_CHARS), chars: job.input.text.length, record: attempt,
-  }
+  const run: RunRecord = { ...runOf(p), outcome, reason, ms: now - at, record: attempt }
   // Battery at the end, then the server's copy: numbers only, best effort (#827)
   void power().then(end => {
     if (end.battery !== undefined) Object.assign(attempt, { batteryEnd: end.battery, chargingEnd: end.charging })
     return p.generation.recordAttempts([{ jobId: job.id, ...attempt }])
   }).catch(e => console.warn('generation: attempt record not sent', e))
-  const runs = [run, ...state.runs].slice(0, MAX_RUNS)
-  write(RUNS_KEY, JSON.stringify(runs))
-  set({ runs })
+  saveRun(run)
 }
+
+/** The job in hand's run record, `generating` until it ends. */
+const runOf = ({ appId, job, at }: Pending): RunRecord => ({
+  appId, setId: job.setId, jobId: job.id, key: job.key, at, outcome: 'generating', reason: null, ms: 0,
+  text: job.input.text.slice(0, RUN_TEXT_CHARS), chars: job.input.text.length,
+})
+
+const inProgress = ({ appId, job, at }: Pending): InProgress => ({
+  appId, setId: job.setId, jobId: job.id, key: job.key, at,
+  model: [job.model, job.modelVersion].filter(Boolean).join(' '),
+  voice: typeof job.params?.voice === 'string' ? job.params.voice : null,
+  leaseExpiresAt: job.leaseExpiresAt, progress: null, audio: null,
+})
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -352,6 +402,8 @@ async function run(
     }
     // For the next claim: read now, so a claim's battery is never waited for
     void power().then(p => { battery = p })
+    // On the record from the claim (#838), so a page closed mid-job leaves it interrupted
+    saveRun(runOf(p))
     return p
   }
   const kokoroApps = apps.map(app => ({
@@ -371,14 +423,23 @@ async function run(
           // A job still in hand at the next claim was abandoned when its lease ran out
           finish('stopped', 'the lease ran out before it finished')
           pending = claimed(appId, e.job)
-          set({ loading: null, current: { appId, key: e.job.key, progress: null } })
-        } else if (e.type === 'progress') set({ current: { appId, key: e.job.key, progress: e.progress } })
-        else if (e.type === 'generated') {
+          set({ loading: null, current: inProgress(pending) })
+        } else if (e.type === 'progress') {
+          if (state.current?.jobId === e.job.id)
+            set({ current: { ...state.current, progress: e.progress, leaseExpiresAt: e.job.leaseExpiresAt } })
+        } else if (e.type === 'generated') {
           const p = pending
           if (p?.job.id !== e.job.id) return
           p.result = e.result
           p.generatedAt = Date.now()
           void keepOutput(appId, e.job.id, e.result)
+          if (state.current?.jobId === e.job.id) {
+            const audio = {
+              url: URL.createObjectURL(e.result.file),
+              metaUrl: URL.createObjectURL(new Blob([JSON.stringify(e.result.meta)], { type: 'application/json' })),
+            }
+            set({ current: { ...state.current, audio, leaseExpiresAt: e.job.leaseExpiresAt } })
+          }
         }
         else if (e.type === 'submitted') {
           finish('submitted', null)

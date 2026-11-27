@@ -55,6 +55,7 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
   const [loadingMine, setLoadingMine] = useState(false)
   const [bucket, setBucket] = useState<Bucket | ''>('')
   const [appFilter, setAppFilter] = useState('')
+  const [openId, setOpenId] = useState<string | null>(null)
   const run = useGenerate()
 
   useEffect(() => {
@@ -102,9 +103,10 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
     setOptIn(appId, on)
     setOptIns(optedInApps())
   }
-  const openActivity = (b: Bucket) => {
+  const openActivity = (b: Bucket, id: string | null = null) => {
     setBucket(b)
     setAppFilter('')
+    setOpenId(id)
     setTab('activity')
   }
 
@@ -131,6 +133,7 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
             onStart={start}
             todayCounts={BUCKETS.map(([b, label]) => [b, label, today.filter(i => i.bucket === b).length])}
             onOpenActivity={openActivity}
+            onOpenCurrent={() => run.current && openActivity('in-progress', `run:${run.current.appId}/${run.current.jobId}/${run.current.at}`)}
           />
         )}
         {tab === 'activity' && (
@@ -144,6 +147,8 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
             onApp={setAppFilter}
             loading={loadingMine}
             onRefresh={() => { loadMine(); loadApps() }}
+            openId={openId}
+            onOpen={setOpenId}
             onReport={async (item, good, note) => {
               const report = await new Generation(item.appId, API_URL, fas.auth).report(item.id, good, note || undefined)
               setMine(list => list.map(s => (s.submissionId === item.id ? { ...s, report } : s)))
@@ -213,7 +218,7 @@ function TabBar({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
   )
 }
 
-function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayCounts, onOpenActivity }: {
+function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayCounts, onOpenActivity, onOpenCurrent }: {
   encoder: AudioEncoderConfig | null | undefined
   downloaded: boolean
   appsLoaded: boolean
@@ -221,6 +226,8 @@ function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayC
   onStart: () => void
   todayCounts: [Bucket, string, number][]
   onOpenActivity: (bucket: Bucket) => void
+  /** Open the job in hand's live detail (#838). */
+  onOpenCurrent: () => void
 }) {
   const { running, loading, current, submitted, skipped, message } = useGenerate()
   const p = current?.progress
@@ -250,8 +257,12 @@ function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayC
         {running && !current && loading === null && <p className="text-muted">Claiming a job…</p>}
         {current && (
           <div>
-            <p className="text-ink">
-              <span className="font-semibold">{current.appId}</span> · <span className="font-mono break-all">{current.key}</span>
+            <p className="flex flex-wrap items-center gap-x-2 text-ink">
+              <span className="rounded-full border border-accent px-2 py-0.5 text-xs font-semibold text-accent">In progress</span>
+              <span><span className="font-semibold">{current.appId}</span> · <span className="font-mono break-all">{current.key}</span></span>
+              <button onClick={onOpenCurrent} aria-haspopup="dialog" className="text-xs font-semibold text-accent hover:underline min-h-[44px] px-2">
+                Details
+              </button>
             </p>
             {p ? (
               <>

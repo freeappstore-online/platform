@@ -66,6 +66,7 @@ afterEach(() => {
   document.body.innerHTML = ''
   vi.unstubAllGlobals()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 const flush = () => act(async () => { for (let i = 0; i < 10; i++) await Promise.resolve() })
@@ -342,4 +343,92 @@ it('shows the text and duration of a job another device ran, which this browser 
   expect(JSON.parse(sent[1]!.body as string)).toEqual({ good: false, note: 'mumbles' })
   expect(document.querySelector('[role=dialog]')!.textContent).toContain('You said Not good')
   expect(container.textContent).toContain('Not good')
+})
+
+it('shows the job in hand as In progress with a live detail, and its audio once encoded (#838)', async () => {
+  localStorage.setItem('fas:generate-apps', JSON.stringify(['books']))
+  localStorage.setItem('fas:generate-model', '1')
+  vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
+  submissions = []
+  vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:audio')
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  const job = {
+    id: 'j6', setId: 's1', key: 'alice/6', input: { text: 'Once upon a time.' }, model: 'kokoro', modelVersion: 'v1.0',
+    params: { voice: 'af_heart' }, leaseExpiresAt: Date.now() + 600_000,
+  } as never
+  let emit: (e: kokoro.KokoroEvent) => void = () => {}
+  vi.mocked(kokoro.contributeKokoroApps).mockImplementation(async (opts) => {
+    emit = (e) => opts.onEvent?.(e, 'books')
+    emit({ type: 'claimed', job })
+    await new Promise<void>((resolve) => opts.signal.addEventListener('abort', () => resolve()))
+    return { submitted: 0, stopped: 'aborted' }
+  })
+  await render()
+  await click(button('Start')!)
+  // On the record from the claim
+  expect(JSON.parse(localStorage.getItem('fas:generate-runs')!)).toMatchObject([{ jobId: 'j6', outcome: 'generating' }])
+  expect(button('In progress 1')).toBeDefined()
+  await click(button('Details')!)
+  const dialog = () => document.querySelector('[role=dialog]')!
+  expect(dialog().textContent).toContain('kokoro v1.0 · af_heart')
+  expect(dialog().textContent).toContain('Starting…')
+  expect(dialog().textContent).toContain('not measured in a browser')
+  expect(dialog().textContent).toMatch(/expires in \d+\.\d s/)
+  await act(async () => emit({ type: 'progress', job, progress: { sentence: 2, sentences: 5, chars: 40, totalChars: 100, charsPerSecond: 12 } }))
+  expect(dialog().textContent).toContain('Sentence 2 of 5 · 40 of 100 characters')
+  const file = new Blob([new Uint8Array(8)], { type: 'audio/mp4' })
+  await act(async () => emit({ type: 'generated', job, result: { file, meta: { segments: [] } } }))
+  expect(dialog().querySelector('audio')!.getAttribute('src')).toBe('blob:audio')
+
+  // Stopped: it leaves In progress with the reason
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+  await tab('Status')
+  await click(button('Stop')!)
+  expect(JSON.parse(localStorage.getItem('fas:generate-runs')!)).toMatchObject([{ jobId: 'j6', outcome: 'stopped', reason: 'stopped before it finished' }])
+  expect(button('In progress 0')).toBeDefined()
+})
+
+it('a job left In progress by a closed page is shown interrupted (#838)', async () => {
+  localStorage.setItem('fas:generate-runs', JSON.stringify([
+    { appId: 'books', setId: 's1', jobId: 'j7', key: 'alice/7', at: Date.now(), outcome: 'generating', reason: null, ms: 0, text: 'Hi.', chars: 3 },
+  ]))
+  await render()
+  expect(JSON.parse(localStorage.getItem('fas:generate-runs')!)).toMatchObject([
+    { jobId: 'j7', outcome: 'stopped', reason: 'interrupted: the console closed before it finished' },
+  ])
+  expect(button('Not done 1')).toBeDefined()
+})
+
+it('downloads an attempt’s full record as record.json and its audio (#843)', async () => {
+  const artifact = { url: `${api}/apps/books/generation/artifacts/j2?v=1`, metaUrl: null }
+  submissions = [{ ...submission, submissionId: 'x2', jobId: 'j2', key: 'alice/1', status: 'accepted', reason: null, artifact }]
+  localStorage.setItem('fas:generate-runs', JSON.stringify([
+    { appId: 'books', setId: 's1', jobId: 'j2', key: 'alice/1', at: Date.now(), outcome: 'submitted', reason: null, ms: 4000, text: 'Call me Ishmael.', chars: 16, record: { runner: 'browser', reason: 'submitted', synthMs: 900 } },
+  ]))
+  const saved: { name: string; blob: Blob }[] = []
+  const blobs = new Map<string, Blob>()
+  vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => { const u = `blob:${blobs.size}`; blobs.set(u, b as Blob); return u })
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+    saved.push({ name: this.download, blob: blobs.get(this.href)! })
+  })
+  const fetchMock = vi.mocked(fetch)
+  const base = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url, init) =>
+    url === artifact.url ? new Response(new Blob([new Uint8Array(4)], { type: 'audio/mp4' })) : base(url, init))
+  await render()
+  await tab('Activity')
+  const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/1')) as HTMLElement
+  await act(async () => row.click())
+  await flush()
+  await act(async () => button('Download record')!.click())
+  await flush()
+  expect(saved.map((s) => s.name)).toEqual(['books-alice_1.record.json', 'books-alice_1.m4a'])
+  const record = JSON.parse(await saved[0]!.blob.text())
+  expect(record).toMatchObject({
+    appId: 'books', jobId: 'j2', key: 'alice/1', status: 'Accepted', submissionId: 'x2',
+    input: { text: 'Call me Ishmael.', chars: 16, whole: true },
+    run: { outcome: 'submitted', ms: 4000, record: { synthMs: 900 } }, artifact,
+  })
+  click.mockRestore()
 })

@@ -61,6 +61,12 @@ for, plus this browser's own run records in localStorage for jobs it skipped, st
 filter by status and app, grouped by day; a row opens its detail with the verdict and reason, size,
 duration, and Play with sentence highlighting for accepted ones, from the set's public manifest) and
 **Settings** (apps with open work and the per-app opt-in, the model download/delete, storage used).
+The job in hand is **In progress** from its claim (#838): on Status and in Activity it opens a detail that
+updates live (app, key, input, model and voice, sentence n/N, elapsed, device, lease expiry, and the audio
+once encoded; a browser has no process CPU time). Stopped or failed, it leaves In progress with the reason; a
+page closed mid-job shows it interrupted when the console opens again. Every Activity detail has
+**Download record** (#843): `record.json` (the submission, this browser's run and attempt record, the live
+job) and the audio, this browser's own or else the accepted artifact, for bug reports.
 
 Every runner keeps a record of each attempt on the device (#827) and sends its numbers to
 `…/generation/events` (below): runner, app version, OS and device, network, foreground or background,

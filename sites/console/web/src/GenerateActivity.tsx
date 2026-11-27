@@ -1,17 +1,19 @@
 import { useEffect, useId, useState } from 'react'
 import type { GenerationReport, GenerationSubmission } from '@freeappstore/sdk'
+import { ProgressBar } from '@freeappstore/sdk/ui'
 import { formatTimeAgo } from './deploy-status'
 import { attemptRows } from './attempt'
 import { ArtifactPlayer } from './GenerationManager'
-import { keptOutput, type RunRecord } from './generate'
+import { context, keptOutput, useGenerate, type InProgress, type RunRecord } from './generate'
 import { useModalDialog } from './useModalDialog'
 
 /** One of this account's submissions, with the app it went to. */
 export type Mine = GenerationSubmission & { appId: string }
 
-export type Bucket = 'accepted' | 'checking' | 'rejected' | 'not-done'
+export type Bucket = 'in-progress' | 'accepted' | 'checking' | 'rejected' | 'not-done'
 export const BUCKETS: [Bucket, string][] = [
-  ['accepted', 'Accepted'], ['checking', 'Checking'], ['rejected', 'Rejected'], ['not-done', 'Not done'],
+  ['in-progress', 'In progress'], ['accepted', 'Accepted'], ['checking', 'Checking'], ['rejected', 'Rejected'],
+  ['not-done', 'Not done'],
 ]
 
 /** A row of Activity: a submission the server knows, or a job this browser never uploaded. */
@@ -48,7 +50,7 @@ const SUBMISSION_STATUS: Record<GenerationSubmission['status'], [Bucket, string]
   superseded: ['rejected', 'Superseded'],
 }
 const RUN_STATUS: Record<RunRecord['outcome'], string> = {
-  submitted: 'Uploaded', skipped: 'Skipped', stopped: 'Stopped', failed: 'Failed',
+  generating: 'In progress', submitted: 'Uploaded', skipped: 'Skipped', stopped: 'Stopped', failed: 'Failed',
 }
 
 /**
@@ -74,7 +76,8 @@ export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
     if (r.outcome === 'submitted' && known.has(`${r.appId}/${r.jobId}`)) continue
     items.push({
       id: `run:${r.appId}/${r.jobId}/${r.at}`, appId: r.appId, setId: r.setId, jobId: r.jobId, key: r.key, at: r.at,
-      bucket: r.outcome === 'submitted' ? 'checking' : 'not-done', status: RUN_STATUS[r.outcome],
+      bucket: r.outcome === 'generating' ? 'in-progress' : r.outcome === 'submitted' ? 'checking' : 'not-done',
+      status: RUN_STATUS[r.outcome],
       reason: r.reason, bytes: null, text: r.text, chars: r.chars, durationMs: null, report: null, uploaded: false,
       artifact: null, run: r,
     })
@@ -93,6 +96,7 @@ function dayLabel(day: number): string {
 }
 
 export const BUCKET_TONE: Record<Bucket, string> = {
+  'in-progress': 'border-accent text-accent',
   accepted: 'border-success text-success',
   checking: 'border-line text-ink',
   rejected: 'border-danger text-danger',
@@ -103,9 +107,40 @@ const chip = (on: boolean) =>
   `px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${on ? 'bg-ink text-paper' : 'text-muted border border-line hover:text-ink'}`
 const kilobytes = (bytes: number) => `${Math.round(bytes / 1024).toLocaleString()} KB`
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`
+const extension = (type: string) => (/mp4|m4a|aac/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : /wav/.test(type) ? 'wav' : 'bin')
+
+function save(blob: Blob, name: string) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 60_000)
+}
+
+/**
+ * Save an attempt's full record for a bug report (#843): `record.json` with every field this console
+ * has (the server's submission, this browser's run and attempt record, the live job in hand) and,
+ * when there is one, its audio: this browser's own, else the accepted artifact.
+ */
+export async function downloadRecord(item: ActivityItem, live: InProgress | null, audioUrl: string | null) {
+  const name = `${item.appId}-${item.key.replace(/[^A-Za-z0-9._-]+/g, '_')}`
+  const { run, text, chars, ...fields } = item
+  const record = {
+    exportedAt: new Date().toISOString(),
+    ...fields,
+    submissionId: item.uploaded ? item.id : null,
+    input: { text, chars, whole: text.length === chars },
+    run: run && { ...run, text: undefined },
+    live: live && { ...live, audio: undefined, device: context() },
+  }
+  save(new Blob([JSON.stringify(record, null, 2)], { type: 'application/json' }), `${name}.record.json`)
+  if (!audioUrl) return
+  const audio = await fetch(audioUrl).then(r => (r.ok ? r.blob() : null), () => null)
+  if (audio) save(audio, `${name}.${extension(audio.type)}`)
+}
 
 /** Activity (#820): every job this browser tried and every submission of this account, filterable. */
-export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh, onReport }: {
+export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh, onReport, openId, onOpen }: {
   items: ActivityItem[]
   appIds: string[]
   onelinerOf: (appId: string) => string | null
@@ -117,8 +152,10 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
   onRefresh: () => void
   /** Send this account's Good / Not good for an upload (#831). */
   onReport: (item: ActivityItem, good: boolean, note: string) => Promise<GenerationReport>
+  /** The item whose detail is open. */
+  openId: string | null
+  onOpen: (id: string | null) => void
 }) {
-  const [openId, setOpenId] = useState<string | null>(null)
   const open = items.find(i => i.id === openId) ?? null
   const appSelect = useId()
   const shown = items.filter(i => (!bucket || i.bucket === bucket) && (!app || i.appId === app))
@@ -172,7 +209,7 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
               {list.map(item => (
                 <li key={item.id}>
                   <button
-                    onClick={() => setOpenId(item.id)}
+                    onClick={() => onOpen(item.id)}
                     aria-haspopup="dialog"
                     className="w-full text-left px-3 py-2 min-h-[44px] flex flex-wrap items-center gap-x-3 gap-y-1 hover:bg-panel-hover rounded-xl"
                   >
@@ -197,7 +234,7 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
         <ActivityDetail
           item={open}
           oneliner={onelinerOf(open.appId)}
-          onClose={() => setOpenId(null)}
+          onClose={() => onOpen(null)}
           onReport={(good, note) => onReport(open, good, note)}
         />
       )}
@@ -242,6 +279,9 @@ function ActivityDetail({ item, oneliner, onClose, onReport }: {
     ['Input', `${item.chars.toLocaleString()} characters`],
   ]
   const whole = item.text.length === item.chars
+  const { current } = useGenerate()
+  const live = item.run?.outcome === 'generating' && current?.jobId === item.jobId && current.at === item.at ? current : null
+  const audioUrl = local?.url ?? live?.audio?.url ?? artifact?.url ?? null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -268,6 +308,11 @@ function ActivityDetail({ item, oneliner, onClose, onReport }: {
             </div>
           ))}
         </dl>
+        {item.bucket === 'in-progress' && (
+          live ? <LiveDetail current={live} text={item.text} /> : (
+            <p className="mt-4 text-sm text-muted">Generating in another console tab or window of this browser.</p>
+          )
+        )}
         {run?.record && (
           <div className="mt-4">
             <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">In this browser</h4>
@@ -312,7 +357,60 @@ function ActivityDetail({ item, oneliner, onClose, onReport }: {
           </div>
         )}
         {item.uploaded && <ReportForm report={item.report} onSend={onReport} />}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => downloadRecord(item, live, audioUrl)}
+            className="rounded-lg border border-line px-3 py-1 text-sm font-semibold text-ink hover:bg-panel-hover min-h-[44px]"
+          >
+            Download record
+          </button>
+          <span className="text-xs text-muted">
+            record.json{audioUrl ? ' and the audio' : ''}, for a bug report
+          </span>
+        </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * The job this browser is generating (#838), updated live: model and voice, progress, elapsed,
+ * the device, lease expiry, and the audio once encoded. A browser has no process CPU time.
+ */
+function LiveDetail({ current, text }: { current: InProgress; text: string }) {
+  const [now, setNow] = useState(Date.now)
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [])
+  const p = current.progress
+  const { device, os } = context()
+  const lease = current.leaseExpiresAt - now
+  const rows: [string, string][] = [
+    ['Model', [current.model, current.voice].filter(Boolean).join(' · ') || '—'],
+    ['Progress', p ? `Sentence ${p.sentence} of ${p.sentences} · ${p.chars.toLocaleString()} of ${p.totalChars.toLocaleString()} characters · ${p.charsPerSecond.toFixed(1)} per second` : current.audio ? 'Encoded, uploading' : 'Starting…'],
+    ['Elapsed', seconds(now - current.at)],
+    ['CPU time', 'not measured in a browser'],
+    ['Device', [device, os].filter(Boolean).join(' · ')],
+    ['Lease', Number.isFinite(lease) ? (lease > 0 ? `expires in ${seconds(lease)} (${new Date(current.leaseExpiresAt).toLocaleTimeString()})` : 'expired') : '—'],
+  ]
+  return (
+    <div className="mt-4">
+      <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">In progress</h4>
+      {p && <div className="mb-2"><ProgressBar value={p.chars} max={Math.max(1, p.totalChars)} label={`Sentence ${p.sentence} of ${p.sentences}`} /></div>}
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        {rows.map(([name, value]) => (
+          <div key={name} className="contents">
+            <dt className="text-muted">{name}</dt>
+            <dd className="text-ink break-words min-w-0">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {current.audio && (
+        <div className="mt-3">
+          <ArtifactPlayer url={current.audio.url} metaUrl={current.audio.metaUrl} preview={text} loadText={() => Promise.reject(new Error('preview only'))} />
+        </div>
+      )}
     </div>
   )
 }
