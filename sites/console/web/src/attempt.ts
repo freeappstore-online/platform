@@ -23,7 +23,7 @@ export function attemptRows(r: GenerationAttemptRecord): [string, string][] {
     ['Wall time', r.wallMs === undefined ? null : ms(r.wallMs)],
     ['Stages', stages.join(' · ') || null],
     ['CPU time', r.cpuMs === undefined ? null : ms(r.cpuMs)],
-    ['Speed', r.rtf === undefined ? null : `${r.rtf.toFixed(2)}× real time to synthesize${r.rtf > 0 ? ` (${(1 / r.rtf).toFixed(1)}× faster)` : ''}`],
+    ['Speed', r.rtf === undefined ? null : `${r.rtf.toFixed(2)}× real time to synthesize${r.rtf > 0 && r.rtf < 1 ? ` (${(1 / r.rtf).toFixed(1)}× faster)` : ''}`],
     ['Peak memory', r.peakMemMb === undefined ? null : `${Math.round(r.peakMemMb)} MB`],
     ['Battery', span(battery(r.batteryStart, r.chargingStart), battery(r.batteryEnd, r.chargingEnd))],
     ['Thermal', span(r.thermalStart, r.thermalEnd)],
