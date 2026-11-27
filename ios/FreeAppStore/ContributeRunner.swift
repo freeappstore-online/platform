@@ -111,11 +111,11 @@ final class ContributeRunner: ObservableObject {
     /// Ends the current run after the job in hand stops, without uploading it.
     func stop() { stopFlag?.stop("user_stop") }
 
-    /// The server's verdicts on this phone's contributions. A refresh only.
     /// Discovery (#820): open jobs this phone could run now, by app.
     func openJobs() async throws -> [String: Int] { try await client.open(model: KokoroModel.id) }
 
-    /// Every app with a job on this phone's record, opted in or not (#820).
+    /// The server's verdicts on this phone's contributions, for every app with a job on this phone's record, opted in or
+    /// not (#820). A refresh only.
     func refreshVerdicts() async {
         for app in local.contributeApps().union((try? local.contributionApps()) ?? []).sorted() { try? await refresh(app, keepGoing: { true }) }
     }

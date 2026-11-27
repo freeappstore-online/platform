@@ -772,7 +772,7 @@ final class ContributeTests: XCTestCase {
         log.record(Contribution(jobId: "j1", appId: "books", key: "book/j1", at: now, status: "pending"))
         log.record(Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "pending"))
         server.submissions = [
-            ["submissionId": "s1", "jobId": "j1", "status": "rejected", "reason": "transcript_mismatch"],
+            ["submissionId": "s1", "jobId": "j1", "status": "rejected", "reason": "audio is too long for the text"],
             ["jobId": "other", "status": "accepted"],
             ["id": "s2", "jobId": "j2", "status": "accepted", "reason": NSNull(), "createdAt": now],
         ]
@@ -780,7 +780,7 @@ final class ContributeTests: XCTestCase {
         log.rows["j1"]?.report = sent
         try await client.refresh("books", log: log)
         XCTAssertEqual(log.rows["j1"]?.status, "rejected")
-        XCTAssertEqual(log.rows["j1"]?.reason, "transcript_mismatch")
+        XCTAssertEqual(log.rows["j1"]?.reason, "audio is too long for the text")
         XCTAssertEqual(log.rows["j1"]?.submissionId, "s1")
         XCTAssertEqual(log.rows["j1"]?.report, sent, "kept when the server gives none")
         XCTAssertNil(log.rows["other"], "only this phone's jobs")
