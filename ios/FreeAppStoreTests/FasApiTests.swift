@@ -420,4 +420,85 @@ final class FasApiTests: XCTestCase {
         XCTAssertEqual(StubProtocol.seen.count, 0)
         XCTAssertEqual(try local.count(), 2)
     }
+
+    // MARK: Versions (#833) and pairing by code (#845)
+
+    func testEveryRequestCarriesTheVersionAndTheClient() async throws {
+        let repository = try await connected()
+        respond(locations: .init(json: ["acknowledged": ["a", "b"]]))
+        try await repository.sync()
+        XCTAssertEqual(StubProtocol.seen.count, 2)
+        for request in StubProtocol.seen {
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-FAS-Client"), "ios")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-FAS-App-Version"), AppInfo.current.label)
+        }
+        XCTAssertNotNil(AppInfo.current.label.range(of: #"^[A-Za-z0-9 .,()+\-_]{1,64}$"#, options: .regularExpression),
+                        "the backend ignores a label outside this set")
+    }
+
+    private func respondToCode(_ code: StubProtocol.Stub, me meStub: StubProtocol.Stub? = nil) {
+        StubProtocol.handler = { [me] request in
+            switch request.url!.path {
+            case "/v1/native/auth/code": return code
+            case "/v1/native/me": return meStub ?? .init(json: me)
+            default: return .init(status: 404)
+            }
+        }
+    }
+
+    func testACodeSignsInLikeTheBrowserFlow() async throws {
+        respondToCode(.init(json: ["token": "ndev_code", "deviceId": "d2"]))
+        let repository = CompanionRepository(local: local, secure: secure, api: api)
+        try await repository.signIn(code: " abcd-efgh-jkmn-pqrs\n", label: "iPhone (iOS 18.0)")
+        XCTAssertEqual(repository.token(), "ndev_code")
+        XCTAssertEqual(try secure.read(), ["token": "ndev_code", "userId": "u1"], "the code is never kept")
+        XCTAssertEqual(local.userName, "Alex")
+        XCTAssertEqual(StubProtocol.seen.map(\.url!.path), ["/v1/native/auth/code", "/v1/native/me"])
+        let pair = StubProtocol.seen[0]
+        XCTAssertEqual(pair.httpMethod, "POST")
+        XCTAssertNil(pair.value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(pair.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(pair.value(forHTTPHeaderField: "X-FAS-Client"), "ios")
+        XCTAssertEqual(pair.value(forHTTPHeaderField: "X-FAS-App-Version"), AppInfo.current.label)
+        let body = try JSONSerialization.jsonObject(with: ContributeTests.FakeServer.body(pair)) as? [String: String]
+        XCTAssertEqual(body, ["code": "abcd-efgh-jkmn-pqrs", "label": "iPhone (iOS 18.0)"], "sent as typed; the server normalizes it")
+        XCTAssertEqual(StubProtocol.seen[1].value(forHTTPHeaderField: "Authorization"), "Bearer ndev_code")
+    }
+
+    func testRejectedCodesSayWhatToDo() async throws {
+        let repository = CompanionRepository(local: local, secure: secure, api: api)
+        for status in [400, 401, 403, 429] {
+            respondToCode(.init(status: status, json: ["error": "server text"]))
+            do { try await repository.signIn(code: "ABCDEFGHJKMNPQRS", label: "iPhone"); XCTFail("\(status) must fail") } catch {
+                XCTAssertEqual(error.localizedDescription, CompanionRepository.codeFailure(status))
+            }
+            XCTAssertEqual(try secure.read(), [:])
+        }
+        XCTAssertTrue(CompanionRepository.codeFailure(403).contains("expired or was already used"))
+        XCTAssertTrue(CompanionRepository.codeFailure(429).contains("Too many tries"))
+        StubProtocol.seen = []
+        do { try await repository.signIn(code: "  ", label: "iPhone"); XCTFail("an empty code must fail") } catch {}
+        XCTAssertEqual(StubProtocol.seen.count, 0, "an empty code is not sent")
+    }
+
+    /// The code is spent once redeemed, so a failed `/native/me` must not lose the credential: the next activation finishes.
+    func testACodeCredentialSurvivesAFailedMe() async throws {
+        respondToCode(.init(json: ["token": "ndev_code", "deviceId": "d2"]), me: .init(offline: true))
+        let repository = CompanionRepository(local: local, secure: secure, api: api)
+        do { try await repository.signIn(code: "ABCDEFGHJKMNPQRS", label: "iPhone"); XCTFail("must fail offline") } catch {}
+        XCTAssertNil(repository.token())
+        XCTAssertEqual(try secure.read(), ["credential": "ndev_code"])
+        respondToCode(.init(status: 403))
+        let finished = try await repository.finishSignIn()
+        XCTAssertTrue(finished)
+        XCTAssertEqual(repository.token(), "ndev_code")
+        XCTAssertEqual(StubProtocol.seen.last?.url?.path, "/v1/native/me", "the code is not sent again")
+    }
+
+    func testACodeNeverReplacesAConnection() async throws {
+        let repository = try await connected()
+        do { try await repository.signIn(code: "ABCDEFGHJKMNPQRS", label: "iPhone"); XCTFail("must fail") } catch {}
+        XCTAssertEqual(StubProtocol.seen.count, 0)
+        XCTAssertEqual(repository.token(), "ndev_test")
+    }
 }

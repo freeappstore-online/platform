@@ -26,6 +26,8 @@
 	<string>$(FAS_DEV_BUILD)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>FreeAppStore uses the camera only to scan the code that connects this phone to your account. Nothing is recorded or sent.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>FreeAppStore records your route for the FAS apps you enable, such as Run, including while your phone is locked. Location goes only to FreeAppStore and the apps you turn on.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

@@ -147,6 +147,7 @@ struct ContributeView: View {
                         today
                     } else {
                         Button("Sign in to FreeAppStore") { model.connect() }.buttonStyle(.borderedProminent).disabled(model.busy)
+                        PairByCode(model: model)
                     }
                 }
                 .padding(20)

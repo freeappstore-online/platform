@@ -80,4 +80,35 @@ final class CompanionModelTests: XCTestCase {
         XCTAssertEqual(model.message, "")
         XCTAssertEqual(StubProtocol.seen.count, 1)
     }
+
+    // MARK: Pairing by code (#845)
+
+    func testOnlyFreeAppStorePairLinksCarryACode() {
+        func code(_ link: String) -> String? { CompanionModel.pairCode(URL(string: link)!) }
+        XCTAssertEqual(code("freeappstore://native/pair?code=ABCDEFGHJKMNPQRS"), "ABCDEFGHJKMNPQRS")
+        XCTAssertEqual(code("freeappstore://native/pair?other=1&code=abcd-efgh"), "abcd-efgh")
+        XCTAssertNil(code("freeappstore://native/pair"))
+        XCTAssertNil(code("freeappstore://native/pair?code="))
+        XCTAssertNil(code("freeappstore://native/connected?code=ABCD"))
+        XCTAssertNil(code("freeappstore://evil/pair?code=ABCD"))
+        XCTAssertNil(code("https://native/pair?code=ABCD"))
+        XCTAssertNil(code("https://freeappstore.online/native/pair?code=ABCD"))
+    }
+
+    /// A link only asks; nothing is sent until the user says yes.
+    func testAPairLinkAsksAndNeverPairsByItself() async throws {
+        let model = CompanionModel(repository: repository)
+        model.handle(URL(string: "freeappstore://native/pair?code=ABCDEFGHJKMNPQRS")!)
+        XCTAssertEqual(model.linkedPairCode, "ABCDEFGHJKMNPQRS")
+        XCTAssertEqual(StubProtocol.seen.count, 0)
+        XCTAssertEqual(try secure.read(), [:], "the code is never stored")
+    }
+
+    func testAPairLinkWhileConnectedIsRefused() throws {
+        try secure.write(["token": "ndev_test", "userId": "u1"])
+        let model = CompanionModel(repository: repository)
+        model.handle(URL(string: "freeappstore://native/pair?code=ABCDEFGHJKMNPQRS")!)
+        XCTAssertNil(model.linkedPairCode)
+        XCTAssertTrue(model.message.contains("already connected"))
+    }
 }

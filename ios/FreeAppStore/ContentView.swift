@@ -50,6 +50,8 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     @Published var showActivity = false
     /// `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself.
     @Published var linkedContribute: String?
+    /// A pairing code from a scan or a `freeappstore://native/pair` link (#845), held only until the user answers.
+    @Published var linkedPairCode: String?
     private var error = ""
     private var authSession: ASWebAuthenticationSession?
     private var refreshTask: Task<Void, Never>?
@@ -154,8 +156,10 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         }
     }
 
+    /// This phone's name on the account's device list, the same for both ways of pairing.
+    private var label: String { "\(UIDevice.current.model) (iOS \(UIDevice.current.systemVersion))" }
+
     private func pair() async throws {
-        let label = "\(UIDevice.current.model) (iOS \(UIDevice.current.systemVersion))"
         let url = try await repository.startSignIn(label: label)
         refresh()
         let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "freeappstore") { [weak self] _, _ in
@@ -170,9 +174,29 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
 
     func completeSignIn() { act { [self] in _ = try await repository.finishSignIn() } }
 
+    /// Pairs with a typed, scanned or linked code (#845), only after the user said yes. After an expiry it reconnects
+    /// like Reconnect does: the same account keeps its history.
+    func connect(code: String) { act { [self] in try await repository.signIn(code: code, label: label) } }
+
+    /// The code in `freeappstore://native/pair?code=…`; nil for any other link (docs/native-companion.md, QR pairing).
+    /// The code is passed on as given: the server ignores case, spaces and dashes.
+    static func pairCode(_ url: URL) -> String? {
+        guard url.scheme == "freeappstore", url.host == "native", url.path == "/pair",
+              let code = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "code" })?.value?
+                .trimmingCharacters(in: .whitespaces), !code.isEmpty else { return nil }
+        return code
+    }
+
+    /// A scanned QR code or an opened pair link: asks before pairing, never pairs by itself.
+    func offer(pairCode code: String) {
+        if signedIn { error = "This phone is already connected. Sign out first to connect it to another account."; refresh() }
+        else { linkedPairCode = code }
+    }
+
     /// Links never grant anything: they finish a pending connection or bring a disclosure forward.
     func handle(_ url: URL) {
         guard url.scheme == "freeappstore", url.host == "native" else { return }
+        if let code = Self.pairCode(url) { offer(pairCode: code); return }
         let parts = url.pathComponents.filter { $0 != "/" }
         if parts == ["connected"] { completeSignIn() }
         else if parts.count == 2, parts[0] == "apps", let app = apps.first(where: { $0.id == parts[1] }), !enabled(app) { consent = app }
@@ -314,6 +338,15 @@ struct ContentView: View {
         )) {
             if let id = model.linkedContribute { model.setContributing(id, true) }
         }
+        .alert("Connect this phone?", isPresented: Binding(
+            get: { model.linkedPairCode != nil },
+            set: { if !$0 { model.linkedPairCode = nil } }
+        )) {
+            Button("Connect") { if let code = model.linkedPairCode { model.connect(code: code) } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(PairByCode.question)
+        }
     }
 
     private func disclosure(_ app: ConnectedApp) -> some View {
@@ -350,6 +383,7 @@ struct ExpiredCard: View {
                 Text("This phone is no longer connected to FreeAppStore, so location sharing has stopped. Your sharing history stays on this phone. Reconnect, then turn sharing back on for each app.")
                     .font(.subheadline)
                 Button("Reconnect") { model.reconnect() }.buttonStyle(.borderedProminent).disabled(model.busy)
+                PairByCode(model: model)
                 if !model.pairingCode.isEmpty { Text("Match this code in your browser: \(model.pairingCode)").font(.footnote) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

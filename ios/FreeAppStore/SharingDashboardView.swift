@@ -161,6 +161,7 @@ struct SharingDashboardView: View {
         Text("Your apps, connected to your phone").font(.headline)
         Text("Enable background features for the FAS apps you use. You stay in control of what each app can access.")
         Button("Sign in to FreeAppStore") { model.connect() }.buttonStyle(.borderedProminent).disabled(model.busy)
+        PairByCode(model: model)
         if !model.pairingCode.isEmpty { Text("Match this code in your browser: \(model.pairingCode)") }
     }
 

@@ -80,11 +80,16 @@ final class FasApi: Sendable {
         return try await send(request)
     }
 
+    /// Sent on every request (#833): the backend keeps each device's last-seen version and kind for the console's device
+    /// list. Pairing carries them too, so a new device row starts with them.
+    static let clientHeaders = ["X-FAS-App-Version": AppInfo.current.label, "X-FAS-Client": "ios"]
+
     private static func request(_ method: String, _ path: String, token: String?, headers: [String: String]) -> URLRequest {
         guard let url = endpoint(path) else { preconditionFailure("Native requests are limited to /native/ and generation routes") }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        for (name, value) in clientHeaders { request.setValue(value, forHTTPHeaderField: name) }
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
         return request

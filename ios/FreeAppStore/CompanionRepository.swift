@@ -56,39 +56,71 @@ actor CompanionRepository {
     }
 
     func finishSignIn() async throws -> Bool {
+        try await exclusive { [self] in try await finish() }
+    }
+
+    /// Pairs with a code shown by the console or the desktop app (#845) instead of the browser flow. The code is sent
+    /// once and never stored or logged.
+    func signIn(code: String, label: String) async throws {
         try await exclusive { [self] in
-            let state = try secure.read()
-            guard let pairId = state["pairId"], let verifier = state["verifier"] else { return false }
-            // The exchange is single use, so its credential is kept with the proof until `/native/me` succeeds: a
-            // network failure in between must not lose it to a 409 on the next try.
-            let credential: String
-            if let saved = state["credential"] { credential = saved } else {
-                let result: [String: Any]
-                do {
-                    result = try await api.request("POST", "/native/auth/complete", body: json(["id": pairId, "verifier": verifier]))
-                } catch let failure as ApiFailure where [400, 403, 409].contains(failure.status) {
-                    // Expired, invalid or already used: this proof can never succeed. Only a proof is stored in this state.
-                    try secure.clear()
-                    throw failure
-                }
-                if result["pending"] as? Bool == true { return false }
-                guard let token = result["token"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
-                try secure.write(["pairId": pairId, "verifier": verifier, "credential": token])
-                credential = token
+            guard token() == nil else { throw CompanionError("Disconnect this account before connecting another.") }
+            let code = code.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !code.isEmpty, code.count <= 64 else { throw CompanionError(Self.codeFailure(400)) }
+            let result: [String: Any]
+            do {
+                result = try await api.request("POST", "/native/auth/code", body: json(["code": code, "label": String(label.prefix(80))]))
+            } catch let failure as ApiFailure where [400, 401, 403, 429].contains(failure.status) {
+                throw CompanionError(Self.codeFailure(failure.status))
             }
-            let me: [String: Any]
-            do { me = try await api.request("GET", "/native/me", token: credential) } catch let failure as ApiFailure where failure.status == 401 {
-                try secure.clear() // revoked before it was confirmed: start again
+            guard let token = result["token"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
+            // Kept until `/native/me` succeeds, as after the browser exchange: the code is spent now.
+            try secure.write(["credential": token])
+            _ = try await finish()
+        }
+    }
+
+    /// What a rejected pairing code means to the user (docs/native-companion.md, QR pairing).
+    static func codeFailure(_ status: Int) -> String {
+        switch status {
+        case 403: "This code expired or was already used. Get a new code and try again."
+        case 429: "Too many tries from this network today. Try again tomorrow."
+        case 401: "The account that showed this code no longer exists."
+        default: "That is not a FreeAppStore code. Check it and try again."
+        }
+    }
+
+    private func finish() async throws -> Bool {
+        let state = try secure.read()
+        // The exchange is single use, so its credential is kept (with the proof, after the browser flow) until
+        // `/native/me` succeeds: a network failure in between must not lose it to a 409 on the next try.
+        let credential: String
+        if let saved = state["credential"] { credential = saved } else {
+            guard let pairId = state["pairId"], let verifier = state["verifier"] else { return false }
+            let result: [String: Any]
+            do {
+                result = try await api.request("POST", "/native/auth/complete", body: json(["id": pairId, "verifier": verifier]))
+            } catch let failure as ApiFailure where [400, 403, 409].contains(failure.status) {
+                // Expired, invalid or already used: this proof can never succeed. Only a proof is stored in this state.
+                try secure.clear()
                 throw failure
             }
-            guard let userId = (me["user"] as? [String: Any])?["id"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
-            // Pairing never adopts a previous installation/account's queue or grants. The same account after an
-            // expiry keeps the on-device history (#638).
-            if local.expiredUser == userId { try local.clearForReconnect() } else { try local.clear() }
-            try secure.write(["token": credential, "userId": userId])
-            try updateMe(me)
-            return true
+            if result["pending"] as? Bool == true { return false }
+            guard let token = result["token"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
+            try secure.write(["pairId": pairId, "verifier": verifier, "credential": token])
+            credential = token
         }
+        let me: [String: Any]
+        do { me = try await api.request("GET", "/native/me", token: credential) } catch let failure as ApiFailure where failure.status == 401 {
+            try secure.clear() // revoked before it was confirmed: start again
+            throw failure
+        }
+        guard let userId = (me["user"] as? [String: Any])?["id"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
+        // Pairing never adopts a previous installation/account's queue or grants. The same account after an
+        // expiry keeps the on-device history (#638).
+        if local.expiredUser == userId { try local.clearForReconnect() } else { try local.clear() }
+        try secure.write(["token": credential, "userId": userId])
+        try updateMe(me)
+        return true
     }
 
     func enable(_ app: ConnectedApp) async throws {
