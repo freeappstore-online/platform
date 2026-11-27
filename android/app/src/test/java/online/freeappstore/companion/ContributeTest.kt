@@ -723,6 +723,17 @@ class ContributeTest {
         Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run(books, { go })
         assertEquals("skipped" to "stopped", log.rows["j1"]!!.let { it.status to it.reason })
     }
+    /** #836: plugged in, a run that ran out of time queues the next at once; anything else re-arms the trigger, later while plugged in. */
+    @Test fun aRunOnPowerChainsOnlyWhenItRanOutOfTime() {
+        val after = ContributeWorker.Companion::after
+        assertEquals(ContributeWorker.Companion.After.NEXT, after("time_budget", true, true))
+        assertEquals("not on Wi‑Fi now", ContributeWorker.Companion.After.TRIGGER_LATER, after("time_budget", true, false))
+        assertEquals("unplugged at the limit (any time)", ContributeWorker.Companion.After.TRIGGER, after("time_budget", false, true))
+        for (end in listOf("no_work", "offline", "no_model", "user_stop", "system_stop", "429 Daily limit reached.")) {
+            assertEquals("no spin after $end", ContributeWorker.Companion.After.TRIGGER_LATER, after(end, true, true))
+        }
+        assertEquals("waits for the next plug-in", ContributeWorker.Companion.After.TRIGGER, after("unplugged", false, true))
+    }
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))
         assertTrue(Regex("^[0-9a-f]{64}$").matches(KokoroModel.SHA256))

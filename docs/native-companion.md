@@ -112,7 +112,15 @@ and verifies every upload; the phone is never trusted.
   in progress is never replaced by **Run now** or a settings change; otherwise the hourly work takes the current
   constraints. If Android refuses the foreground service, the run is a plain job: it claims only in its first 5 minutes
   and ends itself at 9, before the system times it out, recording the job in hand `stopped` (`background_expired`).
-  A `429` at the claim (the app's daily budget, or 4 open leases) ends the run. Each run logs `ContributeWorker: Run ended: <reason>`. A job stopped
+  A `429` at the claim (the app's daily budget, or 4 open leases) ends the run. Each run logs `ContributeWorker: Run ended: <reason>`. On power
+  (#836) it does not wait for the hourly work: a one-time work with a charging constraint (and a connected network) starts
+  a run as soon as the phone is plugged in. It only queues the run (unique `contribute-next`, kept if one is queued or
+  running), so the charging constraint never stops a run part-way. A run that ends at its time limit (`time_budget`)
+  while still plugged in and able to claim queues the next one at once, after itself and never instead of it
+  (`APPEND_OR_REPLACE`; JobScheduler's quotas do not apply while charging). A run that ends for any other reason (no jobs,
+  not on Wi‑Fi, the daily limit, a Stop) re-arms the trigger: an hour later while still plugged in, so nothing spins, or
+  for the next plug-in. The run-ended log line says which (`next: NEXT | TRIGGER | TRIGGER_LATER`). The hourly work stays
+  as the fallback. A job stopped
   part-way is recorded and never retried on this phone, which Activity says.
   The run takes one job from each opted-in app in turn (#819), skipping apps with no open job, rather than finishing one
   app's jobs before the next; an app turned off mid-run is left out from its next turn.

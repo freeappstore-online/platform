@@ -74,7 +74,7 @@ internal fun contributeStatus(state: CompanionState): Pair<String, String> = whe
     !state.online -> "Paused" to "No connection."
     !state.contributeAnyTime && !state.unmetered -> "Paused" to "Not on Wi‑Fi. It runs while plugged in on Wi‑Fi."
     state.model == ModelState.WAITING -> "Idle" to "The voice model downloads on the next run."
-    else -> "Idle" to "Looks for jobs about every hour, or now with Run now."
+    else -> "Idle" to "Starts when plugged in and looks for jobs about every hour, or now with Run now."
 }
 
 /** "1:05" for an audio length, "412 KB" or "1.2 MB" for a size (#820). */

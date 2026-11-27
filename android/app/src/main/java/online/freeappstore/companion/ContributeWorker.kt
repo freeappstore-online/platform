@@ -40,11 +40,22 @@ import kotlinx.coroutines.withContext
  * `stopped` (`background_expired`) and its lease lapses. The server refuses a claim once the app's daily generation
  * budget is used up or the user holds 4 open leases (`429`); the run then ends until the next one. Each run logs how it
  * ended.
+ *
+ * On power (#836) it does not wait for the hourly work: a one-time work with a charging constraint ([arm]) starts a run
+ * as soon as the phone is plugged in. It only queues the run, so the constraint never stops a run part-way. A run that
+ * ends at its time limit still plugged in and able to claim queues the next one at once (JobScheduler's quotas do not
+ * apply while charging); one that ends for any other reason (no jobs, a Stop) re-arms the trigger, an hour later while
+ * still plugged in so it never spins, and the hourly work stays as the fallback.
  */
 class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val graph = applicationContext as FasApplication
         val local = graph.local
+        if (inputData.getBoolean(TRIGGER, false)) {
+            Log.i(TAG, "Plugged in: queueing a run")
+            queueRun(applicationContext, ExistingWorkPolicy.KEEP)
+            return@withContext Result.success()
+        }
         if (graph.repository.token() == null || !lock.tryLock()) {
             Log.i(TAG, "Run ended: " + if (lock.isLocked) "already_running" else "not_connected")
             return@withContext Result.success()
@@ -122,8 +133,15 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // Android stops work whose constraints lapse (a network change) unless it is in the foreground, and ends a
             // dataSync foreground service after its daily limit (Android 15+); either way keepGoing turned false above.
             val stop = if (isStopped && Build.VERSION.SDK_INT >= 31) ", system stop reason $stopReason" else ""
-            Log.i(TAG, "Run ended: $end (${if (foreground) "foreground" else "plain job"}, ${(SystemClock.elapsedRealtime() - started) / 1000} s$stop)")
+            val plugged = plugged() != 0
+            val after = after(end.substringBefore(" ·"), plugged, network())
+            Log.i(TAG, "Run ended: $end (${if (foreground) "foreground" else "plain job"}, ${(SystemClock.elapsedRealtime() - started) / 1000} s$stop), next: $after")
             status = null; downloaded = null; lock.unlock()
+            when (after) {
+                After.NEXT -> queueRun(applicationContext, ExistingWorkPolicy.APPEND_OR_REPLACE) // after this one, never instead of it
+                After.TRIGGER -> arm(applicationContext, ExistingWorkPolicy.REPLACE)
+                After.TRIGGER_LATER -> arm(applicationContext, ExistingWorkPolicy.REPLACE, delayed = true)
+            }
         }
     }
     /** `BatteryManager.EXTRA_PLUGGED` from the sticky battery broadcast: 0 on battery. */
@@ -143,6 +161,11 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
     companion object {
         private const val NAME = "contribute"
         private const val NOW = "contribute-now"
+        /** The next run while plugged in (#836), queued by the trigger or by a run that ran out of time. */
+        private const val NEXT = "contribute-next"
+        /** The plugged-in trigger (#836), and its input flag. */
+        private const val PLUGGED = "contribute-plugged"
+        private const val TRIGGER = "trigger"
         private const val CHANNEL = "fas-contribute"
         private const val TAG = "ContributeWorker"
         /**
@@ -169,19 +192,46 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         @Volatile var downloaded: Long? = null
             private set
         /**
-         * Hourly while paired with something to do; [now] also queues a run as soon as the constraints allow. The hourly
-         * work takes the current constraints whenever nothing is running (so an update's new constraints apply, #828), keeping
-         * its schedule. A run in progress is never replaced or updated (#806): WorkManager stops running work it reschedules,
-         * which lost the job in hand.
+         * Hourly while paired with something to do, and the plugged-in trigger (#836); [now] also queues a run as soon as
+         * the constraints allow. The hourly work takes the current constraints whenever nothing is running (so an update's
+         * new constraints apply, #828), keeping its schedule. A run in progress is never replaced or updated (#806):
+         * WorkManager stops running work it reschedules, which lost the job in hand. The trigger is kept as it is: this
+         * runs on every app open and upload, and a delayed trigger must stay delayed.
          */
         fun schedule(context: Context, active: Boolean, anyTime: Boolean, now: Boolean = false) {
             val work = WorkManager.getInstance(context)
-            if (!active) { work.cancelUniqueWork(NAME); work.cancelUniqueWork(NOW); return }
-            // Connected only, never unmetered or charging: see the class comment.
-            val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(!anyTime).build()
+            if (!active) { listOf(NAME, NOW, NEXT, PLUGGED).forEach(work::cancelUniqueWork); return }
             val (periodic, once) = policies(running = lock.isLocked)
-            work.enqueueUniquePeriodicWork(NAME, periodic, PeriodicWorkRequestBuilder<ContributeWorker>(1, TimeUnit.HOURS).setConstraints(constraints).build())
-            if (now) work.enqueueUniqueWork(NOW, once, OneTimeWorkRequestBuilder<ContributeWorker>().setConstraints(constraints).build())
+            work.enqueueUniquePeriodicWork(NAME, periodic, PeriodicWorkRequestBuilder<ContributeWorker>(1, TimeUnit.HOURS).setConstraints(constraints(anyTime)).build())
+            if (now) work.enqueueUniqueWork(NOW, once, OneTimeWorkRequestBuilder<ContributeWorker>().setConstraints(constraints(anyTime)).build())
+            arm(context, ExistingWorkPolicy.KEEP)
+        }
+        /** Connected only, never unmetered or charging: see the class comment. */
+        private fun constraints(anyTime: Boolean) =
+            Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(!anyTime).build()
+        /** Queues a run on the plugged-in chain (#836), with the current constraints. */
+        private fun queueRun(context: Context, policy: ExistingWorkPolicy) {
+            val anyTime = (context.applicationContext as FasApplication).local.contributeAnyTime
+            WorkManager.getInstance(context).enqueueUniqueWork(NEXT, policy, OneTimeWorkRequestBuilder<ContributeWorker>().setConstraints(constraints(anyTime)).build())
+        }
+        /** The plugged-in trigger (#836): charging and connected; [delayed] by an hour when the phone is plugged in already. */
+        private fun arm(context: Context, policy: ExistingWorkPolicy, delayed: Boolean = false) {
+            val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresCharging(true).build()
+            val request = OneTimeWorkRequestBuilder<ContributeWorker>().setConstraints(constraints).setInputData(workDataOf(TRIGGER to true))
+            if (delayed) request.setInitialDelay(1, TimeUnit.HOURS)
+            WorkManager.getInstance(context).enqueueUniqueWork(PLUGGED, policy, request.build())
+        }
+        /** What a run queues once it ends (#836). */
+        internal enum class After { NEXT, TRIGGER, TRIGGER_LATER }
+        /**
+         * After a run that ended with [end] (its log reason): the next run at once when it ran out of time ([withinBudget]
+         * or [PLAIN_RUN_MS]) while [plugged] in and able to claim; otherwise the trigger, an hour later while plugged in so
+         * that no jobs, no Wi‑Fi, the daily limit or a Stop never turn into a loop of runs.
+         */
+        internal fun after(end: String, plugged: Boolean, mayClaim: Boolean): After = when {
+            end == "time_budget" && plugged && mayClaim -> After.NEXT
+            plugged -> After.TRIGGER_LATER
+            else -> After.TRIGGER
         }
         /** How [schedule] enqueues: new constraints only while nothing is running; never a replacement for a running run. */
         internal fun policies(running: Boolean): Pair<ExistingPeriodicWorkPolicy, ExistingWorkPolicy> =
@@ -189,7 +239,7 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 (if (running) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE)
         @Volatile private var stopRequested = false
         /** Ends the current run after the job in hand stops; the hourly schedule stays. */
-        fun stop(context: Context) { stopRequested = true; WorkManager.getInstance(context).cancelUniqueWork(NOW) }
+        fun stop(context: Context) { stopRequested = true; WorkManager.getInstance(context).run { cancelUniqueWork(NOW); cancelUniqueWork(NEXT) } }
     }
 }
 
