@@ -111,6 +111,7 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             if (!mayClaim()) { end = hold?.code ?: "offline"; return@withContext Result.success() }
             if (local.modelWanted && !graph.kokoro.installed) {
                 if (!runNow && !ContributeConditions.modelFits(settings, device)) { end = "model_waits_for_wifi"; return@withContext Result.success() }
+                if (graph.kokoro.freeBytes() < KokoroModel.SPACE_NEEDED) { end = NO_SPACE; return@withContext Result.success() }
                 downloaded = 0
                 var counted = 0L
                 foreground = show("Downloading the voice model")
@@ -212,6 +213,8 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val TAG = "ContributeWorker"
         /** A run held by a passing condition (in use, hot) while plugged in looks again this soon (#830). */
         internal const val SOON_MINUTES = 10L
+        /** A run's end when the model download waits for free storage (#792). */
+        internal const val NO_SPACE = "no_space"
         /**
          * A run Android kept out of the foreground claims only this long after it starts, and stops itself (the job in hand
          * recorded `stopped`) at [PLAIN_RUN_MS]: a plain job gets about 10 minutes, and one the system times out counts

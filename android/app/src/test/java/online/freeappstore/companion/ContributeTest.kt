@@ -723,6 +723,7 @@ class ContributeTest {
         assertEquals("", c("accepted"))
         assertFalse("no possessive on the app name", contributeDisclosure("Books").contains("Books's"))
         assertTrue(contributeDisclosure("Books").contains("jobs from Books"))
+        assertTrue("opting in says what it downloads (#792)", contributeDisclosure("Books").contains("349 MB voice model"))
     }
     /** #820: what the Activity detail and the status card show. */
     @Test fun theRecordKeepsThePreviewLengthAndSizeAndTheRunReportsSentences() {
@@ -787,6 +788,10 @@ class ContributeTest {
         assertEquals("Paused" to "Battery 28% (min 40%).", contributeStatus(ready.copy(contributeHold = Hold("battery", "Battery 28% (min 40%)."))))
         assertEquals("Waiting" to "No jobs right now. It looks again about every hour.", contributeStatus(ready.copy(contributeLastEnd = "no_work · 0 submitted")))
         assertEquals("Waiting", contributeStatus(ready).first)
+        // #792: the download waits for free storage, and says how much.
+        val noRoom = ready.copy(model = ModelState.WAITING, contributeLastEnd = ContributeWorker.NO_SPACE)
+        assertEquals("Paused" to "Not enough free storage for the voice model. It needs 1751 MB free, so 1 GB is left after it installs.", contributeStatus(noRoom))
+        assertEquals("Waiting", contributeStatus(noRoom.copy(contributeLastEnd = "")).first)
     }
     /** #835: the job is on the record from the claim, its record so far updated each sentence, then it takes its final status. */
     @Test fun theJobInHandIsInProgressWithItsLiveRecord() {

@@ -25,6 +25,8 @@ class KokoroModel(private val dir: File) {
         const val SHA256 = "60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4"
         const val DOWNLOAD_BYTES = 349_886_476L
         const val INSTALLED_BYTES = 401_239_297L
+        /** Free storage a download waits for (#792): the archive and the unpacked model side by side, and 1 GB left over. */
+        const val SPACE_NEEDED = DOWNLOAD_BYTES + INSTALLED_BYTES + 1_000_000_000L
         private const val ROOT = "kokoro-multi-lang-v1_0"
         /** Speaker ids of this model's `voices.bin`, from the sherpa-onnx model docs. */
         val VOICES = listOf(
@@ -71,6 +73,8 @@ class KokoroModel(private val dir: File) {
     val root = File(dir, ROOT)
     private val marker = File(dir, "installed")
     val installed: Boolean get() = marker.isFile
+    /** Free storage where the model goes, to check against [SPACE_NEEDED] before a download (#792). */
+    fun freeBytes(): Long = (dir.parentFile ?: dir).usableSpace
     /** What the model folder takes on disk, a download in progress included (#820). */
     fun bytes(): Long = dir.walk().filter { it.isFile }.sumOf { it.length() }
     /** Downloads, verifies and unpacks. [progress] gets bytes downloaded. Returns false when [keepGoing] stopped it. */

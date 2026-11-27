@@ -32,7 +32,8 @@ internal fun contributeDisclosure(name: String) =
     "This phone will take open jobs from $name, such as narrating a chapter, generate each one with an on-device voice " +
         "model and upload the result to FreeAppStore under your account. It only ever generates exactly what the publisher " +
         "of $name asked for, never anything you type, and FreeAppStore checks every upload before anyone hears it. By " +
-        "default it runs only while plugged in on Wi‑Fi."
+        "default it runs only while plugged in on Wi‑Fi. It needs a ${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB voice model " +
+        "(${KokoroModel.INSTALLED_BYTES / 1_000_000} MB on this phone), downloaded once; you can delete it in Contribute settings."
 
 /** The labels of [Contribution.status]. */
 internal val contributionLabels = mapOf(
@@ -76,6 +77,8 @@ internal fun contributeStatus(state: CompanionState): Pair<String, String> = whe
     state.model == ModelState.NONE -> "Paused" to "No voice model. Download it in Settings."
     state.contributeApps.isEmpty() -> "Paused" to "No apps turned on. Choose them in Settings."
     state.contributeHold != null -> "Paused" to state.contributeHold.text
+    state.model == ModelState.WAITING && state.contributeLastEnd == ContributeWorker.NO_SPACE ->
+        "Paused" to "Not enough free storage for the voice model. It needs ${KokoroModel.SPACE_NEEDED / 1_000_000} MB free, so 1 GB is left after it installs."
     state.model == ModelState.WAITING -> "Waiting" to "The voice model downloads on the next run."
     state.contributeLastEnd.startsWith("no_work") -> "Waiting" to "No jobs right now. It looks again about every hour."
     else -> "Waiting" to "It starts by itself while the conditions in Settings hold, and looks for jobs about every hour."
