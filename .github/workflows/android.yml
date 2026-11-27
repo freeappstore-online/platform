@@ -96,8 +96,10 @@ jobs:
 
   # Job-level `if` cannot read secrets, so this job checks for the upload-key secrets and the release job is
   # skipped cleanly while they are absent. The repo is private: they must be repo-level secrets, not org secrets.
+  # It needs the emulator job as well as build (#852): a failed, cancelled or skipped instrumented test skips this
+  # job and so the signed build and every Play upload, while the debug and test reports above are still uploaded.
   release-gate:
-    needs: build
+    needs: [build, emulator]
     if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/android-v')) && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -119,7 +121,7 @@ jobs:
           fi
 
   release:
-    needs: [build, release-gate]
+    needs: [build, emulator, release-gate]
     if: needs.release-gate.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 35
