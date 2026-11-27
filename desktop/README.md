@@ -37,8 +37,8 @@ contributing while this computer is connected.
 header's **Sign in**), the header shows the account's avatar and name and the tray menu its name and avatar. The
 Account page shows the avatar, name, `@login` (or the sign-in provider), user id, email, platform roles, the number
 of apps for creators with a console link, and this computer's label, connection date and expiry, all from
-`GET /v1/native/me` with the device credential (held in memory only; the avatar is fetched by the main process and
-handed over as a `data:` URL, since the page's CSP allows no remote images). **Sign out** revokes the device
+`GET /v1/native/me` with the device credential (the profile is held in memory only; the avatar is fetched by the main
+process and handed over as a `data:` URL, since the page's CSP allows no remote images). **Sign out** revokes the device
 credential, like Contribute's **Disconnect**; **Delete account** opens the console's deletion flow.
 
 Development environment variables (dev builds, i.e. not packaged):
