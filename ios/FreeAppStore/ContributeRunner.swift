@@ -9,7 +9,9 @@ import UIKit
 /// either (the task's expiration, or the app leaving the foreground) stops the job in hand without uploading it; a Run
 /// now cut short that way asks for the background run at once, and claims nothing more once the app has left the screen
 /// (#828). The server refuses a claim once the day's contribution limit is reached; the run then ends. Each run logs how
-/// it ended.
+/// it ended. iOS alone decides when a background run starts and how long it lasts (#836): this asks for the next one
+/// straight away when a run ends with jobs left and when the phone is plugged in while the app runs, otherwise in 15
+/// minutes.
 @MainActor
 final class ContributeRunner: ObservableObject {
     static let taskId = "online.freeappstore.companion.contribute"
@@ -45,10 +47,32 @@ final class ContributeRunner: ObservableObject {
         client = GenerationClient(api: api, credential: { [repository] in repository.token() })
     }
 
-    /// Before the end of launch, as BGTaskScheduler requires.
+    /// Before the end of launch, as BGTaskScheduler requires. Plugging the phone in while the app runs asks for a
+    /// background run straight away (#836); iOS still decides when it starts, most often once the phone is locked.
     func register() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskId, using: .main) { [weak self] task in
             MainActor.assumeIsolated { self?.handle(task as! BGProcessingTask) }
+        }
+        UIDevice.current.isBatteryMonitoringEnabled = true
+        NotificationCenter.default.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, Self.pluggedIn, !self.running else { return }
+                self.schedule(soon: true)
+            }
+        }
+    }
+
+    /// The phone is on external power: charging, or full while plugged in.
+    static var pluggedIn: Bool { [.charging, .full].contains(UIDevice.current.batteryState) }
+
+    /// Whether a background run that ended with `end` asks for the next one straight away rather than in 15 minutes
+    /// (#836): iOS ended it, or it ended with a job not done and jobs may be left. Never after nothing to claim, a
+    /// failure (the daily limit among them) or Stop, so the phone does not spin.
+    nonisolated static func again(end: String, drained: Bool) -> Bool {
+        switch end {
+        case "background_expired": true
+        case "no_work": !drained
+        default: false
         }
     }
 
@@ -75,7 +99,7 @@ final class ContributeRunner: ObservableObject {
         Task {
             // A Run now that just lost the foreground ends at its next sentence; this run then takes over.
             while running && !flag.stopped { try? await Task.sleep(for: .seconds(1)) }
-            await run(flag, background: true)
+            if await run(flag, background: true) { schedule(soon: true) } // jobs left (#836): as soon as iOS allows
             task.setTaskCompleted(success: !flag.stopped)
         }
     }
@@ -100,7 +124,7 @@ final class ContributeRunner: ObservableObject {
             left.stop("left_app")
         }
         Task {
-            await run(flag, background: false, mayClaim: { !left.stopped })
+            _ = await run(flag, background: false, mayClaim: { !left.stopped })
             NotificationCenter.default.removeObserver(observer)
             if flag.reason == "background_expired" { schedule(soon: true) }
             UIApplication.shared.isIdleTimerDisabled = idle
@@ -133,8 +157,9 @@ final class ContributeRunner: ObservableObject {
         try await NetworkRetry().attempts(keepGoing: keepGoing) { try await client.refresh(app, log: local) }
     }
 
-    private func run(_ flag: StopFlag, background: Bool, mayClaim: @escaping () -> Bool = { true }) async {
-        guard stopFlag == nil, repository.token() != nil else { return }
+    /// Whether the next background run should start as soon as iOS allows (`again`).
+    private func run(_ flag: StopFlag, background: Bool, mayClaim: @escaping () -> Bool = { true }) async -> Bool {
+        guard stopFlag == nil, repository.token() != nil else { return false }
         stopFlag = flag
         lastError = ""
         lastStop = nil
@@ -144,9 +169,11 @@ final class ContributeRunner: ObservableObject {
         let began = Date()
         var submitted = 0
         var failed: String?
+        var drained = true
+        func end() -> String { flag.reason ?? failed ?? (mayClaim() ? "no_work" : "left_app") }
         defer {
-            let end = flag.reason ?? failed ?? (mayClaim() ? "no_work" : "left_app")
-            Self.logger.notice("Run ended: \(end, privacy: .public) · \(submitted) submitted (\(background ? "background task" : "run now", privacy: .public), \(Int(Date().timeIntervalSince(began))) s)")
+            let reason = end()
+            Self.logger.notice("Run ended: \(reason, privacy: .public) · \(submitted) submitted (\(background ? "background task" : "run now", privacy: .public), \(Int(Date().timeIntervalSince(began))) s)")
         }
         defer { stopFlag = nil; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason }
         // A background run asked for external power: unplugging stops it (iOS would end it soon anyway).
@@ -176,7 +203,7 @@ final class ContributeRunner: ObservableObject {
                 downloaded = nil
             }
             let apps = local.contributeApps().sorted()
-            guard kokoro.installed, !apps.isEmpty else { return }
+            guard kokoro.installed, !apps.isEmpty else { return false }
             status = "Looking for jobs"
             let synth = KokoroSynthesizer(files: kokoro)
             defer { synth.close() }
@@ -200,6 +227,7 @@ final class ContributeRunner: ObservableObject {
                 started.value = Date()
                 Task { @MainActor in self.app = app; self.job = job.key; self.sentences = nil; self.speed = nil; self.status = "Generating \(job.key)" }
             }
+            drained = contributor.drained
         } catch let failure as ApiFailure where failure.status == 401 {
             failed = "401"
             try? await repository.sync() // the connection expired: the sync marks it, and the expired card says so
@@ -207,6 +235,7 @@ final class ContributeRunner: ObservableObject {
             lastError = error.localizedDescription
             failed = ((error as? ApiFailure).map { "\($0.status) " } ?? "") + lastError
         }
+        return Self.again(end: end(), drained: drained)
     }
 }
 

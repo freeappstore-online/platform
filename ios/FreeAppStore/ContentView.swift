@@ -110,8 +110,9 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         }
     }
 
-    /// Leaving the app mid-run ends Run now shortly; the background run is asked for straight away to carry on (#819).
-    func resignActive() { refreshTask?.cancel(); contribute.schedule(soon: contribute.running) }
+    /// Leaving the app mid-run ends Run now shortly; the background run is asked for straight away to carry on (#819), and
+    /// so it is when leaving the app while plugged in (#836).
+    func resignActive() { refreshTask?.cancel(); contribute.schedule(soon: contribute.running || ContributeRunner.pluggedIn) }
 
     /// Finishes a pending connection, then syncs. A connection error is shown until the next activation; sync
     /// failures are left to `local.message`, which every later successful sync clears, background ones included.

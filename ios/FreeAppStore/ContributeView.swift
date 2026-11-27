@@ -45,8 +45,11 @@ enum ContributeText {
         }
         if let lastStop { return ("Stopped", "Stopped because \(reasons[lastStop] ?? lastStop).") }
         if chargingOnly && !charging { return ("Idle", "Waiting for the phone to charge. Background runs need power and a connection.") }
-        return ("Idle", chargingOnly ? "Runs in the background while the phone charges and is online, when iOS allows."
-            : "Runs in the background when iOS allows, most often while the phone charges.")
+        if charging {
+            return ("Idle", "Plugged in. iOS decides when background runs start and how long they last, most often with the phone locked. "
+                + "When one ends with jobs left, FreeAppStore asks iOS for the next straight away.")
+        }
+        return ("Idle", "Runs in the background when iOS allows, most often while the phone charges.")
     }
 }
 

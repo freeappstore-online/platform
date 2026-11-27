@@ -429,6 +429,10 @@ final class Contributor {
     private let probes: DeviceProbes
     private let audio: AttemptAudio?
     private static let logger = Logger(subsystem: "online.freeappstore.companion", category: "contribute")
+    /// Whether the last `run` left no job to claim (#836): every app left the rotation finding no open job (or turned off,
+    /// or no longer claiming). False once an app left after a job it did not submit, such as one whose lease ran out, so
+    /// jobs may be left.
+    private(set) var drained = true
 
     /// `stopReason` names why `keepGoing` turned false, for the record. While `hot()` (the phone is too warm) the work
     /// waits between sentences and before claiming, checking every `coolDown` and keeping the lease alive, then goes on.
@@ -452,6 +456,7 @@ final class Contributor {
              mayClaim: @escaping () -> Bool = { true }, progress: (String, GenerationJob) -> Void = { _, _ in }) async throws -> Int {
         var submitted = 0
         var rotation = apps
+        drained = true
         while !rotation.isEmpty && keepGoing() && mayClaim() {
             for app in rotation {
                 if !mayClaim() { break }
@@ -465,7 +470,7 @@ final class Contributor {
                     if let job {
                         progress(app, job)
                         stays = try await process(app, job, go, optedIn: { optedIn(app) })
-                        if stays { submitted += 1 }
+                        if stays { submitted += 1 } else { drained = false }
                     }
                 }
                 if !stays { rotation.removeAll { $0 == app } }

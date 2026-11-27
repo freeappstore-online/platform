@@ -19,7 +19,7 @@ struct ContributeSettingsView: View {
                 GroupBox {
                     VStack(alignment: .leading, spacing: 8) {
                         AdaptiveToggle(title: "Only while charging", isOn: Binding(get: { model.chargingOnly }, set: model.setChargingOnly))
-                        Text("Background runs wait for the phone to be charging and online. Turned off, iOS may also run them on battery, at its discretion. Run now works either way.")
+                        Text("Background runs wait for the phone to be charging and online. iOS decides when each one starts and how long it lasts; plugging in, and a run ending with jobs left, ask it for the next one straight away. Turned off, iOS may also run them on battery, at its discretion. Run now works either way.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)

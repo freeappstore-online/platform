@@ -906,6 +906,26 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(state(model: .waiting).title, "Waiting")
         XCTAssertEqual(state(lastStop: "unplugged").why, "Stopped because the phone was unplugged.")
         XCTAssertTrue(state(charging: false).why.hasPrefix("Waiting for the phone to charge"))
+        XCTAssertTrue(state(charging: true).why.contains("iOS decides when background runs start"), "#836: says what iOS controls")
+    }
+
+    /// #836: a background run asks iOS for the next one straight away only when it ended with jobs left; after nothing to
+    /// claim, a failure or Stop it waits the normal 15 minutes, so the phone does not spin.
+    func testTheNextBackgroundRunIsAskedForAtOnceOnlyWithJobsLeft() async throws {
+        XCTAssertTrue(ContributeRunner.again(end: "background_expired", drained: true))
+        XCTAssertTrue(ContributeRunner.again(end: "no_work", drained: false))
+        XCTAssertFalse(ContributeRunner.again(end: "no_work", drained: true))
+        for end in ["user_stop", "unplugged", "left_app", "401", "429 daily limit reached"] {
+            XCTAssertFalse(ContributeRunner.again(end: end, drained: false), end)
+        }
+        let contributor = contributor()
+        server.jobs = [job("j1")]
+        _ = try await contributor.run(["books"], keepGoing: { true })
+        XCTAssertTrue(contributor.drained, "every job submitted, then none open")
+        server.jobs = [job("j2", expires: now + 10_000)]
+        _ = try await contributor.run(["books"], keepGoing: { true })
+        XCTAssertEqual(log.rows["j2"]?.reason, "lease_expired")
+        XCTAssertFalse(contributor.drained, "a job not done: jobs may be left")
     }
 
     func testParsesIsoLeaseExpiryAndRejectsOddJobIds() throws {

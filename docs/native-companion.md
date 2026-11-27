@@ -210,7 +210,15 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   app's background time running out after leaving it), the job in hand stops between sentences and is not uploaded.
   Leaving the app during **Run now**, or Run now ending with `background_expired`, submits the background task request
   with no earliest start (#819), so the work goes on as soon as iOS allows on external power; the tab says plainly that
-  Run now needs the app on screen and background runs happen while charging. Once the app has left the screen, Run now
+  Run now needs the app on screen and background runs happen while charging. **Keep going while charging** (#836): a
+  background run that ends with jobs left (iOS expired it, or a job was not done, such as one whose lease ran out)
+  submits the next request with no earliest start; one that found nothing to claim, failed (the daily limit among
+  them) or was stopped asks for 15 minutes out, so the phone does not spin. Plugging in while the app is running
+  (`UIDevice.batteryStateDidChangeNotification`), and leaving the app while plugged in, also ask with no earliest
+  start. What iOS still controls: whether and when a requested run starts (most often with the phone locked, on power
+  and a connection, and less for an app the user rarely opens), how long it lasts before expiring, and that nothing is
+  delivered while the app is suspended or killed. Plugging in does not start **Run now** by itself: Run now keeps the
+  screen awake, which stays the user's choice. Once the app has left the screen, Run now
   claims nothing more (#828): the job in hand may finish in the seconds left, then the background task carries on.
   The daily limit's `429` at the claim ends a run; each run logs `Run ended: <reason>` (subsystem
   `online.freeappstore.companion`, category `Contribute`). Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
