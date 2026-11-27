@@ -43,6 +43,8 @@ export interface RegistryApp {
   icon?: string;
   iconBg?: string;
   description?: string;
+  /** When the app was first published (ISO 8601), for Newest (#834). */
+  published?: string;
 }
 
 declare global {
@@ -69,7 +71,7 @@ declare global {
       clients(): Promise<ClientStatus[]>;
       /** Connect (true) or disconnect (false) a client; resolves with every client's new status. */
       setConnected(id: ClientId, connect: boolean): Promise<ClientStatus[]>;
-      registry(): Promise<{ apps: RegistryApp[] }>;
+      registry(): Promise<{ apps: RegistryApp[]; votes: Record<string, number> }>;
       contribute: {
         connect(): Promise<void>;
         cancel(): Promise<void>;

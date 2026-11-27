@@ -53,6 +53,7 @@ const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
 // Dev builds can point Contribute at a local API (the e2e test's stand-in).
 const apiOrigin = (dev && process.env.FAS_DEV_API_ORIGIN) || API_ORIGIN;
 const REGISTRY = 'https://freeappstore.online/registry.json';
+const VOTES = 'https://api.freeappstore.online/v1/store/votes';
 // "0.3.0 (57, abc1234)": package.json's version with the build number and commit (#832).
 const version = versionLabel(
   app.getVersion(),
@@ -378,9 +379,18 @@ ipcMain.handle('home:connect', async (event, id: unknown, connect: unknown) => {
 });
 ipcMain.handle('home:registry', async (event) => {
   if (!fromHome(event)) return null;
-  const response = await net.fetch(REGISTRY);
+  const [response, votes] = await Promise.all([
+    net.fetch(REGISTRY),
+    // Votes only order Most popular (#834): the Store still loads without them.
+    net
+      .fetch(VOTES)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((body: { votes?: Record<string, number> }) => body.votes ?? {})
+      .catch(() => ({})),
+  ]);
   if (!response.ok) throw new Error(`registry.json: ${response.status}`);
-  return response.json();
+  const { apps } = (await response.json()) as { apps: unknown[] };
+  return { apps, votes };
 });
 
 function pushState() {

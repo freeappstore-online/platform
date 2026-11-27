@@ -29,7 +29,7 @@ pnpm --dir desktop dev        # builds main, preloads and UI, then starts Electr
 The home screen leads with the status (**Pause AI access** / **Resume**, **Open at login**) and the **Connect**
 buttons for Claude Code and Claude Desktop, then the connected apps and their tools, and a collapsed **Manual
 setup** with the HTTP command and token for other AI apps. **Store** opens apps from `registry.json` in desktop
-windows; **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
+windows, sorted Newest (default), Most popular, A–Z or by Category, with the choice remembered (#834); **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
 menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and Pause / Resume
 contributing while this computer is connected.
 

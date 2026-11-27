@@ -384,28 +384,89 @@ const decodeIcon = (icon = '') =>
     String.fromCodePoint(Number.parseInt(code, hex ? 16 : 10)),
   );
 
+const SORTS = {
+  newest: 'Newest',
+  popular: 'Most popular',
+  az: 'A–Z',
+  category: 'Category',
+} as const;
+type Sort = keyof typeof SORTS;
+const SORT_KEY = 'fas-desktop-store-sort';
+const LAST = '\uffff';
+const isSort = (value: string | null): value is Sort => !!value && value in SORTS;
+const byName = (a: RegistryApp, b: RegistryApp) =>
+  a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true });
+
+/** The storefront's orders (#834): apps without a date, votes or category go last, ties by name. */
+function sortApps(apps: RegistryApp[], sort: Sort, votes: Record<string, number>) {
+  const compare: Record<Sort, (a: RegistryApp, b: RegistryApp) => number> = {
+    newest: (a, b) => (b.published ?? '').localeCompare(a.published ?? ''),
+    popular: (a, b) => (votes[b.id] ?? 0) - (votes[a.id] ?? 0),
+    az: () => 0,
+    category: (a, b) => (a.category ?? LAST).localeCompare(b.category ?? LAST),
+  };
+  return [...apps].sort((a, b) => compare[sort](a, b) || byName(a, b));
+}
+
 function Store() {
   const [apps, setApps] = useState<RegistryApp[] | null>(null);
+  const [votes, setVotes] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<Sort>(() => {
+    const saved = localStorage.getItem(SORT_KEY);
+    return isSort(saved) ? saved : 'newest';
+  });
 
   useEffect(() => {
     desktop
       .registry()
-      .then((registry) => setApps(registry.apps))
+      .then((registry) => {
+        setApps(registry.apps);
+        setVotes(registry.votes);
+      })
       .catch(() => setError("Couldn't load the Store. Check your connection and try again."));
   }, []);
 
+  const chooseSort = (value: string) => {
+    if (!isSort(value)) return;
+    setSort(value);
+    localStorage.setItem(SORT_KEY, value);
+  };
+
   const q = query.trim().toLowerCase();
-  const shown = (apps ?? []).filter(
-    (app) =>
-      !q || `${app.name} ${app.category ?? ''} ${app.description ?? ''}`.toLowerCase().includes(q),
+  const shown = sortApps(
+    (apps ?? []).filter(
+      (app) =>
+        !q ||
+        `${app.name} ${app.category ?? ''} ${app.description ?? ''}`.toLowerCase().includes(q),
+    ),
+    sort,
+    votes,
   );
 
   return (
     <Section
       title="Store"
-      aside={<SearchInput value={query} onChange={setQuery} placeholder="Search apps" />}
+      aside={
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-muted">
+            Sort
+            <select
+              value={sort}
+              onChange={(e) => chooseSort(e.target.value)}
+              className="rounded-control border border-line bg-panel px-2 py-1 text-sm text-ink cursor-pointer"
+            >
+              {(Object.keys(SORTS) as Sort[]).map((key) => (
+                <option key={key} value={key}>
+                  {SORTS[key]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <SearchInput value={query} onChange={setQuery} placeholder="Search apps" />
+        </div>
+      }
     >
       {error && <p className="text-danger">{error}</p>}
       {!apps && !error && <p className="text-muted">Loading…</p>}

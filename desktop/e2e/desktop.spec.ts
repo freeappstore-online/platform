@@ -295,6 +295,19 @@ test('the Store tab lists apps from registry.json (needs the network)', async ()
   await home.getByRole('button', { name: 'Store', exact: true }).click();
   await expect(home.getByRole('button', { name: 'Open' }).first()).toBeVisible({ timeout: 15_000 });
   await home.screenshot({ path: join(SHOTS, 'store-dark.png') });
+  // Sort (#834): A–Z orders the names, and the choice survives leaving the page.
+  const sort = home.getByLabel('Sort');
+  await expect(sort).toHaveValue('newest');
+  await sort.selectOption('az');
+  const names = await home.locator('li .font-bold').allTextContents();
+  expect(names).toEqual(
+    [...names].sort((a, b) =>
+      a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }),
+    ),
+  );
+  await home.getByRole('button', { name: 'Home', exact: true }).click();
+  await home.getByRole('button', { name: 'Store', exact: true }).click();
+  await expect(home.getByLabel('Sort')).toHaveValue('az');
   await home.getByRole('button', { name: 'Home', exact: true }).click();
 });
 

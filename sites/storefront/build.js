@@ -1295,7 +1295,9 @@ ${sitemapEntries.join('\n')}
 `;
 
 fs.writeFileSync(path.join(DIST, 'sitemap.xml'), sitemap);
-fs.writeFileSync(path.join(DIST, 'registry.json'), JSON.stringify({ ...registry, apps }, null, 2) + '\n');
+// Each app's `published` date (the cards' data-published) lets the desktop Store sort by Newest (#834).
+const publishedApps = apps.map((app, i) => ({ ...app, published: histories[i]?.meta?.created_at ?? undefined }));
+fs.writeFileSync(path.join(DIST, 'registry.json'), JSON.stringify({ ...registry, apps: publishedApps }, null, 2) + '\n');
 
 // --- Copy static assets ---
 
