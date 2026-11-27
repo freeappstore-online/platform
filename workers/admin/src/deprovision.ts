@@ -138,6 +138,7 @@ export const APP_DATA_TABLES = [
   "generation_sets",
   "generation_blocks",
   "generation_audit",
+  "generation_settings", // 0061 (#842)
 ] as const;
 
 /** Delete the D1 rows of an app: the `routes` row the host reads, the `apps`
