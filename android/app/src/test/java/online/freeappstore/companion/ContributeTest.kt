@@ -710,6 +710,8 @@ class ContributeTest {
         assertEquals("the audio stays on the phone for playback", 33_600L, kept.audio("j1")!!.length())
         assertEquals("One. Two." to listOf(Segment(0, 4, 0, 500), Segment(5, 9, 900, 1_400)), kept.playback("j1"))
         assertFalse(File(dir, "contribution.m4a").exists())
+        kept.clear() // Disconnect: the audio and its text go with the record
+        assertNull(kept.audio("j1")); assertNull(kept.playback("j1"))
     }
     @Test fun attemptEndsUseTheDiagnosticVocabulary() {
         assertEquals("too_large", AttemptReason.refusal("too_large"))

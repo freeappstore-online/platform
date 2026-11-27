@@ -566,6 +566,8 @@ class KeptAudio(private val dir: File) {
             .forEach { it.delete(); File(dir, it.nameWithoutExtension + ".json").delete() }
     }
     fun audio(jobId: String): File? = File(dir, "$jobId.m4a").takeIf { it.isFile }
+    /** Disconnect, or pairing a different account: the audio and its text go too. */
+    fun clear() { dir.deleteRecursively() }
     /** The whole input and its sentence timings, or null when this job's audio is not kept. */
     fun playback(jobId: String): Pair<String, List<Segment>>? {
         if (audio(jobId) == null) return null

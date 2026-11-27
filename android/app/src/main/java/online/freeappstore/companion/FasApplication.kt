@@ -12,8 +12,7 @@ class FasApplication : Application() {
     /** Contribute (#731): the voice model in no-backup storage, and the contributor routes with the device credential. */
     val kokoro by lazy { KokoroModel(java.io.File(noBackupFilesDir, "kokoro")) }
     val generation by lazy { GenerationClient(api, repository::token) }
-    /** The audio of this phone's latest attempts, for playback in Activity (#827). */
-    val kept by lazy { KeptAudio(java.io.File(filesDir, "generated")) }
+    val kept get() = local.kept
     /** Outside LocalStore, so pairing and disconnect keep the Store tab's cache. */
     val catalogue by lazy { CatalogueStore(java.io.File(noBackupFilesDir, "fas-catalogue")) }
     override fun onCreate() {

@@ -18,6 +18,8 @@ import org.json.JSONObject
  */
 class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 7), ContributionLog {
     private val prefs = context.getSharedPreferences("native-settings", Context.MODE_PRIVATE)
+    /** The audio of this phone's latest attempts, for playback in Activity (#827); cleared with the record. */
+    val kept = KeptAudio(java.io.File(context.filesDir, "generated"))
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE points(id TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)")
         db.execSQL("CREATE INDEX points_at ON points(at)")
@@ -209,6 +211,7 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     /** Disconnect, or pairing a different account: everything. */
     @Synchronized fun clear() {
         transaction { db -> listOf("points", "share_events", "share_points", "generation_jobs").forEach { db.delete(it, null, null) } }
+        kept.clear()
         check(prefs.edit().clear().commit())
     }
     /**
