@@ -12,6 +12,8 @@ import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
 import { API_URL } from './builder/lib/api'
 import {
   deleteModel,
+  diagnostics,
+  DIAGNOSTIC_RUNS,
   downloadModel,
   fetchOpenWork,
   modelConsented,
@@ -173,6 +175,7 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
               <ModelCard encoder={encoder} device={device} downloaded={downloaded} onChanged={() => setDownloaded(modelConsented())} />
             )}
             <StorageCard downloaded={downloaded} />
+            <TroubleshootingCard encoder={encoder ?? null} device={device} />
           </>
         )}
       </div>
@@ -373,6 +376,35 @@ function StorageCard({ downloaded }: { downloaded: boolean }) {
         </p>
       ) : (
         <p className="text-sm text-muted">This browser doesn't report its storage use.</p>
+      )}
+    </div>
+  )
+}
+
+/** Copy diagnostics (#813): what this browser can run and the latest runs' records, for a bug report. */
+function TroubleshootingCard({ encoder, device }: { encoder: AudioEncoderConfig | null; device: KokoroDevice }) {
+  const [copied, setCopied] = useState<'' | 'yes' | 'failed'>('')
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(await diagnostics(encoder, device))
+      setCopied('yes')
+    } catch (err) {
+      console.warn('generation: diagnostics not copied', err)
+      setCopied('failed')
+    }
+  }
+  return (
+    <div className={card}>
+      <h3 className={heading}>Troubleshooting</h3>
+      <p className="text-sm text-muted mb-3">
+        Copies what this browser can run, how the last run ended and the latest {DIAGNOSTIC_RUNS} jobs' records, for a bug
+        report. No text, audio or sign-in details.
+      </p>
+      <button type="button" className={secondary} onClick={copy}>Copy diagnostics</button>
+      {copied && (
+        <p role="status" className={`mt-2 text-sm ${copied === 'yes' ? 'text-muted' : 'text-danger'}`}>
+          {copied === 'yes' ? 'Copied.' : "Couldn't copy: this browser refused the clipboard."}
+        </p>
       )}
     </div>
   )

@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { GenerationError, type FreeAppStore, type GenerationOpenApp } from '@freeappstore/sdk'
 import * as kokoro from '@freeappstore/sdk/generation-kokoro'
-import { endReason } from './generate'
 import { GeneratePage } from './GeneratePage'
 
 const load = vi.fn(async (onLoading?: (p: number) => void) => { onLoading?.(0.5) })
@@ -218,17 +217,38 @@ it("records the run's last job as lease_cap when its lease ran out, not as a sto
   expect(run).toMatchObject({ jobId: 'j5', outcome: 'stopped', record: { reason: 'lease_cap' } })
 })
 
-it('maps how a job ended to the #813 reasons', () => {
-  expect(endReason('submitted', null)).toBe('submitted')
-  expect(endReason('skipped', 'audio exceeds maxBytes')).toBe('too_large')
-  expect(endReason('skipped', 'too slow to finish within the lease')).toBe('lease_cap')
-  expect(endReason('skipped', 'unknown voice zz')).toBe('unsupported')
-  expect(endReason('stopped', 'the lease ran out before it finished')).toBe('lease_cap')
-  expect(endReason('stopped', 'stopped before it finished')).toBe('user_stop')
-  expect(endReason('failed', 'x', new GenerationError('gone', 403))).toBe('lease_403')
-  expect(endReason('failed', 'x', new GenerationError('down', 503))).toBe('server_5xx')
-  expect(endReason('failed', 'Failed to fetch', new TypeError('Failed to fetch'))).toBe('network')
-  expect(endReason('failed', 'worker crashed')).toBe('other')
+it('records a model failure as model_error and an upload refused as lease_403 (#813)', async () => {
+  localStorage.setItem('fas:generate-apps', JSON.stringify(['books']))
+  localStorage.setItem('fas:generate-model', '1')
+  vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
+  vi.mocked(kokoro.contributeKokoroApps).mockImplementation(async (opts) => {
+    const job = (id: string) => ({ id, setId: 's1', key: `alice/${id}`, input: { text: 'Hi.' } }) as never
+    opts.onEvent?.({ type: 'failed', job: job('j6'), reason: 'the model worker crashed', error: new kokoro.KokoroError('the model worker crashed', 'worker') }, 'books')
+    opts.onEvent?.({ type: 'failed', job: job('j7'), reason: 'gone', error: new GenerationError('gone', 403) }, 'books')
+    return { submitted: 0, stopped: 'no-work' }
+  })
+  await render()
+  await click(button('Start')!)
+  const runs = JSON.parse(localStorage.getItem('fas:generate-runs')!)
+  expect(runs.find((r: { jobId: string }) => r.jobId === 'j6')).toMatchObject({ outcome: 'failed', record: { reason: 'model_error' } })
+  expect(runs.find((r: { jobId: string }) => r.jobId === 'j7')).toMatchObject({ outcome: 'failed', record: { reason: 'lease_403' } })
+})
+
+it('copies diagnostics without the input text (#813)', async () => {
+  localStorage.setItem('fas:generate-runs', JSON.stringify([{
+    appId: 'books', setId: 's1', jobId: 'j9', key: 'alice/9', at: 1, outcome: 'skipped', reason: 'unknown voice zz', ms: 5,
+    text: 'SECRET INPUT', chars: 12, record: { runner: 'browser', reason: 'unsupported' },
+  }]))
+  const writeText = vi.fn(async (_text: string) => {})
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+  await render()
+  await tab('Settings')
+  await click(button('Copy diagnostics')!)
+  const copied = JSON.parse(writeText.mock.calls[0]![0])
+  expect(copied.capabilities).toMatchObject({ runner: 'browser', accelerator: 'webgpu', model: 'kokoro v1.0' })
+  expect(copied.runs[0]).toMatchObject({ jobId: 'j9', reason: 'unknown voice zz', record: { reason: 'unsupported' } })
+  expect(JSON.stringify(copied)).not.toContain('SECRET')
+  expect(container.textContent).toContain('Copied.')
 })
 
 it('runs in one tab at a time: another tab holding the Web Lock blocks Start', async () => {

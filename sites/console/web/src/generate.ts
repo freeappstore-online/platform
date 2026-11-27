@@ -11,16 +11,16 @@
 import { useSyncExternalStore } from 'react'
 import {
   Generation,
-  GenerationError,
   type FreeAppStore,
   type GenerationAttemptRecord,
-  type GenerationEndReason,
   type GenerationJob,
   type GenerationOpenApp,
 } from '@freeappstore/sdk'
 import {
   contributeKokoroApps,
   deleteKokoroModel,
+  isKokoroDownloaded,
+  kokoroEndReason,
   kokoroProblem,
   KokoroRunner,
   type KokoroDevice,
@@ -227,16 +227,52 @@ export function context(): Pick<GenerationAttemptRecord, 'os' | 'device' | 'netw
   }
 }
 
-/** The #813 reason for how a job ended here. */
-export function endReason(outcome: RunRecord['outcome'], reason: string | null, err?: unknown): GenerationEndReason {
-  if (outcome === 'submitted') return 'submitted'
-  if (err instanceof GenerationError)
-    return err.status === 403 ? 'lease_403' : err.status >= 500 ? 'server_5xx' : 'server_4xx'
-  if (err instanceof TypeError) return 'network'
-  const text = reason ?? ''
-  if (outcome === 'skipped') return /exceed/.test(text) ? 'too_large' : /lease/.test(text) ? 'lease_cap' : 'unsupported'
-  if (outcome === 'stopped') return /lease/.test(text) ? 'lease_cap' : 'user_stop'
-  return /network|fetch/i.test(text) ? 'network' : 'other'
+/**
+ * What this browser generates with (#813), taken at the start of each run and for Copy
+ * diagnostics: the browser, CPU cores and memory, the accelerator asked for and the one the model
+ * really runs on (WebGPU falls back to WebAssembly), the AAC encoder, whether the model is
+ * downloaded, storage, battery and network. Nothing about the account.
+ */
+export async function capabilityReport(encoder: AudioEncoderConfig | null, device: KokoroDevice) {
+  const nav = navigator as Navigator & { deviceMemory?: number; gpu?: unknown }
+  const estimate = await navigator.storage?.estimate?.().catch(() => undefined)
+  return {
+    runner: 'browser',
+    ...context(),
+    cores: nav.hardwareConcurrency ?? null,
+    memoryGb: nav.deviceMemory ?? null,
+    webgpu: 'gpu' in nav,
+    accelerator: device,
+    acceleratorInUse: runner?.device ?? null,
+    aacEncoder: encoder && { sampleRate: encoder.sampleRate, bitrate: encoder.bitrate ?? null },
+    model: 'kokoro v1.0',
+    modelDownloaded: modelConsented() && (await isKokoroDownloaded().catch(() => false)),
+    storageUsedMb: estimate?.usage !== undefined ? Math.round(estimate.usage / 1e6) : null,
+    storageQuotaMb: estimate?.quota !== undefined ? Math.round(estimate.quota / 1e6) : null,
+    ...(await power()),
+  }
+}
+
+/** The capability report taken when the last run started (#813), or null. */
+let startCapabilities: Awaited<ReturnType<typeof capabilityReport>> | null = null
+
+/** How many of the latest runs Copy diagnostics includes. */
+export const DIAGNOSTIC_RUNS = 50
+
+/**
+ * Copy diagnostics (#813), for a bug report: the capability report now and at the last run's
+ * start, how the last run ended, and the latest runs with their reasons and attempt records.
+ * Never the input text, the audio or any credential.
+ */
+export async function diagnostics(encoder: AudioEncoderConfig | null, device: KokoroDevice): Promise<string> {
+  const runs = state.runs.slice(0, DIAGNOSTIC_RUNS).map(({ text: _text, ...run }) => ({ ...run, at: new Date(run.at).toISOString() }))
+  return JSON.stringify({
+    at: new Date().toISOString(),
+    capabilities: await capabilityReport(encoder, device),
+    capabilitiesAtLastStart: startCapabilities,
+    lastMessage: state.message,
+    runs,
+  }, null, 2)
 }
 
 const OUTPUTS = 'fas-generate-outputs'
@@ -274,7 +310,7 @@ function record(p: Pending, outcome: RunRecord['outcome'], reason: string | null
   const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined
   const attempt: GenerationAttemptRecord = {
     runner: 'browser',
-    reason: endReason(outcome, reason, err),
+    reason: kokoroEndReason(outcome === 'generating' ? 'stopped' : outcome, reason, err),
     ...(outcome !== 'submitted' && reason && { error: reason.slice(0, 300) }),
     ...context(),
     background: p.background || document.visibilityState === 'hidden',
@@ -386,6 +422,8 @@ async function run(
   // A screen that turns off would put the computer to sleep
   const release = keepAwake()
   const work = getRunner(encoder, device)
+  startCapabilities = await capabilityReport(encoder, device)
+  console.info('generation: capabilities', startCapabilities)
   // The job in hand, recorded when it ends however it ends
   let pending: Pending | null = null
   const finish = (outcome: RunRecord['outcome'], reason: string | null, err?: unknown) => {
@@ -447,7 +485,7 @@ async function run(
           onSubmitted(appId)
         } else {
           if (pending?.job.id !== e.job.id) pending = claimed(appId, e.job)
-          finish(e.type, e.reason)
+          finish(e.type, e.reason, e.type === 'failed' ? e.error : undefined)
           set(e.type === 'skipped' ? { skipped: state.skipped + 1, current: null } : { current: null })
         }
       },
