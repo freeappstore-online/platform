@@ -3563,9 +3563,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-27T05:20:55.598Z",
-      "creatorGithub": "Thanekachalamjagan"
+      "creatorGithub": "Thanekachalamjagan",
+      "discoveryDeliveryPending": "183a5c69-893f-4ddd-a7e2-1b4c2c33890a"
     }
   ]
 }
