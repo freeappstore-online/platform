@@ -2,11 +2,9 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import type {
   GenerationAttemptRecord,
-  GenerationEndReason,
   GenerationReport,
   GenerationSubmissionStatus,
 } from '@freeappstore/sdk';
-import { GenerationError } from '@freeappstore/sdk';
 
 /**
  * This computer's Contribute history (#827): every job it tried, with what it measured and the
@@ -134,21 +132,4 @@ export function saveRecord(dir: string, item: HistoryItem, target: string): void
     `${JSON.stringify({ ...item, ...(kept && { meta: kept.meta }) }, null, 2)}\n`,
   );
   if (kept) writeFileSync(join(target, 'audio.m4a'), kept.audio);
-}
-
-/** The #813 reason for how a job ended on this computer. */
-export function endReason(
-  outcome: HistoryItem['outcome'],
-  reason: string | null,
-  err?: unknown,
-): GenerationEndReason {
-  if (outcome === 'submitted') return 'submitted';
-  if (err instanceof GenerationError)
-    return err.status === 403 ? 'lease_403' : err.status >= 500 ? 'server_5xx' : 'server_4xx';
-  if (err instanceof TypeError) return 'network';
-  const text = reason ?? '';
-  if (outcome === 'skipped')
-    return /exceed/.test(text) ? 'too_large' : /lease/.test(text) ? 'lease_cap' : 'unsupported';
-  if (outcome === 'stopped') return /lease/.test(text) ? 'lease_cap' : 'user_stop';
-  return /network|fetch/i.test(text) ? 'network' : 'other';
 }

@@ -642,6 +642,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
       <ContributeModel state={state} />
       <ContributeApps state={state} />
       <ContributeHistory state={state} />
+      <ContributeTroubleshooting />
     </Section>
   );
 }
@@ -905,6 +906,34 @@ function ContributeConditions({ when }: { when: ContributeWhen }) {
             onChange={(event) => set({ quietTo: minuteOf(event.target.value) })}
           />
         </div>
+      </div>
+    </section>
+  );
+}
+
+/** Copy diagnostics (#813): what this computer can run and the latest jobs' records, for a bug report. */
+function ContributeTroubleshooting() {
+  const [copied, setCopied] = useState(false);
+  return (
+    <section className={`${card} mb-6 p-5`} aria-label="Troubleshooting">
+      <h3 className="mt-0 mb-2 text-base font-bold">Troubleshooting</h3>
+      <p className="mt-0 mb-3 text-sm text-muted">
+        Copies what this computer can run, what Contribute is doing and the latest 50 jobs' records,
+        for a bug report. No text, audio or sign-in details.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          className={secondary}
+          onClick={async () => setCopied(await desktop.contribute.copyDiagnostics())}
+        >
+          Copy diagnostics
+        </button>
+        {copied && (
+          <span role="status" className="text-sm text-muted">
+            Copied.
+          </span>
+        )}
       </div>
     </section>
   );

@@ -1,4 +1,4 @@
-import { KokoroSkip } from '@freeappstore/sdk/generation-kokoro';
+import { KokoroError, KokoroSkip, kokoroEndReason } from '@freeappstore/sdk/generation-kokoro';
 import { describe, expect, it } from 'vitest';
 import { kokoroLanguage, kokoroProblem, NativeRunner, sentences, VOICES } from './kokoro.js';
 
@@ -168,5 +168,35 @@ describe('NativeRunner', () => {
     });
     await expect(going).rejects.toThrow('Paused');
     expect(events).toEqual(['start 24000', 'cancel']);
+  });
+
+  it('names the stage a job failed in, so the record says model_error or encode_error (#813)', async () => {
+    const failing = (say: boolean) =>
+      new NativeRunner({
+        say: async () => {
+          if (say) throw new Error('TTS process exited');
+          return { samples: new Float32Array(24_000), sampleRate: 24_000, loadMs: 0 };
+        },
+        encode: () => ({
+          write: () => {},
+          finish: async () => {
+            throw new Error('EncodingError');
+          },
+          cancel: () => {},
+        }),
+        bitrate: 32_000,
+        dispose: () => {},
+      });
+    const spoken = await failing(true)
+      .generate(job('Hi.', 'af_heart'))
+      .catch((e) => e);
+    expect(spoken).toBeInstanceOf(KokoroError);
+    expect(spoken).toMatchObject({ stage: 'synth', message: 'TTS process exited' });
+    expect(kokoroEndReason('failed', spoken.message, spoken)).toBe('model_error');
+    const encoded = await failing(false)
+      .generate(job('Hi.', 'af_heart'))
+      .catch((e) => e);
+    expect(encoded).toMatchObject({ stage: 'encode', message: 'EncodingError' });
+    expect(kokoroEndReason('failed', encoded.message, encoded)).toBe('encode_error');
   });
 });

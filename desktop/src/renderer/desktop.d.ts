@@ -110,6 +110,8 @@ declare global {
         saveRecord(appId: string, jobId: string, at: number): Promise<string | null>;
         /** This account's Good / Not good (and note) for an uploaded attempt (#831). */
         report(appId: string, jobId: string, good: boolean, note: string): Promise<unknown>;
+        /** Copies the capability report and the latest jobs' records to the clipboard (#813). */
+        copyDiagnostics(): Promise<boolean>;
       };
     };
   }

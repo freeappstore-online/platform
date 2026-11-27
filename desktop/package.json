@@ -20,7 +20,7 @@
     "dist:mac": "pnpm build && electron-builder --mac --publish never"
   },
   "dependencies": {
-    "@freeappstore/sdk": "^0.21.20",
+    "@freeappstore/sdk": "^0.21.22",
     "@modelcontextprotocol/sdk": "1.32.2",
     "electron-updater": "6.8.11",
     "sherpa-onnx-node": "2.0.3",

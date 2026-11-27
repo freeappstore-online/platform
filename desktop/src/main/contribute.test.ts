@@ -13,7 +13,6 @@ import {
 } from './device.js';
 import {
   clearHistory,
-  endReason,
   type HistoryItem,
   INTERRUPTED,
   keepAudio,
@@ -257,6 +256,42 @@ describe('Contribute', () => {
     expect(JSON.parse(String(init!.body))).toEqual({ good: false, note: 'mumbles' });
     expect(history[0]!.verdict!.report).toEqual(report);
     await expect(contribute.report('books', 'nope', true, '')).rejects.toThrow(/Nothing uploaded/);
+  });
+
+  it('copies diagnostics: the capability report and the latest jobs, without their text (#813)', () => {
+    const { contribute } = setup();
+    history = Array.from({ length: 60 }, (_, i) => ({
+      appId: 'books',
+      jobId: `j${i}`,
+      key: `k/${i}`,
+      at: 60 - i,
+      outcome: 'skipped' as const,
+      reason: 'unknown voice zz',
+      text: 'SECRET INPUT',
+      chars: 12,
+      record: { runner: 'desktop' as const, reason: 'unsupported' as const },
+      verdict: {
+        status: 'rejected' as const,
+        reason: null,
+        durationMs: null,
+        report: { good: false, note: 'SECRET NOTE', at: 1 },
+      },
+    }));
+    const copied = JSON.parse(contribute.diagnostics());
+    expect(copied.capabilities).toMatchObject({
+      runner: 'desktop',
+      appVersion: '0.1.2',
+      modelReady: true,
+      accelerator: 'cpu (sherpa-onnx)',
+    });
+    expect(copied.jobs).toHaveLength(50);
+    expect(copied.jobs[0]).toMatchObject({
+      jobId: 'j0',
+      reason: 'unknown voice zz',
+      record: { reason: 'unsupported' },
+      verdict: { reportedGood: false },
+    });
+    expect(JSON.stringify(copied)).not.toContain('SECRET');
   });
 
   it('says why it is not generating: paused, no model, no apps chosen, no AAC', async () => {
@@ -844,17 +879,5 @@ describe('history (#827)', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
-  });
-
-  it('maps how a job ended to the #813 reasons', () => {
-    expect(endReason('submitted', null)).toBe('submitted');
-    expect(endReason('skipped', 'audio exceeds maxBytes')).toBe('too_large');
-    expect(endReason('skipped', 'unknown voice zz')).toBe('unsupported');
-    expect(endReason('stopped', 'the lease ran out before it finished')).toBe('lease_cap');
-    expect(endReason('stopped', 'stopped before it finished')).toBe('user_stop');
-    expect(endReason('failed', 'Failed to fetch', new TypeError('Failed to fetch'))).toBe(
-      'network',
-    );
-    expect(endReason('failed', 'worker crashed')).toBe('other');
   });
 });

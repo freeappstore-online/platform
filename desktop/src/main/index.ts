@@ -809,6 +809,12 @@ ipcMain.handle(
     return filePath;
   },
 );
+/** Copy diagnostics (#813): the capability report and the latest jobs' records, to the clipboard. */
+ipcMain.handle('home:contribute-diagnostics', (event) => {
+  if (!fromHome(event)) return false;
+  clipboard.writeText(contribute.diagnostics());
+  return true;
+});
 ipcMain.handle(
   'home:contribute-report',
   (event, appId: unknown, jobId: unknown, good: unknown, note: unknown) => {

@@ -1,10 +1,12 @@
 import type { GenerationJob } from '@freeappstore/sdk';
 import {
   KOKORO_MODEL,
+  KokoroError,
   type KokoroProgress,
   type KokoroResult,
   type KokoroSegment,
   KokoroSkip,
+  type KokoroStage,
   type KokoroWork,
 } from '@freeappstore/sdk/generation-kokoro';
 
@@ -207,9 +209,12 @@ export class NativeRunner {
     let length = 0; // samples written
     let pause = 0; // seconds of silence before the next sentence
     let done = false;
+    /** Where a failure happened (#813): speaking, or encoding. */
+    let stage: KokoroStage = 'synth';
     try {
       for (const [n, [start, end, endsParagraph]] of parts.entries()) {
         let t = Date.now();
+        stage = 'synth';
         const speech = await unlessAborted(
           this.opts.say(text.slice(start, end), VOICES.indexOf(voice), speed, language === 'zh'),
           signal,
@@ -219,6 +224,7 @@ export class NativeRunner {
         timing.synthMs += sentenceMs;
         if (speech.samples.length) {
           t = Date.now();
+          stage = 'encode';
           if (!encoding) {
             rate = speech.sampleRate;
             encoding = this.opts.encode(rate);
@@ -255,6 +261,7 @@ export class NativeRunner {
           await unlessAborted(new Promise((resolve) => setTimeout(resolve, rest)), signal);
       }
       if (!encoding) throw new KokoroSkip(job, 'nothing to say in the text');
+      stage = 'encode';
       const t = Date.now();
       const short = Math.round(MIN_SECONDS * rate) - length;
       if (short > 0) encoding.write(new Float32Array(short));
@@ -267,6 +274,10 @@ export class NativeRunner {
       if (JSON.stringify(meta).length > META_BYTES)
         throw new KokoroSkip(job, 'sentence timings exceed 64 KB');
       return { file, meta, timing };
+    } catch (err) {
+      // A give-back, a stop or the lease's cap stays as it is; anything else failed in `stage`
+      if (signal?.aborted || err instanceof KokoroSkip || err instanceof KokoroError) throw err;
+      throw new KokoroError(err instanceof Error ? err.message : String(err), stage);
     } finally {
       if (!done) (encoding as Encoding | null)?.cancel();
     }

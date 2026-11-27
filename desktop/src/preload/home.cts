@@ -37,5 +37,6 @@ contextBridge.exposeInMainWorld('fasDesktop', {
       ipcRenderer.invoke('home:contribute-save-record', appId, jobId, at),
     report: (appId: string, jobId: string, good: boolean, note: string) =>
       ipcRenderer.invoke('home:contribute-report', appId, jobId, good, note),
+    copyDiagnostics: () => ipcRenderer.invoke('home:contribute-diagnostics'),
   },
 });

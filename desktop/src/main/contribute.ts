@@ -1,3 +1,5 @@
+import { statfsSync } from 'node:fs';
+import { arch, cpus, homedir, platform, totalmem } from 'node:os';
 import {
   Generation,
   type GenerationAttemptRecord,
@@ -12,6 +14,7 @@ import {
   type KokoroResult,
   type KokoroRunner,
   type KokoroRunnerOptions,
+  kokoroEndReason,
 } from '@freeappstore/sdk/generation-kokoro';
 import {
   type ContributeMode,
@@ -25,7 +28,7 @@ import {
   usage,
 } from './conditions.js';
 import { API_ORIGIN, clientHeaders } from './device.js';
-import { endReason, type HistoryItem, TEXT_CHARS } from './history.js';
+import { type HistoryItem, TEXT_CHARS } from './history.js';
 import { ENGINE, kokoroProblem, LANGUAGES, type NativeRunner } from './kokoro.js';
 import { type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
 
@@ -92,6 +95,9 @@ export interface ContributeHost {
   /** Keep a job's audio and segments for playback. */
   keepAudio(appId: string, jobId: string, result: KokoroResult): Promise<void>;
 }
+
+/** How many of the latest jobs Copy diagnostics includes (#813). */
+export const DIAGNOSTIC_JOBS = 50;
 
 /** The engine Contribute shows (#837). */
 export const MODEL_INFO = { engine: ENGINE, languages: Object.values(LANGUAGES).join(', ') };
@@ -197,6 +203,10 @@ export class Contribute {
   private loading = false;
   /** Bumped by `reset` (sign-out, #848): work from before it writes nothing. */
   private epoch = 0;
+  /** The hidden window's encoder once it has loaded, for the capability report. */
+  private loadedEngine: Engine | null = null;
+  /** The capability report taken when the last run started (#813). */
+  private startCapabilities: Record<string, unknown> | null = null;
 
   constructor(
     private readonly host: ContributeHost,
@@ -328,6 +338,7 @@ export class Contribute {
 
   private async engine(): Promise<Engine> {
     const engine = await this.host.engine();
+    this.loadedEngine = engine;
     this.set({
       model: {
         ...MODEL_INFO,
@@ -338,6 +349,77 @@ export class Contribute {
       },
     });
     return engine;
+  }
+
+  /**
+   * What this computer generates with (#813), taken at the start of each run and for Copy
+   * diagnostics: the app version, OS and CPU, memory, the model, the accelerator (sherpa-onnx runs
+   * Kokoro on the CPU), the hidden window's AAC encoder, free storage, and power, heat and use now.
+   */
+  capabilities(): Record<string, unknown> {
+    const { onBattery, battery, thermal, speedLimit, inUse } = this.host.machine();
+    const encoder = this.loadedEngine?.encoder;
+    let freeStorageMb: number | null = null;
+    try {
+      const fs = statfsSync(homedir());
+      freeStorageMb = Math.round((fs.bavail * fs.bsize) / 1e6);
+    } catch (err) {
+      console.warn('contribute: free storage unknown', err); // the report says null
+    }
+    return {
+      runner: 'desktop',
+      ...this.host.context(),
+      platform: `${platform()} ${arch()}`,
+      cores: cpus().length,
+      memoryGb: Math.round(totalmem() / 1e9),
+      model: 'kokoro v1.0',
+      engine: ENGINE,
+      modelReady: this.host.modelReady(),
+      accelerator: 'cpu (sherpa-onnx)',
+      aacEncoder: encoder
+        ? { codec: encoder.codec, sampleRate: encoder.sampleRate, bitrate: encoder.bitrate ?? null }
+        : null,
+      freeStorageMb,
+      onBattery,
+      battery,
+      thermal,
+      speedLimit,
+      inUse,
+    };
+  }
+
+  /**
+   * Copy diagnostics (#813), for a bug report: the capability report now and at the last run's
+   * start, what Contribute is doing and why, and the DIAGNOSTIC_JOBS latest jobs with their reasons
+   * and attempt records. Never the input text, the audio, report notes or any credential.
+   */
+  diagnostics(): string {
+    const jobs = this.host
+      .history()
+      .slice(0, DIAGNOSTIC_JOBS)
+      .map(({ text: _text, verdict, ...item }) => ({
+        ...item,
+        at: new Date(item.at).toISOString(),
+        verdict: verdict && {
+          submissionId: verdict.submissionId,
+          status: verdict.status,
+          reason: verdict.reason,
+          durationMs: verdict.durationMs,
+          reportedGood: verdict.report?.good ?? null,
+        },
+      }));
+    const { status, message, runNow, submitted, skipped, failed } = this.state;
+    return JSON.stringify(
+      {
+        at: new Date().toISOString(),
+        capabilities: this.capabilities(),
+        capabilitiesAtLastStart: this.startCapabilities,
+        state: { status, message, runNow, submitted, skipped, failed },
+        jobs,
+      },
+      null,
+      2,
+    );
   }
 
   /** One look for work and, if there is some, one run. */
@@ -401,7 +483,10 @@ export class Contribute {
     let changed = false;
     for (const { appId, generation } of apps) {
       if (!wanted.has(appId)) continue;
-      const mine = await generation.mySubmissions().catch(() => []);
+      const mine = await generation.mySubmissions().catch((err) => {
+        console.warn(`contribute: verdicts for ${appId} not refreshed`, err); // asked again after the next run
+        return [];
+      });
       for (const item of items) {
         const s = mine.find((m) => m.jobId === item.jobId);
         if (item.appId !== appId || !s) continue;
@@ -524,7 +609,8 @@ export class Contribute {
     const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined;
     const record: GenerationAttemptRecord = {
       runner: 'desktop',
-      reason: endAs ?? endReason(outcome, reason, err),
+      reason:
+        endAs ?? kokoroEndReason(outcome === 'in_progress' ? 'stopped' : outcome, reason, err),
       ...(outcome !== 'submitted' && reason && { error: reason.slice(0, 300) }),
       ...this.host.context(),
       background: a.background || !end.foreground,
@@ -562,6 +648,8 @@ export class Contribute {
     this.controller = controller;
     const runner = this.host.createRunner(engine.encoder, (ms) => this.rest(ms));
     const epoch = this.epoch;
+    this.startCapabilities = this.capabilities();
+    console.info('contribute: capabilities', JSON.stringify(this.startCapabilities));
     this.set({ status: 'running', message: null, current: null });
     let attempt: Attempt | null = null;
     /** A condition failed with the job in hand nearly done: it finishes, nothing more is claimed. */
@@ -650,7 +738,7 @@ export class Contribute {
         this.set({ submitted: this.state.submitted + 1, current: null });
       } else if (e.type === 'skipped' || e.type === 'failed') {
         if ((attempt as Attempt | null)?.job.id !== e.job.id) start(appId, e.job);
-        end(e.type, e.reason);
+        end(e.type, e.reason, e.type === 'failed' ? e.error : undefined);
         if (e.type === 'skipped') this.set({ skipped: this.state.skipped + 1, current: null });
         else this.set({ failed: this.state.failed + 1, current: null });
       }
