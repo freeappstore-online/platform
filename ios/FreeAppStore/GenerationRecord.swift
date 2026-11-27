@@ -318,8 +318,7 @@ enum Diagnostics {
     /// power, thermal state and network now.
     static func capabilities(kokoro: KokoroModel, cpu: ContributePrefs.Cpu, now: DeviceNow) -> [String: Any] {
         let cores = ProcessInfo.processInfo.activeProcessorCount
-        let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
-            .volumeAvailableCapacityForImportantUsage
+        let free = KokoroModel.freeBytes()
         var out: [String: Any] = [
             "runner": "ios", "appVersion": DeviceProbes.appVersion, "os": DeviceProbes.os, "device": DeviceProbes.device,
             "model": "\(KokoroModel.id.model) \(KokoroModel.id.version)", "modelInstalled": kokoro.installed,

@@ -1157,6 +1157,21 @@ final class ContributeTests: XCTestCase {
         XCTAssertFalse(model.installed)
     }
 
+    func testModelInstallWaitsForFreeStorage() async throws {
+        let source = try archive([("kokoro-multi-lang-v1_0/model.onnx", "weights")])
+        let model = KokoroModel(dir: dir.appendingPathComponent("kokoro"))
+        do {
+            _ = try await model.install(source: source, sha256: try KokoroModel.sha256(of: source), free: KokoroModel.spaceNeeded - 1)
+            XCTFail("too little free storage must refuse the download")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Not enough free storage for the voice model. It needs 1751 MB free, so 1 GB is left after it installs.")
+        }
+        XCTAssertFalse(model.installed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("kokoro").path))
+        let installed = try await model.install(source: source, sha256: try KokoroModel.sha256(of: source), free: KokoroModel.spaceNeeded)
+        XCTAssertTrue(installed)
+    }
+
     func testModelInstallCanBeStopped() async throws {
         let source = try archive([("kokoro-multi-lang-v1_0/model.onnx", "weights")])
         let model = KokoroModel(dir: dir.appendingPathComponent("kokoro"))

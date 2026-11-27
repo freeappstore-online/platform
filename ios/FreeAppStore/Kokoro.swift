@@ -11,6 +11,13 @@ final class KokoroModel: @unchecked Sendable {
     static let sha256 = "60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4"
     static let downloadBytes: Int64 = 349_886_476
     static let installedBytes: Int64 = 401_239_297
+    /// Free storage a download waits for (#792): the archive and the unpacked model side by side, and 1 GB left over.
+    static let spaceNeeded: Int64 = downloadBytes + installedBytes + 1_000_000_000
+    /// Free storage for important use on this phone, nil when iOS does not say.
+    static func freeBytes() -> Int64? {
+        (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage
+    }
     private static let rootName = "kokoro-multi-lang-v1_0"
     /// Speaker ids of this model's `voices.bin`, from the sherpa-onnx model docs.
     static let voices = [
@@ -67,9 +74,13 @@ final class KokoroModel: @unchecked Sendable {
 
     /// Downloads, verifies and unpacks. `progress` gets bytes downloaded. Returns false when `keepGoing` stopped it.
     /// `cellular`: whether the download may use an expensive or constrained network (a tap on Download, not background work).
-    func install(source: URL = KokoroModel.url, sha256: String = KokoroModel.sha256, cellular: Bool = true,
+    /// Refused, with nothing downloaded, while `free` storage is under `spaceNeeded`.
+    func install(source: URL = KokoroModel.url, sha256: String = KokoroModel.sha256, cellular: Bool = true, free: Int64? = KokoroModel.freeBytes(),
                  progress: @escaping (Int64) -> Void = { _ in }, keepGoing: @escaping () -> Bool = { true }) async throws -> Bool {
         if installed { return true }
+        if let free, free < Self.spaceNeeded {
+            throw CompanionError("Not enough free storage for the voice model. It needs \(Self.spaceNeeded / 1_000_000) MB free, so 1 GB is left after it installs.")
+        }
         let files = FileManager.default
         try? files.removeItem(at: dir)
         try files.createDirectory(at: dir, withIntermediateDirectories: true)
