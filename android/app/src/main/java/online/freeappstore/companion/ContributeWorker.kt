@@ -52,8 +52,9 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val graph = applicationContext as FasApplication
         val local = graph.local
         if (inputData.getBoolean(TRIGGER, false)) {
-            Log.i(TAG, "Plugged in: queueing a run")
-            queueRun(applicationContext, ExistingWorkPolicy.KEEP)
+            // Android's "charging" and EXTRA_PLUGGED can disagree for a moment; never a loop of trigger and run over it.
+            if (plugged() == 0) { Log.i(TAG, "Charging but not plugged in: trigger again in an hour"); arm(applicationContext, ExistingWorkPolicy.REPLACE, delayed = true) }
+            else { Log.i(TAG, "Plugged in: queueing a run"); queueRun(applicationContext, ExistingWorkPolicy.KEEP) }
             return@withContext Result.success()
         }
         if (graph.repository.token() == null || !lock.tryLock()) {
