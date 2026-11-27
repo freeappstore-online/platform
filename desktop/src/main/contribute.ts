@@ -1,4 +1,3 @@
-import { statfsSync } from 'node:fs';
 import { arch, cpus, homedir, platform, totalmem } from 'node:os';
 import {
   Generation,
@@ -30,7 +29,7 @@ import {
 import { API_ORIGIN, clientHeaders } from './device.js';
 import { type HistoryItem, TEXT_CHARS } from './history.js';
 import { ENGINE, kokoroProblem, LANGUAGES, type NativeRunner } from './kokoro.js';
-import { type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
+import { freeBytes, type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
 
 /**
  * Contribute on the desktop (#826): this computer generates community jobs (narration) for the
@@ -359,13 +358,8 @@ export class Contribute {
   capabilities(): Record<string, unknown> {
     const { onBattery, battery, thermal, speedLimit, inUse } = this.host.machine();
     const encoder = this.loadedEngine?.encoder;
-    let freeStorageMb: number | null = null;
-    try {
-      const fs = statfsSync(homedir());
-      freeStorageMb = Math.round((fs.bavail * fs.bsize) / 1e6);
-    } catch (err) {
-      console.warn('contribute: free storage unknown', err); // the report says null
-    }
+    const free = freeBytes(homedir());
+    const freeStorageMb = free === null ? null : Math.round(free / 1e6); // the report says null when unknown
     return {
       runner: 'desktop',
       ...this.host.context(),

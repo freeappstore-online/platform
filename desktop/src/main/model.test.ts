@@ -6,7 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { installModel, MODEL_ROOT, modelInstalled } from './model.js';
+import { installModel, MODEL_ROOT, MODEL_SPACE_NEEDED, modelInstalled } from './model.js';
 
 let tmp: string;
 let server: Server;
@@ -40,6 +40,16 @@ describe('installModel', () => {
     expect(readFileSync(join(dir, MODEL_ROOT, 'tokens.txt'), 'utf8')).toBe('a 1\n');
     expect(existsSync(join(dir, 'download.part'))).toBe(false);
     expect([...stages]).toEqual(['download', 'unpack']);
+  });
+
+  it('downloads nothing without room for the package and 1 GB to spare (#792)', async () => {
+    const dir = join(tmp, 'full');
+    await expect(installModel(dir, () => {}, url, sha256, MODEL_SPACE_NEEDED - 1)).rejects.toThrow(
+      'It needs 1751 MB free, so 1 GB is left after it installs.',
+    );
+    expect(existsSync(dir)).toBe(false);
+    await installModel(dir, () => {}, url, sha256, MODEL_SPACE_NEEDED);
+    expect(modelInstalled(dir)).toBe(true);
   });
 
   it('unpacks nothing from a download that does not match its checksum', async () => {

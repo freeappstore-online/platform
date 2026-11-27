@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, statfsSync } from 'node:fs';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar';
@@ -17,12 +17,25 @@ export const MODEL_URL =
 export const MODEL_SHA256 = '60703707bc05ccd48d60e1eb723f38b07d6e474795a0b6a588d7220400e0f7a4';
 export const MODEL_DOWNLOAD_BYTES = 349_886_476;
 export const MODEL_INSTALLED_BYTES = 401_239_297;
+/** Free storage a download waits for (#792): the archive and the unpacked model side by side, and 1 GB left over. */
+export const MODEL_SPACE_NEEDED = MODEL_DOWNLOAD_BYTES + MODEL_INSTALLED_BYTES + 1_000_000_000;
 /** The folder the archive unpacks into, under the model's directory. */
 export const MODEL_ROOT = 'kokoro-multi-lang-v1_0';
 /** Mandarin text normalisers in the package: dates, phone numbers, then other numbers read as Chinese. */
 export const MANDARIN_RULES = ['date-zh.fst', 'phone-zh.fst', 'number-zh.fst'];
 
 const MARKER = 'installed';
+
+/** Free bytes on the disk holding `path` (which must exist), or null when the system won't say. */
+export function freeBytes(path: string): number | null {
+  try {
+    const fs = statfsSync(path);
+    return fs.bavail * fs.bsize;
+  } catch (err) {
+    console.warn('model: free storage unknown', err);
+    return null;
+  }
+}
 
 export const modelInstalled = (dir: string) => existsSync(join(dir, MARKER));
 
@@ -45,15 +58,21 @@ function counter(total: number, stage: 'download' | 'unpack', report: InstallPro
 /**
  * Downloads, verifies and unpacks the model into `dir` unless it is there. Only regular files and
  * directories are unpacked, each inside `dir` (node-tar refuses paths that leave it). Anything
- * that fails leaves nothing behind.
+ * that fails leaves nothing behind. Refused, with nothing downloaded, while `free` storage (of
+ * `dir`'s parent) is under MODEL_SPACE_NEEDED.
  */
 export async function installModel(
   dir: string,
   progress: InstallProgress,
   source = MODEL_URL,
   sha256 = MODEL_SHA256,
+  free = freeBytes(dirname(dir)),
 ): Promise<void> {
   if (modelInstalled(dir)) return;
+  if (free !== null && free < MODEL_SPACE_NEEDED)
+    throw new Error(
+      `Not enough free storage for the voice model. It needs ${Math.floor(MODEL_SPACE_NEEDED / 1e6)} MB free, so 1 GB is left after it installs.`,
+    );
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
   const archive = join(dir, 'download.part');
