@@ -447,7 +447,8 @@ await fas.generation.withdraw(jobId);           // the job reopens
 await fas.generation.blockContributor(userId);  // withdraws everything they contributed
 const sets = await fas.generation.listSets();   // [{ ...set, createdAt, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }]
 const { jobs, nextCursor } = await fas.generation.listJobs(set.id, { status: 'accepted', cursor, limit: 50 });
-// jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact: { url, durationMs, bytes, contributor, acceptedAt } | null, submissions }]
+// jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact: { url, submissionId, durationMs, bytes, contributor, acceptedAt, review } | null, submissions: [{ ..., report, record }], attempts }]
+await fas.generation.review(jobId, artifact.submissionId, 'needs_changes', 'mumbles in the second sentence'); // or 'reviewed'; the owner's console session only; 409 once the artifact is another version
 const job = await fas.generation.getJob(set.id, jobId); // one job as listed, plus its whole input: { ..., input: { text } }
 
 // Contributor: claim → generate → submit until there is no work
@@ -462,6 +463,7 @@ const { submitted, stopped } = await fas.generation.contribute({
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
 }); // stopped: 'no-work' | 'aborted' | 'lease-expired' | 'limit'
 const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, durationMs, report, input: { text }, artifact: { url, metaUrl } | null }]
+await fas.generation.report(submissionId, false, 'mumbles'); // the caller's own upload: Good (true) / Not good (false), optional note of at most 500 characters
 await fas.generation.recordAttempts([{ jobId, runner: 'browser', reason: 'submitted', wallMs, synthMs }]); // attempt records (#827): numbers only, one per lease; owners see them in listJobs
 const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, language, open }]
 
