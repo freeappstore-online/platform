@@ -10,6 +10,12 @@ import { join } from 'node:path';
 export const API_ORIGIN = 'https://api.freeappstore.online';
 export const API = `${API_ORIGIN}/v1`;
 const FILE = 'device-token';
+
+/** What this app is (#833): sent with pairing and every call with the device credential. */
+export const clientHeaders = (version: string) => ({
+  'X-FAS-App-Version': version,
+  'X-FAS-Client': 'desktop',
+});
 /** How often a pairing in progress asks whether the user approved it. */
 const POLL_MS = 2000;
 
@@ -38,10 +44,15 @@ const wait = (ms: number, signal?: AbortSignal) =>
     });
   });
 
-async function post(url: string, body: unknown, signal?: AbortSignal) {
+async function post(
+  url: string,
+  body: unknown,
+  headers: Record<string, string>,
+  signal?: AbortSignal,
+) {
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
     signal,
   });
@@ -58,31 +69,67 @@ async function post(url: string, body: unknown, signal?: AbortSignal) {
 export async function pairDevice(opts: {
   label: string;
   open: (url: string) => void;
+  headers: Record<string, string>;
   signal?: AbortSignal;
   api?: string;
   pollMs?: number;
 }): Promise<string> {
-  const { label, open, signal, api = API, pollMs = POLL_MS } = opts;
+  const { label, open, headers, signal, api = API, pollMs = POLL_MS } = opts;
   const verifier = randomBytes(32).toString('hex');
   const challenge = createHash('sha256').update(verifier).digest('hex');
-  const { json: started } = await post(`${api}/native/auth/start`, { challenge, label }, signal);
+  const { json: started } = await post(
+    `${api}/native/auth/start`,
+    { challenge, label },
+    headers,
+    signal,
+  );
   const id = String(started.id);
   open(String(started.authorizationUrl));
   const expiresAt = Date.now() + Number(started.expiresIn) * 1000;
   while (Date.now() < expiresAt) {
     await wait(pollMs, signal);
-    const { status, json } = await post(`${api}/native/auth/complete`, { id, verifier }, signal);
+    const { status, json } = await post(
+      `${api}/native/auth/complete`,
+      { id, verifier },
+      headers,
+      signal,
+    );
     if (status === 200 && typeof json.token === 'string') return json.token;
   }
   throw new Error('The connection expired before it was approved. Try again.');
 }
 
 /** Revoke the device credential on the server; the local copy is deleted by the caller either way. */
-export async function unpairDevice(token: string, api = API): Promise<void> {
+export async function unpairDevice(
+  token: string,
+  headers: Record<string, string>,
+  api = API,
+): Promise<void> {
   await fetch(`${api}/native/device`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...headers, Authorization: `Bearer ${token}` },
   }).catch(() => {});
+}
+
+/** A code another phone scans to join this account (#845): 5 minutes, single use. */
+export interface PairCode {
+  code: string;
+  url: string;
+  expiresAt: number;
+}
+
+export async function createPairCode(
+  token: string,
+  headers: Record<string, string>,
+  api = API,
+): Promise<PairCode> {
+  const response = await fetch(`${api}/native/pair-codes`, {
+    method: 'POST',
+    headers: { ...headers, Authorization: `Bearer ${token}` },
+  });
+  const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) throw new Error(String(json.error ?? `HTTP ${response.status}`));
+  return json as unknown as PairCode;
 }
 
 /** The signed-in account and this computer's connection, from `GET /native/me` (#829). */
@@ -102,9 +149,13 @@ export interface Profile {
 }
 
 /** The account behind `token`, or null when the credential was refused (expired or revoked). */
-export async function fetchProfile(token: string, api = API): Promise<Profile | null> {
+export async function fetchProfile(
+  token: string,
+  headers: Record<string, string>,
+  api = API,
+): Promise<Profile | null> {
   const response = await fetch(`${api}/native/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { ...headers, Authorization: `Bearer ${token}` },
   });
   if (response.status === 401) return null;
   if (!response.ok) throw new Error(`HTTP ${response.status}`);

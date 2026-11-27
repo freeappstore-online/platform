@@ -42,7 +42,12 @@ Account page shows the avatar, name, `@login` (or the sign-in provider), user id
 of apps for creators with a console link, and this computer's label, connection date and expiry, all from
 `GET /v1/native/me` with the device credential (the profile is held in memory only; the avatar is fetched by the main
 process and handed over as a `data:` URL, since the page's CSP allows no remote images). **Sign out** revokes the device
-credential, like Contribute's **Disconnect**; **Delete account** opens the console's deletion flow.
+credential, like Contribute's **Disconnect**; **Delete account** opens the console's deletion flow. The page also
+shows this build's version, and **Add a phone** (#845) shows a 5-minute, single-use code from
+`POST /v1/native/pair-codes` (made with the device credential) as a QR code (`uqr`, drawn locally) and as text, for the
+phone app to scan ([docs/native-companion.md](../docs/native-companion.md#qr-pairing-845)); the console's Settings >
+Devices lists every device with its version and Revoke. Pairing and every call with the device credential send
+`X-FAS-App-Version` (the version label) and `X-FAS-Client: desktop` (#833).
 
 Development environment variables (dev builds, i.e. not packaged):
 
@@ -112,6 +117,12 @@ Mandarin), and keeps going while the window is closed, as long as FreeAppStore r
   credential, kept in userData as `device-token` (mode `0600`, never logged; 90 days). **Disconnect** revokes it on the
   server and deletes it. A credential the server refuses (expired, revoked) is dropped and the page asks to connect
   again. Submissions from the desktop are `device_kind` `native`.
+- **One account's** (#848): the history, kept audio and opt-ins belong to the account recorded with them
+  (`contributeAccount` in `settings.json`). **Disconnect** / **Sign out** deletes `contribute-history.json`,
+  `contribute-audio/` and the opt-ins, as the phones' Disconnect does. A credential the server refused keeps them, hidden;
+  after the next connect, `/native/me` says whose account it is: the same account gets them back, another one has them
+  deleted first. Until that check nothing is shown and nothing is claimed. A job, upload or verdict refresh still running
+  at sign-out writes nothing afterwards. The downloaded model stays (it is not an opt-in) until **Delete model**.
 - **Opt in** per app from discovery (`GET /v1/generation/open`; apps whose sets this engine can't do are listed
   with why: `kokoroProblem` in `src/main/kokoro.ts`), and **Download the model** after seeing its size: the phones'
   `kokoro-multi-lang-v1_0.tar.bz2` (350 MB) from sherpa-onnx's GitHub release, checked against its pinned SHA-256

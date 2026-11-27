@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('fasDesktop', {
   update: (action: 'check' | 'apply') => ipcRenderer.invoke('home:update', action),
   setAutoUpdate: (on: boolean) => ipcRenderer.invoke('home:set-auto-update', on),
   releaseNotes: (version: string) => ipcRenderer.invoke('home:release-notes', version),
+  pairCode: () => ipcRenderer.invoke('home:pair-code'),
   contribute: {
     connect: () => ipcRenderer.invoke('home:contribute-connect'),
     cancel: () => ipcRenderer.invoke('home:contribute-cancel'),

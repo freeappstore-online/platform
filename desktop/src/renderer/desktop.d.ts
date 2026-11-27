@@ -1,6 +1,6 @@
 // The API the home window's preload (src/preload/home.cts) exposes.
 import type { ContributeState } from '../main/contribute.js';
-import type { Profile } from '../main/device.js';
+import type { PairCode, Profile } from '../main/device.js';
 import type { HistoryItem } from '../main/history.js';
 import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
@@ -82,6 +82,8 @@ declare global {
       releaseNotes(
         version: string,
       ): Promise<{ version: string; body: string; published: string | null } | null>;
+      /** A 5-minute, single-use code for a phone to scan and join this account (#845). */
+      pairCode(): Promise<PairCode | null>;
       contribute: {
         connect(): Promise<void>;
         cancel(): Promise<void>;

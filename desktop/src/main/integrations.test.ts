@@ -263,6 +263,7 @@ describe('settings', () => {
   const contribute = {
     contributeApps: [],
     contributePaused: false,
+    contributeAccount: null,
     autoUpdate: true,
     recentApps: [],
     favoriteApps: [],
@@ -277,6 +278,7 @@ describe('settings', () => {
       openAtLogin: false,
       contributeApps: ['books'],
       contributePaused: true,
+      contributeAccount: 'gh:1',
       autoUpdate: false,
       recentApps: ['notes', 'books'],
       favoriteApps: ['books'],

@@ -8,6 +8,8 @@ import {
   ThemeToggle,
 } from '@freeappstore/sdk/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { encode } from 'uqr';
+import type { PairCode } from '../main/device.js';
 import type {
   ClientId,
   ClientStatus,
@@ -1307,11 +1309,13 @@ function Account({ state }: { state: DesktopState }) {
         <section className={`${card} p-5`} aria-label="This computer">
           <dl className="m-0 divide-y divide-line">
             <Row label="This computer" value={device.label} />
+            <Row label="Version" value={state.version} />
             <Row label="Connected" value={day(device.createdAt)} />
             <Row label="Connection expires" value={day(device.expiresAt)} />
           </dl>
         </section>
       </div>
+      <AddPhone />
       <div className="mt-6 flex flex-wrap gap-6 text-sm">
         <a href={CONSOLE_URL} target="_blank" rel="noreferrer" className={link}>
           Manage account
@@ -1337,6 +1341,102 @@ function Account({ state }: { state: DesktopState }) {
         }}
       />
     </Section>
+  );
+}
+
+/** `text` as a QR code, dark on white whatever the theme, so every camera reads it. */
+function QrCode({ text }: { text: string }) {
+  const { size, data } = encode(text, { border: 2 });
+  const path = data
+    .flatMap((row, y) => row.map((dark, x) => (dark ? `M${x} ${y}h1v1h-1z` : '')))
+    .join('');
+  return (
+    <svg
+      viewBox={`0 0 ${size} ${size}`}
+      shapeRendering="crispEdges"
+      role="img"
+      aria-label="Pairing QR code"
+      className="h-48 w-48 shrink-0 rounded-control"
+    >
+      <rect width={size} height={size} className="fill-white" />
+      <path d={path} className="fill-black" />
+    </svg>
+  );
+}
+
+/**
+ * Add a phone (#845): a 5-minute, single-use code from the server, as a QR for the phone app to
+ * scan and as text to type (docs/native-companion.md). The console lists the devices.
+ */
+function AddPhone() {
+  const [pair, setPair] = useState<PairCode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!pair) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [pair]);
+  const create = async () => {
+    setError(null);
+    try {
+      setPair(await desktop.pairCode());
+      setNow(Date.now());
+    } catch (err) {
+      setError(
+        (err as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
+      );
+    }
+  };
+  const left = pair ? Math.max(0, Math.ceil((pair.expiresAt - now) / 1000)) : 0;
+  return (
+    <section className={`${card} mt-6 p-5`} aria-label="Add a phone">
+      <h3 className="mt-0 mb-2 text-base font-bold">Add a phone</h3>
+      {!pair ? (
+        <>
+          <p className="mt-0 mb-4 text-sm text-muted">
+            Connect the FreeAppStore phone app to this account by scanning a code, without signing
+            in on the phone.
+          </p>
+          <button type="button" className={secondary} onClick={create}>
+            Show a code
+          </button>
+        </>
+      ) : (
+        <div className="flex flex-wrap items-center gap-5">
+          {left > 0 && <QrCode text={pair.url} />}
+          <div className="min-w-0">
+            <p className="mt-0 mb-2 text-sm">Scan with the FreeAppStore app, or type this code:</p>
+            <p data-testid="pair-code" className="mt-0 mb-2 font-code text-lg select-all">
+              {pair.code}
+            </p>
+            <p className="mt-0 mb-4 text-xs text-muted">
+              {left > 0
+                ? `Works once, for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} more. See your devices in the console.`
+                : 'This code expired.'}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {left === 0 && (
+                <button type="button" className={secondary} onClick={create}>
+                  New code
+                </button>
+              )}
+              <button type="button" className={secondary} onClick={() => setPair(null)}>
+                {left > 0 ? 'Cancel' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 mb-0 rounded-control bg-danger-soft text-danger p-3 text-sm"
+        >
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

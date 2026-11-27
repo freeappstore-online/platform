@@ -12,7 +12,7 @@ import {
   type KokoroRunner,
   type KokoroRunnerOptions,
 } from '@freeappstore/sdk/generation-kokoro';
-import { API_ORIGIN } from './device.js';
+import { API_ORIGIN, clientHeaders } from './device.js';
 import { endReason, type HistoryItem, TEXT_CHARS } from './history.js';
 import { ENGINE, kokoroProblem, LANGUAGES, type NativeRunner } from './kokoro.js';
 import { type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
@@ -83,6 +83,8 @@ export interface Reading {
 
 /** The job in hand and what has been measured so far. */
 interface Attempt {
+  /** The account it ran for (`Contribute.reset`). */
+  epoch: number;
   appId: string;
   generation: Generation;
   job: GenerationJob;
@@ -164,6 +166,8 @@ export class Contribute {
   private wakeUp: () => void = () => {};
   private looping = false;
   private loading = false;
+  /** Bumped by `reset` (sign-out, #848): work from before it writes nothing. */
+  private epoch = 0;
 
   constructor(
     private readonly host: ContributeHost,
@@ -186,6 +190,25 @@ export class Contribute {
   /** Stop the loop for good (quit, disconnect). */
   stop(): void {
     this.controller?.abort(new Error('Stopped'));
+  }
+
+  /**
+   * Sign-out or another account (#848): stop, forget what this account's run showed, and drop
+   * whatever the job in hand, an upload or a verdict refresh still in flight would write later.
+   */
+  reset(): void {
+    this.epoch++;
+    this.stop();
+    this.set({
+      status: 'idle',
+      message: null,
+      apps: null,
+      current: null,
+      submitted: 0,
+      skipped: 0,
+      failed: 0,
+      historyVersion: this.state.historyVersion + 1,
+    });
   }
 
   private async loop() {
@@ -214,7 +237,10 @@ export class Contribute {
 
   private async fetchApps(token: string): Promise<GenerationOpenApp[]> {
     const response = await fetch(`${this.origin}/v1/generation/open`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        ...clientHeaders(this.host.context().appVersion ?? 'unknown'),
+        Authorization: `Bearer ${token}`,
+      },
     });
     if (response.status === 401) throw new Error('Not signed in.');
     if (!response.ok) throw new Error(`Looking for work failed (HTTP ${response.status}).`);
@@ -287,12 +313,13 @@ export class Contribute {
     // Paused or disconnected while looking for work: there was no run to stop yet
     if (this.host.token() !== token) return;
     if (this.host.paused()) return this.set({ status: 'paused', message: null, current: null });
+    const epoch = this.epoch;
     await this.run(engine, chosen);
-    await this.verdicts(apps);
+    await this.verdicts(apps, epoch);
   }
 
   /** Copy the server's verdicts on this account's submissions into the history. */
-  private async verdicts(apps: { appId: string; generation: Generation }[]) {
+  private async verdicts(apps: { appId: string; generation: Generation }[], epoch: number) {
     const items = this.host.history();
     const wanted = new Set(items.filter((i) => i.outcome === 'submitted').map((i) => i.appId));
     let changed = false;
@@ -312,7 +339,7 @@ export class Contribute {
         changed = true;
       }
     }
-    if (changed) this.saveHistory(items);
+    if (changed) this.saveHistory(items, epoch);
   }
 
   /**
@@ -326,6 +353,7 @@ export class Contribute {
     note: string,
   ): Promise<GenerationReport> {
     const token = this.host.token();
+    const epoch = this.epoch;
     const items = this.host.history();
     const item = items.find((i) => i.appId === appId && i.jobId === jobId);
     const submissionId = item?.verdict?.submissionId;
@@ -334,11 +362,13 @@ export class Contribute {
     const generation = new Generation(appId, this.origin, { token, handleUnauthorized: () => {} });
     const report = await generation.report(submissionId, good, note || undefined);
     item.verdict.report = report;
-    this.saveHistory(items);
+    this.saveHistory(items, epoch);
     return report;
   }
 
-  private saveHistory(items: HistoryItem[]) {
+  /** Writes nothing for an account signed out since `epoch` (#848). */
+  private saveHistory(items: HistoryItem[], epoch: number) {
+    if (epoch !== this.epoch) return;
     this.host.setHistory(items);
     this.set({ historyVersion: this.state.historyVersion + 1 });
   }
@@ -385,7 +415,7 @@ export class Contribute {
       ...this.host.context(),
       startedAt: a.at,
     };
-    this.saveHistory([this.item(a, 'in_progress', null, record), ...this.host.history()]);
+    this.saveHistory([this.item(a, 'in_progress', null, record), ...this.host.history()], a.epoch);
     this.set({
       current: {
         appId: a.appId,
@@ -438,10 +468,13 @@ export class Contribute {
     };
     const { job } = a;
     // In place of its In progress item (#838), if it got one
-    this.saveHistory([
-      this.item(a, outcome, reason, record),
-      ...this.host.history().filter((i) => !this.same(i, a)),
-    ]);
+    this.saveHistory(
+      [
+        this.item(a, outcome, reason, record),
+        ...this.host.history().filter((i) => !this.same(i, a)),
+      ],
+      a.epoch,
+    );
     a.generation
       .recordAttempts([{ jobId: job.id, ...record }])
       .catch((e) => console.warn('contribute: attempt record not sent', e));
@@ -451,6 +484,7 @@ export class Contribute {
     const controller = new AbortController();
     this.controller = controller;
     const runner = this.host.createRunner(engine.encoder!);
+    const epoch = this.epoch;
     this.set({ status: 'running', message: null, current: null });
     let attempt: Attempt | null = null;
     const sample = () => {
@@ -464,6 +498,7 @@ export class Contribute {
     const start = (appId: string, job: GenerationJob) => {
       const reading = this.host.probe();
       attempt = {
+        epoch,
         appId,
         generation: apps().find((a) => a.appId === appId)!.generation,
         job,
@@ -480,6 +515,8 @@ export class Contribute {
       attempt = null;
     };
     const onEvent = (e: KokoroEvent, appId: string) => {
+      // Signed out since this run started: nothing more of it is shown or kept
+      if (epoch !== this.epoch) return;
       if (e.type === 'claimed') {
         // A job still in hand at the next claim was abandoned when its lease ran out
         end('stopped', 'the lease ran out before it finished');

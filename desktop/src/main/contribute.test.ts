@@ -1,10 +1,17 @@
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Contribute, type ContributeHost, contributeStatus, type Reading } from './contribute.js';
-import { deleteDeviceToken, loadDeviceToken, pairDevice, saveDeviceToken } from './device.js';
 import {
+  clientHeaders,
+  deleteDeviceToken,
+  loadDeviceToken,
+  pairDevice,
+  saveDeviceToken,
+} from './device.js';
+import {
+  clearHistory,
   endReason,
   type HistoryItem,
   INTERRUPTED,
@@ -463,6 +470,63 @@ describe('Contribute', () => {
     held.stop();
   });
 
+  it('a sign-out drops what the job in hand, its audio and a verdict refresh would still write (#848)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetch = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/generation/open'))
+        return json({
+          apps: [
+            {
+              appId: 'books',
+              oneliner: null,
+              sets: [kokoroSet('s1', { voice: 'af_heart' }, null)],
+            },
+          ],
+        });
+      if (url.endsWith('/claim')) return json({ job });
+      if (url.endsWith('/events')) return json({ recorded: 1 });
+      return json({ submissions: [] });
+    });
+    vi.stubGlobal('fetch', fetch);
+    const { host, contribute: held } = setup({
+      createRunner: () =>
+        new NativeRunner({
+          say: async (text) => {
+            if (text === 'Two.') await gate;
+            return { samples: new Float32Array(24_000), sampleRate: 24_000, loadMs: 0 };
+          },
+          encode: () => ({
+            write: () => {},
+            finish: async () => new Uint8Array(8),
+            cancel: () => {},
+          }),
+          bitrate: 32_000,
+          dispose: () => {},
+        }),
+    });
+    held.wake();
+    await until(() => held.state.current?.sentence === 1);
+    expect(history.map((i) => i.outcome)).toEqual(['in_progress']);
+    // The sign-out clears the record (the app deletes the files), then the job in hand ends late
+    history = [];
+    held.reset();
+    release();
+    await until(() => held.state.status !== 'running');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(history).toEqual([]);
+    expect(host.keepAudio).not.toHaveBeenCalled();
+    expect(held.state).toMatchObject({ current: null, apps: null, submitted: 0, message: null });
+    // Looking for work names this app's version and kind (#833)
+    expect(fetch.mock.calls[0]![1]!.headers).toMatchObject({
+      'X-FAS-App-Version': '0.1.2',
+      'X-FAS-Client': 'desktop',
+    });
+    held.stop();
+  });
+
   it('describes itself in one tray line', () => {
     const state = new Contribute(setup().host).state;
     expect(contributeStatus(state)).toBe('Contribute: idle');
@@ -496,12 +560,22 @@ describe('device pairing', () => {
       .mockResolvedValueOnce(json({ token: 'ndev_new', deviceId: 'd1' }));
     vi.stubGlobal('fetch', fetch);
     const open = vi.fn();
-    const token = await pairDevice({ label: 'FreeAppStore desktop (Mac)', open, api, pollMs: 1 });
+    const headers = clientHeaders('0.4.0 (57, abc1234)');
+    const token = await pairDevice({
+      label: 'FreeAppStore desktop (Mac)',
+      open,
+      headers,
+      api,
+      pollMs: 1,
+    });
     expect(token).toBe('ndev_new');
     expect(open).toHaveBeenCalledWith('https://api.test/ok');
     const start = JSON.parse(fetch.mock.calls[0]![1].body);
     expect(start.label).toBe('FreeAppStore desktop (Mac)');
     expect(start.challenge).toMatch(/^[0-9a-f]{64}$/);
+    // Pairing says which version this is (#833)
+    for (const [, init] of fetch.mock.calls)
+      expect(init.headers).toMatchObject({ 'X-FAS-App-Version': '0.4.0 (57, abc1234)' });
     const complete = JSON.parse(fetch.mock.calls[2]![1].body);
     expect(complete.id).toBe('p1');
     // The verifier hashes to the challenge sent first
@@ -514,7 +588,7 @@ describe('device pairing', () => {
       'fetch',
       vi.fn(async () => json({ error: 'Try connecting again later.' }, 429)),
     );
-    await expect(pairDevice({ label: 'x', open: vi.fn(), api })).rejects.toThrow(
+    await expect(pairDevice({ label: 'x', open: vi.fn(), headers: {}, api })).rejects.toThrow(
       'Try connecting again later.',
     );
   });
@@ -564,6 +638,20 @@ describe('history (#827)', () => {
       expect(readAudio(dir, 'books', 'j2')).not.toBeNull();
       expect(readAudio(dir, 'books', 'j1')).toBeNull();
       expect(readAudio(dir, 'books', 'j0')).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('deletes the history and every kept audio file on sign-out (#848)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fas-clear-'));
+    try {
+      saveHistory(dir, [{ appId: 'books', jobId: 'j1' } as HistoryItem]);
+      keepAudio(dir, 'books', 'j1', new Uint8Array([1]), { segments: [] });
+      expect(clearHistory(dir)).toEqual([]);
+      expect(readdirSync(dir)).toEqual([]);
+      expect(loadHistory(dir)).toEqual([]);
+      expect(readAudio(dir, 'books', 'j1')).toBeNull();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

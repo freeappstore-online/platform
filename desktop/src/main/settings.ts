@@ -10,6 +10,11 @@ export interface Settings {
   /** Contribute (#826): the apps this computer generates for, and whether it is paused. */
   contributeApps: string[];
   contributePaused: boolean;
+  /**
+   * The account (user id) the Contribute history and opt-ins belong to (#848), checked against
+   * `/native/me` before any of it is shown or used. Null once cleared by a sign-out.
+   */
+  contributeAccount: string | null;
   /** Look for a new version on start and daily (#839). On by default. */
   autoUpdate: boolean;
   /** Store (#840): apps opened on this computer, most recent first, and the starred ones. */
@@ -23,6 +28,7 @@ const DEFAULTS: Settings = {
   openAtLogin: true,
   contributeApps: [],
   contributePaused: false,
+  contributeAccount: null,
   autoUpdate: true,
   recentApps: [],
   favoriteApps: [],
@@ -47,6 +53,8 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
       openAtLogin: bool(saved.openAtLogin, DEFAULTS.openAtLogin),
       contributeApps: strings(saved.contributeApps),
       contributePaused: bool(saved.contributePaused, DEFAULTS.contributePaused),
+      contributeAccount:
+        typeof saved.contributeAccount === 'string' ? saved.contributeAccount : null,
       autoUpdate: bool(saved.autoUpdate, DEFAULTS.autoUpdate),
       recentApps: strings(saved.recentApps),
       favoriteApps: strings(saved.favoriteApps),

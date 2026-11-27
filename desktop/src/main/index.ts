@@ -25,6 +25,8 @@ import electronUpdater from 'electron-updater';
 import { Contribute, contributeStatus, type Engine } from './contribute.js';
 import {
   API_ORIGIN,
+  clientHeaders,
+  createPairCode,
   deleteDeviceToken,
   fetchProfile,
   loadDeviceToken,
@@ -35,6 +37,7 @@ import {
 } from './device.js';
 import { EncoderRelay, type EncoderReply, type TtsPort, TtsProcess } from './engine.js';
 import {
+  clearHistory,
   type HistoryItem,
   keepAudio,
   loadHistory,
@@ -74,6 +77,8 @@ const version = versionLabel(
   app.getVersion(),
   loadBuildInfo(fileURLToPath(new URL('../build-info.json', import.meta.url))),
 );
+/** Sent with pairing and every call with the device credential (#833). */
+const headers = clientHeaders(version);
 
 // Windows start hidden on the theme's paper colour (DESIGN-SYSTEM tokens) and show on first
 // paint, so a dark Mac never sees Electron's default white window (#814).
@@ -501,9 +506,15 @@ const encoders = new EncoderRelay((message) => {
   if (!contents.isDestroyed()) contents.send('contribute:to-encoder', message);
 });
 let history: HistoryItem[] | null = null;
+/**
+ * The connected account is the one the Contribute history and opt-ins belong to (#848): checked
+ * against `/native/me` after connecting (`verifyAccount`). Until then Contribute claims nothing
+ * and shows no history.
+ */
+let accountVerified = false;
 const contribute = new Contribute(
   {
-    token: () => deviceToken,
+    token: () => (accountVerified ? deviceToken : null),
     optedIn: () => settings.contributeApps,
     paused: () => settings.contributePaused,
     modelReady: () => modelInstalled(modelDir()),
@@ -544,14 +555,13 @@ const contribute = new Contribute(
     setHistory: (items) => {
       history = saveHistory(app.getPath('userData'), items);
     },
-    keepAudio: async (appId, jobId, result) =>
-      keepAudio(
-        app.getPath('userData'),
-        appId,
-        jobId,
-        new Uint8Array(await result.file.arrayBuffer()),
-        result.meta,
-      ),
+    keepAudio: async (appId, jobId, result) => {
+      const token = deviceToken;
+      const audio = new Uint8Array(await result.file.arrayBuffer());
+      // Signed out meanwhile (#848): the audio is not kept
+      if (token === deviceToken)
+        keepAudio(app.getPath('userData'), appId, jobId, audio, result.meta);
+    },
   },
   apiOrigin,
 );
@@ -568,7 +578,7 @@ function contributeState() {
     connected: deviceToken !== null,
     pairing: pairing !== null,
     pairError,
-    optedIn: settings.contributeApps,
+    optedIn: accountVerified ? settings.contributeApps : [],
     paused: settings.contributePaused,
   };
 }
@@ -647,6 +657,7 @@ async function connectDevice() {
     const token = await pairDevice({
       label: deviceLabel(),
       open: openExternal,
+      headers,
       signal: pairing.signal,
       api: `${apiOrigin}/v1`,
     });
@@ -658,10 +669,28 @@ async function connectDevice() {
     pairing = null;
     pushState();
   }
-  if (deviceToken) {
-    contribute.wake();
-    void refreshProfile();
-  }
+  // Contribute starts once refreshProfile has checked whose history this is
+  if (deviceToken) void refreshProfile();
+}
+
+/**
+ * Contribute's history, kept audio and opt-ins belong to one account (#848): an explicit sign-out
+ * deletes them, and a different account never inherits them. `account` is who they are for next.
+ */
+function clearContribute(account: string | null) {
+  contribute.reset();
+  history = clearHistory(app.getPath('userData'));
+  saveContribute({ contributeApps: [], contributeAccount: account });
+}
+
+/** The account behind the credential is now known: keep or clear Contribute's state, then start. */
+function verifyAccount(userId: string) {
+  if (settings.contributeAccount && settings.contributeAccount !== userId) clearContribute(userId);
+  else if (!settings.contributeAccount) saveContribute({ contributeAccount: userId });
+  if (accountVerified) return;
+  accountVerified = true;
+  contribute.reset(); // the window reads the history again, now shown
+  contribute.wake();
 }
 
 function signedOut() {
@@ -680,9 +709,10 @@ async function refreshProfile() {
   const token = deviceToken;
   if (!token) return;
   try {
-    const next = await fetchProfile(token, `${apiOrigin}/v1`);
+    const next = await fetchProfile(token, headers, `${apiOrigin}/v1`);
     if (token !== deviceToken) return;
     if (!next) return signedOut();
+    verifyAccount(next.user.id);
     let avatar: string | null = null;
     let icon: NativeImage | null = null;
     if (next.user.avatarUrl?.startsWith('https://')) {
@@ -704,21 +734,31 @@ async function refreshProfile() {
   }
 }
 
+/**
+ * `revoke`: an explicit sign-out, which also deletes Contribute's history, audio and opt-ins
+ * (#848). A credential the server refused keeps them for the same account to reconnect; another
+ * account clears them (`verifyAccount`).
+ */
 function disconnectDevice(revoke: boolean) {
   profile = null;
   avatarIcon = null;
-  if (deviceToken && revoke) void unpairDevice(deviceToken, `${apiOrigin}/v1`);
+  if (deviceToken && revoke) void unpairDevice(deviceToken, headers, `${apiOrigin}/v1`);
   deleteDeviceToken(app.getPath('userData'));
   deviceToken = null;
-  contribute.stop();
+  accountVerified = false;
+  if (revoke) clearContribute(null);
+  else contribute.reset();
   contribute.wake(); // ends the loop's wait
   engineWindow?.destroy();
 }
 
-ipcMain.handle('home:contribute-history', (event) => (fromHome(event) ? historyItems() : []));
+ipcMain.handle('home:contribute-history', (event) =>
+  fromHome(event) && accountVerified ? historyItems() : [],
+);
 ipcMain.handle('home:contribute-audio', (event, appId: unknown, jobId: unknown) => {
   if (!fromHome(event) || typeof appId !== 'string' || typeof jobId !== 'string') return null;
   if (!APP_ID.test(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(jobId)) return null;
+  if (!accountVerified) return null;
   return readAudio(app.getPath('userData'), appId, jobId);
 });
 /** Saves an item's record and audio in a folder the user names (#843); its path, or null. */
@@ -726,6 +766,7 @@ ipcMain.handle(
   'home:contribute-save-record',
   async (event, appId: unknown, jobId: unknown, at: unknown) => {
     if (!fromHome(event) || !home) return null;
+    if (!accountVerified) return null;
     const item = historyItems().find((i) => i.appId === appId && i.jobId === jobId && i.at === at);
     if (!item) return null;
     const { canceled, filePath } = await dialog.showSaveDialog(home, {
@@ -747,6 +788,10 @@ ipcMain.handle(
     return contribute.report(appId, jobId, good, note);
   },
 );
+/** A code for a phone to scan and join this account (#845). */
+ipcMain.handle('home:pair-code', (event) =>
+  fromHome(event) && deviceToken ? createPairCode(deviceToken, headers, `${apiOrigin}/v1`) : null,
+);
 ipcMain.handle('home:contribute-connect', (event) => {
   if (fromHome(event)) void connectDevice();
 });
@@ -759,7 +804,8 @@ ipcMain.handle('home:contribute-disconnect', (event) => {
   pushState();
 });
 ipcMain.handle('home:contribute-opt-in', (event, appId: unknown, on: unknown) => {
-  if (!fromHome(event) || typeof appId !== 'string' || !APP_ID.test(appId)) return;
+  if (!fromHome(event) || !accountVerified || typeof appId !== 'string' || !APP_ID.test(appId))
+    return;
   const apps = settings.contributeApps.filter((id) => id !== appId);
   saveContribute({ contributeApps: on === true ? [...apps, appId] : apps });
   contribute.wake();
@@ -812,6 +858,8 @@ if (!app.requestSingleInstanceLock()) {
     });
     token = loadToken(userData);
     deviceToken = loadDeviceToken(userData);
+    // Contribute state left by a sign-out before #848 belongs to no one: it goes
+    if (!deviceToken && !settings.contributeAccount) clearContribute(null);
     try {
       await startServer({
         hub,
@@ -832,7 +880,11 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     updates.start();
     if (deviceToken) {
-      contribute.wake();
+      // Checked when it was connected; refreshProfile checks again
+      if (settings.contributeAccount) {
+        accountVerified = true;
+        contribute.wake();
+      }
       void refreshProfile();
     }
     if (hidden) app.dock?.hide();

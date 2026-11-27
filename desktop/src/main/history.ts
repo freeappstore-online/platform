@@ -73,6 +73,13 @@ export function saveHistory(dir: string, items: HistoryItem[]): HistoryItem[] {
   return kept;
 }
 
+/** Deletes the history and the kept audio (#848): an explicit sign-out or another account. */
+export function clearHistory(dir: string): HistoryItem[] {
+  rmSync(join(dir, FILE), { force: true });
+  rmSync(join(dir, AUDIO), { recursive: true, force: true });
+  return [];
+}
+
 const audioName = (appId: string, jobId: string) => `${appId}--${jobId}`;
 
 /** Keep a job's audio and meta; the oldest beyond KEEP_AUDIO go. */
