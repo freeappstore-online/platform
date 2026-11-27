@@ -146,6 +146,12 @@ function SetCard({ appId, set, getToken, open, onToggle, onChanged }: {
 }
 
 const STATUS_FILTERS = [['', 'All'], ['open', 'Open'], ['accepted', 'Accepted']] as const
+/** Accepted jobs by the owner's review of their current version (#787). */
+const REVIEW_FILTERS = [
+  ['', 'Any review'], ['unreviewed', 'Unreviewed'], ['reviewed', 'Reviewed'], ['needs_changes', 'Needs changes'],
+] as const
+/** One review in a job's history (#791): which version, and what was said. */
+type ReviewEntry = GenerationReview & { submissionId: string }
 
 function SetJobs({ appId, setId, getToken, onChanged }: {
   appId: string
@@ -154,6 +160,7 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
   onChanged: () => void
 }) {
   const [status, setStatus] = useState<'' | 'open' | 'accepted'>('')
+  const [reviewFilter, setReviewFilter] = useState<(typeof REVIEW_FILTERS)[number][0]>('')
   const [jobs, setJobs] = useState<GenerationJobSummary[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,6 +173,7 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
     setError('')
     const query = new URLSearchParams()
     if (status) query.set('status', status)
+    if (reviewFilter) query.set('review', reviewFilter)
     if (after) query.set('cursor', after)
     const qs = query.toString()
     try {
@@ -181,7 +189,7 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
     } finally {
       setLoading(false)
     }
-  }, [base, setId, status, getToken])
+  }, [base, setId, status, reviewFilter, getToken])
 
   useEffect(() => { fetchPage(null) }, [fetchPage])
 
@@ -198,13 +206,13 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
     setJobs(prev => prev.map(j => (j.id === job.id && j.artifact ? { ...j, artifact: { ...j.artifact, review: saved } } : j)))
   }
 
-  /** The job's whole input: the list carries only a 200-character preview. */
-  const loadText = async (jobId: string) => {
+  /** The job with its whole input (the list carries only a 200-character preview) and review history. */
+  const loadJob = async (jobId: string) => {
     const res = await fetch(`${base}/sets/${encodeURIComponent(setId)}/jobs/${encodeURIComponent(jobId)}`, {
       headers: authHeaders(getToken()),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return ((await res.json()) as { job: GenerationJobDetail }).job.input.text
+    return ((await res.json()) as { job: GenerationJobDetail & { reviews: ReviewEntry[] } }).job
   }
 
   const confirm = async () => {
@@ -227,12 +235,23 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
 
   return (
     <div className="mt-4 border-t border-line pt-4">
-      <div className="flex gap-1 mb-3">
+      <div className="flex gap-1 mb-2 flex-wrap">
         {STATUS_FILTERS.map(([value, label]) => (
           <button
             key={value}
             onClick={() => setStatus(value)}
             className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${status === value ? 'bg-ink text-paper' : 'text-muted border border-line'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className="flex gap-1 mb-3 flex-wrap">
+        {REVIEW_FILTERS.map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setReviewFilter(value)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${reviewFilter === value ? 'bg-ink text-paper' : 'text-muted border border-line'}`}
           >
             {label}
           </button>
@@ -246,7 +265,8 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
             key={job.id}
             job={job}
             onAction={setPending}
-            loadText={() => loadText(job.id)}
+            loadText={async () => (await loadJob(job.id)).input.text}
+            loadHistory={async () => (await loadJob(job.id)).reviews}
             onReview={(status, note) => review(job, status, note)}
           />
         ))}
@@ -276,10 +296,11 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
 
 const seconds = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)}s`)
 
-function JobRow({ job, onAction, loadText, onReview }: {
+function JobRow({ job, onAction, loadText, loadHistory, onReview }: {
   job: GenerationJobSummary
   onAction: (p: Pending) => void
   loadText: () => Promise<string>
+  loadHistory: () => Promise<ReviewEntry[]>
   onReview: (status: GenerationReview['status'], note: string) => Promise<void>
 }) {
   const a = job.artifact
@@ -304,7 +325,7 @@ function JobRow({ job, onAction, loadText, onReview }: {
               Withdraw
             </button>
           </div>
-          <ReviewForm key={a.submissionId} review={a.review} onSave={onReview} />
+          <ReviewForm key={a.submissionId} submissionId={a.submissionId} review={a.review} onSave={onReview} loadHistory={loadHistory} />
         </div>
       ) : (
         <p className="mt-2 text-sm text-muted break-words">{job.inputPreview}{job.inputChars > job.inputPreview.length ? '…' : ''}</p>
@@ -390,17 +411,25 @@ const REVIEW_LABEL: Record<GenerationReview['status'], [string, string]> = {
  * Needs changes, with a note. A version generated again is a new one and starts unreviewed. A
  * review never publishes or withdraws anything; Withdraw does that.
  */
-function ReviewForm({ review, onSave }: {
+function ReviewForm({ submissionId, review, onSave, loadHistory }: {
+  submissionId: string
   review: GenerationReview | null
   onSave: (status: GenerationReview['status'], note: string) => Promise<void>
+  loadHistory: () => Promise<ReviewEntry[]>
 }) {
   const [note, setNote] = useState(review?.note ?? '')
   const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const [history, setHistory] = useState<ReviewEntry[] | 'loading' | 'error' | null>(null)
+  const showHistory = async () => {
+    setHistory('loading')
+    try { setHistory(await loadHistory()) } catch { setHistory('error') }
+  }
   const save = async (status: GenerationReview['status']) => {
     setState('saving')
     try {
       await onSave(status, note.trim())
       setState('idle')
+      if (Array.isArray(history)) void showHistory()
     } catch {
       setState('error')
     }
@@ -430,7 +459,25 @@ function ReviewForm({ review, onSave }: {
           Needs changes
         </button>
         {state === 'error' && <span role="status" className="text-xs text-danger">Couldn't save the review.</span>}
+        {history === null && (
+          <button onClick={showHistory} className="text-xs text-muted hover:underline min-h-[36px] px-2">History</button>
+        )}
       </div>
+      {history === 'loading' && <p className="text-xs text-muted">Loading history…</p>}
+      {history === 'error' && <p role="status" className="text-xs text-danger">Couldn't load the history.</p>}
+      {Array.isArray(history) && (
+        history.length === 0 ? <p className="text-xs text-muted">No reviews yet.</p> : (
+          <ul aria-label="Review history" className="mt-1 space-y-1 text-xs">
+            {history.map((h, i) => (
+              <li key={i} className="break-words">
+                <span className="font-semibold">{REVIEW_LABEL[h.status][0]}</span>
+                <span className="text-muted"> by {h.by} · {formatTimeAgo(new Date(h.at))}{h.submissionId === submissionId ? '' : ' · an earlier version'}</span>
+                {h.note && <span className="text-ink"> · {h.note}</span>}
+              </li>
+            ))}
+          </ul>
+        )
+      )}
     </div>
   )
 }

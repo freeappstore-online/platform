@@ -135,7 +135,9 @@ it('the owner marks the exact version Reviewed or Needs changes with a note (#78
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'wrong tone on 妈')
     note.dispatchEvent(new Event('input', { bubbles: true }))
   })
-  await act(async () => button('Needs changes')!.click())
+  // The review form's button, not the filter chip of the same name
+  const mark = [...document.querySelectorAll('button')].filter(b => b.textContent === 'Needs changes').at(-1)!
+  await act(async () => mark.click())
   await flush()
   const put = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!
   expect(put[0]).toBe(`${api}/artifacts/j-a/review`)
@@ -143,6 +145,34 @@ it('the owner marks the exact version Reviewed or Needs changes with a note (#78
   expect(container.textContent).toContain('Needs changes')
   expect(container.textContent).toContain('by alice')
   expect(container.textContent).not.toContain('Not reviewed')
+})
+
+it('filters jobs by review and shows the review history of every version (#787, #791)', async () => {
+  const at = Date.now()
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.endsWith('/generation/sets')) return json({ sets: [set] })
+    if (url.endsWith('/jobs/j-a')) return json({ job: { ...job('a'), input: { text: 'Hi.' }, reviews: [
+      { submissionId: 's-a', status: 'reviewed', note: null, by: 'alice', at },
+      { submissionId: 's-old', status: 'needs_changes', note: 'cut off at the end', by: 'alice', at },
+    ] } })
+    return json({ jobs: [job('a')], nextCursor: null })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => root.render(<GenerationManager appId="demo" getToken={getToken} />))
+  await flush()
+  act(() => button('Jobs')!.click())
+  await flush()
+  // The filter chip, not the review form's button of the same name
+  const chip = [...document.querySelectorAll('button')].find(b => b.textContent === 'Needs changes' && b.className.includes('rounded-full'))!
+  await act(async () => chip.click())
+  await flush()
+  expect(fetchMock).toHaveBeenCalledWith(`${api}/sets/set1/jobs?review=needs_changes`, expect.anything())
+  await act(async () => button('History')!.click())
+  await flush()
+  const history = container.querySelector('[aria-label="Review history"]')!
+  expect(history.textContent).toContain('Reviewed by alice')
+  expect(history.textContent).toContain('Needs changes by alice')
+  expect(history.textContent).toContain('an earlier version · cut off at the end')
 })
 
 it('blocks a contributor after confirming', async () => {
