@@ -201,6 +201,22 @@ it('records what each attempt measured, sends it, and shows it in Activity (#827
   expect(document.body.textContent).toContain('0.50× real time')
 })
 
+it("records the run's last job as lease_cap when its lease ran out, not as a stop", async () => {
+  localStorage.setItem('fas:generate-apps', JSON.stringify(['books']))
+  localStorage.setItem('fas:generate-model', '1')
+  vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
+  submissions = []
+  vi.mocked(kokoro.contributeKokoroApps).mockImplementation(async (opts) => {
+    // The lease ran out: the runner emits nothing more and the app leaves the run
+    opts.onEvent?.({ type: 'claimed', job: { id: 'j5', setId: 's1', key: 'alice/5', input: { text: 'Hi.' } } as never }, 'books')
+    return { submitted: 0, stopped: 'no-work' }
+  })
+  await render()
+  await click(button('Start')!)
+  const [run] = JSON.parse(localStorage.getItem('fas:generate-runs')!)
+  expect(run).toMatchObject({ jobId: 'j5', outcome: 'stopped', record: { reason: 'lease_cap' } })
+})
+
 it('maps how a job ended to the #813 reasons', () => {
   expect(endReason('submitted', null)).toBe('submitted')
   expect(endReason('skipped', 'audio exceeds maxBytes')).toBe('too_large')

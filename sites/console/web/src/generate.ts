@@ -391,7 +391,8 @@ async function run(
         }
       },
     })
-    finish('stopped', 'stopped before it finished')
+    // A job still in hand when the run ends by itself ran out of lease (no event says so)
+    finish('stopped', signal.aborted ? 'stopped before it finished' : 'the lease ran out before it finished')
     set({ message: signal.aborted ? 'Stopped.' : 'No more work for now.' })
   } catch (err) {
     if (signal.aborted) finish('stopped', 'stopped before it finished')
