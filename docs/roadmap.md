@@ -35,7 +35,7 @@ language promise, and no general compute marketplace.
 | AI access (MCP) | Implemented, released | — | — |
 | Location for Run | — | Implemented | Implemented |
 | Contribute (en, es, zh) | Implemented, released | Implemented | Implemented |
-| Auto / Run now / Off and device conditions (#830) | Pause only; no power or heat policy | Implemented | Implemented |
+| Auto / Run now / Off and device conditions (#830) | Implemented (power, battery, heat, in use; no mobile data) | Implemented | Implemented |
 | Account and sign out (#829) | Implemented, released | Implemented | Implemented |
 | Reports its version to the devices list (#833) | Implemented, released | In progress | Implemented |
 | QR pairing (#845) | Shows the code, released | In progress | Implemented |
@@ -63,8 +63,8 @@ Each stage starts when the previous one's gate is met.
   user guide.
 
 **3. Measured improvement**
-- The physical-device pilot (#790) with one shared batch, using device-side controls (#830). Desktop needs a power
-  and heat policy like the phones' before it is part of the pilot.
+- The physical-device pilot (#790) with one shared batch, using device-side controls (#830; which are hard and which
+  best-effort: [devices.md](devices.md#contribute-controls-what-is-enforced)).
 - Gate: the pilot's numbers (below) are recorded in #790.
 
 ### iOS distribution

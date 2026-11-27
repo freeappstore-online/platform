@@ -30,7 +30,7 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 | Contribute (make narration) | The console's Generate page, signed in, in a desktop browser that encodes AAC (Chrome, Edge; not Firefox) | Yes | Yes | Yes |
 | Contribute languages | English only | English, Spanish, Mandarin | English, Spanish, Mandarin | English, Spanish, Mandarin |
 | Contribute in the background | While the tab stays open and the computer awake | While the app runs in the tray and the computer is awake | Yes, by default when plugged in on Wi-Fi | Only when iOS starts it: on power, with a network |
-| Battery, heat and data conditions | No | No (it runs while not paused) | Yes | Yes |
+| Battery, heat and data conditions | No | Power, battery and heat; no mobile-data setting | Yes | Yes |
 | Overnight summary | No | No | Yes | Yes |
 | Pair a phone by QR code | Console: **Settings > Devices > Add a phone** | **Account > Add a phone** | Scanning: in progress (#845) | Scan or type the code |
 | Updates | Prompted in each app | Windows and Linux update themselves. Mac: the app tells you and opens the download | n/a | n/a |
@@ -142,6 +142,33 @@ in settings.
 | Offline | Retries for a short time; the job is given back later | Same |
 | The system ends the run | The job in hand stops and is given back | The job in hand stops and is given back |
 | Force stop / swipe away | Android runs none of its work until you open it again | iOS starts no background runs until you open it again |
+
+## Contribute controls: what is enforced
+
+Every limit is set and checked on the device; the server sets none per person (#830). **Hard**: our code or the
+system applies it every time. **Best-effort**: it depends on a signal the device may not give, or gives late.
+**None**: not offered there. No client promises an exact CPU percentage. Checked against the code on 2026-11-28
+(#792).
+
+| Control | Android | iPhone | Desktop | Browser (Generate page) |
+|---|---|---|---|---|
+| Per-app opt-in | Hard | Hard | Hard | Hard, in this browser |
+| Off / Stop | Hard: stops the job in hand, cancels every schedule, survives restarts | Hard: same, cancels background requests | Hard: same | Stop is hard while the page is open |
+| Wi-Fi only, or a monthly mobile-data allowance (model download and uploads counted on the device) | Hard for its own traffic, checked before each claim and download | Hard: each request refuses expensive and constrained networks unless allowed | None: a computer can't reliably tell a metered connection | None |
+| Charging only, or a battery minimum | Hard: checked before each claim and between sentences | Hard for background runs (iOS starts them only on power when charging-only); the level is checked between sentences | AC power: hard. Battery minimum: best-effort (needs the level the system reports) | None |
+| Low Power Mode | — | Hard: always pauses | — | None |
+| Pause when hot | Best-effort: thermal status moderate or worse | Best-effort: thermal state serious or worse | Best-effort: macOS thermal state serious or worse, or a CPU speed limit under 100% where the system reports one | None |
+| While in use: pause or run slower | Hard: screen on and unlocked | iOS runs background work only while the phone is not in use; Run now can run slower | Hard: keyboard or mouse in the last 2 minutes | None |
+| CPU level (Light, Balanced, Full: threads and rests) | Hard | Hard | Hard | None (one Web Worker) |
+| Daily maximum (jobs, minutes), quiet hours | Hard: checked before each claim and between sentences; the system picks start times | Hard: same; iOS picks start times | Hard | None |
+| Jobs at once | One | One | One | One per browser profile |
+| Free storage for the voice model | Hard: the download waits for 1,751 MB free (the download, the unpacked model and 1 GB to spare) | Hard: same | Hard: same | Best-effort: the browser's storage estimate must hold the model; the browser may still evict it |
+| Audio kept for playback | The 20 latest attempts | Same | Same | Same |
+| Runs after you leave | When Android schedules it | Only when iOS starts it | While the app runs (tray) and the computer is awake | Only while the tab stays open and the computer is awake |
+
+A failed condition stops the job in hand unless it is at least 80% done, and the server gives a stopped job back
+(#841), so stopping never spends an allowance twice. The voice model downloads only after you ask for it or turn on
+an app, whose confirmation names its size.
 
 ## When something looks wrong
 
