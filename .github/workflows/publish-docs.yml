@@ -80,6 +80,8 @@ jobs:
             - stylesheets/extra.css
           nav:
             - Home: index.md
+            - Desktop and phone apps: devices.md
+            - Where data goes: device-data.md
             - Getting Started: getting-started.md
             - SDK: sdk.md
             - UI Components: ui.md
@@ -98,6 +100,8 @@ jobs:
             - Permissions: permissions.md
             - Architecture: architecture.md
             - MCP: mcp.md
+            - Versioning: versioning.md
+            - Desktop and phone roadmap: roadmap.md
           YAML
           python -m zensical build
       - name: Publish to kb-host
