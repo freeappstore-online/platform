@@ -1,13 +1,13 @@
-// Preload for the hidden Contribute window (#826): it only relays the model worker's messages and
-// reports what this computer can do. It never sees the device credential; the main process makes
-// every API call.
+// Preload for the hidden Contribute window (#826, #837): it only relays the AAC encoder's messages
+// and reports whether this computer can encode. It never sees the device credential; the main
+// process makes every API call.
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fasContribute', {
-  /** Messages from the main process for the worker, or `delete-model`. */
+  /** Encoder requests from the main process. */
   onMessage(listener: (message: unknown) => void) {
-    ipcRenderer.on('contribute:to-worker', (_event, message) => listener(message));
+    ipcRenderer.on('contribute:to-encoder', (_event, message) => listener(message));
   },
-  fromWorker: (message: unknown) => ipcRenderer.send('contribute:from-worker', message),
+  reply: (message: unknown) => ipcRenderer.send('contribute:from-encoder', message),
   engine: (engine: unknown) => ipcRenderer.send('contribute:engine', engine),
 });

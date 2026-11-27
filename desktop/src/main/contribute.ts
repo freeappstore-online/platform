@@ -7,71 +7,49 @@ import {
 } from '@freeappstore/sdk';
 import {
   contributeKokoroApps,
-  KOKORO_DOWNLOAD_BYTES,
-  type KokoroDevice,
   type KokoroEvent,
   type KokoroResult,
-  KokoroRunner,
+  type KokoroRunner,
   type KokoroRunnerOptions,
-  kokoroProblem,
 } from '@freeappstore/sdk/generation-kokoro';
 import { API_ORIGIN } from './device.js';
 import { endReason, type HistoryItem, TEXT_CHARS } from './history.js';
+import { ENGINE, kokoroProblem, LANGUAGES, type NativeRunner } from './kokoro.js';
+import { type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.js';
 
 /**
  * Contribute on the desktop (#826): this computer generates community jobs (narration) for the
- * store apps the user opted in to, with the SDK's shared Kokoro runner, and keeps going while the
- * window is closed (the app lives in the tray). The loop and every API call run here in the main
- * process with the device credential, so no timer is throttled and the credential never reaches a
- * page; synthesis and AAC encoding run in a Web Worker in a hidden window (the main process has no
- * WebCodecs), reached through `RelayWorker`. With nothing to do it looks again every 15 minutes.
+ * store apps the user opted in to, and keeps going while the window is closed (the app lives in
+ * the tray). The loop and every API call run here in the main process with the device credential,
+ * so no timer is throttled and the credential never reaches a page. The voice is the phones' own
+ * (#837): Kokoro through sherpa-onnx in a utility process; AAC encoding runs in a hidden window
+ * (the main process has no WebCodecs). With nothing to do it looks again every 15 minutes.
  */
 
 /** How long the loop waits after a run, or with nothing to do, before looking for work again. */
 export const IDLE_MS = 15 * 60_000;
 
-/** The hidden window's model worker, seen from here as the `Worker` that `KokoroRunner` talks to. */
-export class RelayWorker extends EventTarget {
-  constructor(private readonly post: (message: unknown) => void) {
-    super();
-  }
-  postMessage(message: unknown): void {
-    this.post(message);
-  }
-  terminate(): void {
-    this.post({ type: 'terminate' });
-  }
-  /** A message from the worker; a finished job's audio arrives as bytes and becomes a Blob again. */
-  receive(message: { type?: string; file?: ArrayBuffer }): void {
-    const data =
-      message.type === 'done' && message.file
-        ? { ...message, file: new Blob([message.file], { type: 'audio/mp4' }) }
-        : message;
-    this.dispatchEvent(new MessageEvent('message', { data }));
-  }
-}
-
-/** The worker type `KokoroRunner` takes (a DOM `Worker`); `RelayWorker` does what it uses of one. */
-type RunnerWorker = ReturnType<KokoroRunnerOptions['createWorker']>;
+/** WebCodecs AAC settings (the main process has no DOM types). */
+type EncoderConfig = KokoroRunnerOptions['encoder'];
 
 /** What the hidden window reports about this computer once it has loaded. */
 export interface Engine {
   /** From `kokoroEncoder()`: null when this build of Chromium has no AAC encoder. */
-  encoder: KokoroRunnerOptions['encoder'] | null;
-  device: KokoroDevice;
-  /** Whether the model's files are in the window's Cache Storage. */
-  downloaded: boolean;
+  encoder: EncoderConfig | null;
 }
 
 export interface ContributeHost {
   token(): string | null;
   optedIn(): string[];
   paused(): boolean;
+  /** The model package is downloaded and unpacked (`model.ts`). */
   modelReady(): boolean;
-  setModelReady(ready: boolean): void;
-  /** The hidden window's engine, waiting for it to load. */
+  /** Downloads, verifies and unpacks it, off the main thread. */
+  installModel(progress: InstallProgress): Promise<void>;
+  /** The hidden window's encoder, waiting for it to load. */
   engine(): Promise<Engine>;
-  createWorker(): RelayWorker;
+  /** A runner with the TTS process and the hidden window's encoder. */
+  createRunner(encoder: EncoderConfig): NativeRunner;
   deleteModel(): Promise<void>;
   /** The device credential was refused (expired or revoked). */
   signedOut(): void;
@@ -86,6 +64,9 @@ export interface ContributeHost {
   /** Keep a job's audio and segments for playback. */
   keepAudio(appId: string, jobId: string, result: KokoroResult): Promise<void>;
 }
+
+/** The engine Contribute shows (#837). */
+export const MODEL_INFO = { engine: ENGINE, languages: Object.values(LANGUAGES).join(', ') };
 
 /** What the host reads of this computer at an attempt's start, each sentence and its end. */
 export interface Reading {
@@ -128,15 +109,33 @@ export interface ContributeState {
   message: string | null;
   /** Apps with open work, from discovery; null until it has been asked. */
   apps: ContributeApp[] | null;
-  model: { device: KokoroDevice; bytes: number; ready: boolean; loading: number | null } | null;
+  model: {
+    engine: string;
+    languages: string;
+    bytes: number;
+    ready: boolean;
+    /** Downloading or unpacking, 0-1; null when neither. */
+    loading: number | null;
+    stage: 'download' | 'unpack';
+  } | null;
   /** False when this computer can't encode AAC; null until the hidden window says. */
   encoder: boolean | null;
+  /** The job in hand (#838): its history item is `in_progress`, this is what changes as it runs. */
   current: {
     appId: string;
+    jobId: string;
     key: string;
+    /** When it was claimed, as its history item's `at`. */
+    at: number;
+    /** Sentence being done of `sentences` (0 of 0 before the first). */
     sentence: number;
     sentences: number;
     charsPerSecond: number;
+    /** CPU time of every FreeAppStore process since the claim. */
+    cpuMs: number | null;
+    leaseExpiresAt: number;
+    /** The audio is encoded and kept (the detail can play it); it is uploading. */
+    encoded: boolean;
   } | null;
   /** Since the app started. */
   submitted: number;
@@ -224,14 +223,14 @@ export class Contribute {
 
   private async engine(): Promise<Engine> {
     const engine = await this.host.engine();
-    const ready = this.host.modelReady() && engine.downloaded;
     this.set({
       encoder: engine.encoder !== null,
       model: {
-        device: engine.device,
-        bytes: KOKORO_DOWNLOAD_BYTES[engine.device],
-        ready,
+        ...MODEL_INFO,
+        bytes: MODEL_DOWNLOAD_BYTES,
+        ready: this.host.modelReady(),
         loading: this.state.model?.loading ?? null,
+        stage: this.state.model?.stage ?? 'download',
       },
     });
     return engine;
@@ -344,6 +343,65 @@ export class Contribute {
     this.set({ historyVersion: this.state.historyVersion + 1 });
   }
 
+  /** Updates the In progress detail of `a`, if it is still the job in hand. */
+  private live(a: Attempt, changes: Partial<NonNullable<ContributeState['current']>>) {
+    const { current } = this.state;
+    if (current?.jobId !== a.job.id || current.at !== a.at) return;
+    this.set({ current: { ...current, ...changes, leaseExpiresAt: a.job.leaseExpiresAt } });
+  }
+
+  private same = (i: HistoryItem, a: Attempt) =>
+    i.appId === a.appId && i.jobId === a.job.id && i.at === a.at;
+
+  private item(
+    a: Attempt,
+    outcome: HistoryItem['outcome'],
+    reason: string | null,
+    record: GenerationAttemptRecord,
+  ): HistoryItem {
+    return {
+      appId: a.appId,
+      jobId: a.job.id,
+      key: a.job.key,
+      at: a.at,
+      outcome,
+      reason,
+      text: a.job.input.text.slice(0, TEXT_CHARS),
+      chars: a.job.input.text.length,
+      record,
+      verdict: null,
+    };
+  }
+
+  /**
+   * The job in hand goes on the record from its claim (#838), so it can be opened while it runs; a
+   * run cut off with the app (quit, crash) is closed at the next start (`loadHistory`). Its record
+   * so far names this computer; its `reason` is what it would end with then, never sent.
+   */
+  private begin(a: Attempt) {
+    const record: GenerationAttemptRecord = {
+      runner: 'desktop',
+      reason: 'user_stop',
+      ...this.host.context(),
+      startedAt: a.at,
+    };
+    this.saveHistory([this.item(a, 'in_progress', null, record), ...this.host.history()]);
+    this.set({
+      current: {
+        appId: a.appId,
+        jobId: a.job.id,
+        key: a.job.key,
+        at: a.at,
+        sentence: 0,
+        sentences: 0,
+        charsPerSecond: 0,
+        cpuMs: null,
+        leaseExpiresAt: a.job.leaseExpiresAt,
+        encoded: false,
+      },
+    });
+  }
+
   /** Record how the job in hand ended, here and (the numbers) on the server. */
   private finish(
     a: Attempt | null,
@@ -379,20 +437,10 @@ export class Contribute {
       ...(durationMs && timing && { rtf: Math.round((timing.synthMs / durationMs) * 1000) / 1000 }),
     };
     const { job } = a;
+    // In place of its In progress item (#838), if it got one
     this.saveHistory([
-      {
-        appId: a.appId,
-        jobId: job.id,
-        key: job.key,
-        at: a.at,
-        outcome,
-        reason,
-        text: job.input.text.slice(0, TEXT_CHARS),
-        chars: job.input.text.length,
-        record,
-        verdict: null,
-      },
-      ...this.host.history(),
+      this.item(a, outcome, reason, record),
+      ...this.host.history().filter((i) => !this.same(i, a)),
     ]);
     a.generation
       .recordAttempts([{ jobId: job.id, ...record }])
@@ -402,11 +450,7 @@ export class Contribute {
   private async run(engine: Engine, apps: Parameters<typeof contributeKokoroApps>[0]['apps']) {
     const controller = new AbortController();
     this.controller = controller;
-    const runner = new KokoroRunner({
-      createWorker: () => this.host.createWorker() as unknown as RunnerWorker,
-      encoder: engine.encoder!,
-      device: engine.device,
-    });
+    const runner = this.host.createRunner(engine.encoder!);
     this.set({ status: 'running', message: null, current: null });
     let attempt: Attempt | null = null;
     const sample = () => {
@@ -440,9 +484,7 @@ export class Contribute {
         // A job still in hand at the next claim was abandoned when its lease ran out
         end('stopped', 'the lease ran out before it finished');
         start(appId, e.job);
-        this.set({
-          current: { appId, key: e.job.key, sentence: 0, sentences: 0, charsPerSecond: 0 },
-        });
+        this.begin(attempt!);
       } else if (e.type === 'generated') {
         const a = attempt as Attempt | null;
         if (a?.job.id !== e.job.id) return;
@@ -451,17 +493,20 @@ export class Contribute {
         sample();
         this.host
           .keepAudio(appId, e.job.id, e.result)
+          .then(() => this.live(a, { encoded: true }))
           .catch((err) => console.warn('contribute: audio not kept', err));
       } else if (e.type === 'progress') {
-        sample();
-        this.set({
-          current: {
-            appId,
-            key: e.job.key,
-            sentence: e.progress.sentence,
-            sentences: e.progress.sentences,
-            charsPerSecond: e.progress.charsPerSecond,
-          },
+        const r = sample();
+        const a = attempt as Attempt | null;
+        if (a?.job.id !== e.job.id) return;
+        this.live(a, {
+          sentence: e.progress.sentence,
+          sentences: e.progress.sentences,
+          charsPerSecond: e.progress.charsPerSecond,
+          cpuMs:
+            r.cpuMs !== undefined && a.start.cpuMs !== undefined
+              ? Math.max(0, r.cpuMs - a.start.cpuMs)
+              : null,
         });
       } else if (e.type === 'submitted') {
         end('submitted', null);
@@ -474,7 +519,13 @@ export class Contribute {
       }
     };
     try {
-      await contributeKokoroApps({ runner, signal: controller.signal, apps, onEvent });
+      // contributeKokoroApps only calls the runner's generate(), which NativeRunner has
+      await contributeKokoroApps({
+        runner: runner as unknown as KokoroRunner,
+        signal: controller.signal,
+        apps,
+        onEvent,
+      });
       // A job still in hand when the run ends by itself ran out of lease (no event says so)
       end(
         'stopped',
@@ -499,32 +550,25 @@ export class Contribute {
     }
   }
 
-  /** Download (unless cached) and load the model once the user agreed to its size. */
+  /** Download, verify and unpack the model once the user agreed to its size. */
   async downloadModel(): Promise<void> {
     if (this.loading) return;
     this.loading = true;
     try {
       const engine = await this.engine();
       if (!engine.encoder) return;
-      const runner = new KokoroRunner({
-        createWorker: () => this.host.createWorker() as unknown as RunnerWorker,
-        encoder: engine.encoder,
-        device: engine.device,
-      });
       const model = this.state.model!;
-      this.set({ model: { ...model, loading: 0 }, message: null });
+      this.set({ model: { ...model, loading: 0, stage: 'download' }, message: null });
       try {
-        await runner.load((loading) => this.set({ model: { ...model, loading } }));
-        engine.downloaded = true; // the window reported it before the download
-        this.host.setModelReady(true);
+        await this.host.installModel((stage, loading) =>
+          this.set({ model: { ...model, loading, stage } }),
+        );
         this.set({ model: { ...model, ready: true, loading: null } });
       } catch (err) {
         this.set({
           model: { ...model, loading: null },
           message: `The model didn't download: ${errorText(err)}`,
         });
-      } finally {
-        runner.dispose();
       }
     } finally {
       this.loading = false;
@@ -535,9 +579,7 @@ export class Contribute {
   /** Stop and delete the model's files. */
   async deleteModel(): Promise<void> {
     this.controller?.abort(new Error('Stopped'));
-    this.host.setModelReady(false);
     await this.host.deleteModel();
-    (await this.host.engine()).downloaded = false;
     if (this.state.model) this.set({ model: { ...this.state.model, ready: false } });
   }
 }

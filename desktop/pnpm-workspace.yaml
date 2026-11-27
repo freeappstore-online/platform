@@ -3,3 +3,8 @@ packages: []
 onlyBuiltDependencies:
   - electron
   - esbuild
+# Contribute's native TTS (sherpa-onnx-node, #837) ships one package per platform and CPU: install both CPUs of
+# this OS, so one macOS runner can build the x64 and arm64 apps (electron-builder.yml keeps each app's own).
+supportedArchitectures:
+  os: [current]
+  cpu: [x64, arm64]

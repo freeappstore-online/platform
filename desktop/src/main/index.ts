@@ -1,5 +1,6 @@
+import { rm } from 'node:fs/promises';
 import { arch, cpus, type as osType, release } from 'node:os';
-import { sep } from 'node:path';
+import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   app,
@@ -17,10 +18,11 @@ import {
   powerMonitor,
   shell,
   Tray,
+  utilityProcess,
   type WebContents,
 } from 'electron';
 import electronUpdater from 'electron-updater';
-import { Contribute, contributeStatus, type Engine, RelayWorker } from './contribute.js';
+import { Contribute, contributeStatus, type Engine } from './contribute.js';
 import {
   API_ORIGIN,
   deleteDeviceToken,
@@ -31,9 +33,19 @@ import {
   saveDeviceToken,
   unpairDevice,
 } from './device.js';
-import { type HistoryItem, keepAudio, loadHistory, readAudio, saveHistory } from './history.js';
+import { EncoderRelay, type EncoderReply, type TtsPort, TtsProcess } from './engine.js';
+import {
+  type HistoryItem,
+  keepAudio,
+  loadHistory,
+  readAudio,
+  saveHistory,
+  saveRecord,
+} from './history.js';
 import { Hub, type Peer } from './hub.js';
 import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
+import { NativeRunner } from './kokoro.js';
+import { modelInstalled } from './model.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
 import { startServer } from './server.js';
 import { loadSettings, type Settings, saveSettings } from './settings.js';
@@ -474,32 +486,43 @@ let pairError: string | null = null;
 /** The hidden window that hosts the model worker; created when Contribute first needs it. */
 let engineWindow: BrowserWindow | null = null;
 let engineReady: Promise<Engine> | null = null;
-let relay: RelayWorker | null = null;
-let modelDeleted: (() => void) | null = null;
+const modelDir = () => join(app.getPath('userData'), 'kokoro');
+// Dev builds can download the model from elsewhere (the e2e test's stand-in)
+const modelSource = (dev && process.env.FAS_DEV_MODEL_URL) || undefined;
+/** The TTS utility process (`tts.ts`): sherpa-onnx and the model's install, off the main thread. */
+const tts = new TtsProcess(
+  () =>
+    utilityProcess.fork(fileURLToPath(new URL('./tts.js', import.meta.url)), [modelDir()], {
+      serviceName: 'FreeAppStore Contribute',
+    }) as unknown as TtsPort,
+);
+const encoders = new EncoderRelay((message) => {
+  const contents = engineWindowContents();
+  if (!contents.isDestroyed()) contents.send('contribute:to-encoder', message);
+});
 let history: HistoryItem[] | null = null;
 const contribute = new Contribute(
   {
     token: () => deviceToken,
     optedIn: () => settings.contributeApps,
     paused: () => settings.contributePaused,
-    modelReady: () => settings.contributeModel,
-    setModelReady: (ready) => saveContribute({ contributeModel: ready }),
+    modelReady: () => modelInstalled(modelDir()),
+    installModel: (progress) => tts.install(progress, modelSource),
     engine: () => {
       engineWindowContents();
       return engineReady!;
     },
-    createWorker: () => {
-      const contents = engineWindowContents();
-      relay = new RelayWorker((message) => {
-        if (!contents.isDestroyed()) contents.send('contribute:to-worker', message);
-      });
-      return relay;
-    },
-    deleteModel: () =>
-      new Promise<void>((resolve) => {
-        modelDeleted = resolve;
-        engineWindowContents().send('contribute:to-worker', { type: 'delete-model' });
+    createRunner: (encoder) =>
+      new NativeRunner({
+        say: (text, sid, speed, mandarin) => tts.say(text, sid, speed, mandarin),
+        encode: (rate) => encoders.start(rate),
+        bitrate: encoder.bitrate ?? 32_000,
+        dispose: () => tts.close(),
       }),
+    deleteModel: async () => {
+      tts.close();
+      await rm(modelDir(), { recursive: true, force: true });
+    },
     signedOut,
     changed: () => pushState(),
     probe: () => {
@@ -552,8 +575,8 @@ function contributeState() {
 
 /**
  * The hidden window's contents: no throttling, since it does the work while every other window
- * is closed. It loads the SDK's runner page from disk and reports this computer's encoder,
- * WebGPU or WebAssembly, and whether the model is cached.
+ * is closed. It loads the encoder page from disk and reports whether this computer can encode AAC
+ * (#837: synthesis is the TTS process's).
  */
 function engineWindowContents(): WebContents {
   if (engineWindow && !engineWindow.isDestroyed()) return engineWindow.webContents;
@@ -587,17 +610,15 @@ function engineWindowContents(): WebContents {
   });
   win.on('closed', () => {
     if (engineWindow === win) engineWindow = null;
+    encoders.closed();
   });
   void win.loadFile(fileURLToPath(new URL('../renderer/contribute.html', import.meta.url)));
   return contents;
 }
 
-ipcMain.on('contribute:from-worker', (event, message: { type?: string }) => {
+ipcMain.on('contribute:from-encoder', (event, message: EncoderReply) => {
   if (!engineWindow || event.sender !== engineWindow.webContents) return;
-  if (message?.type === 'model-deleted') {
-    modelDeleted?.();
-    modelDeleted = null;
-  } else relay?.receive(message);
+  encoders.receive(message);
 });
 
 function saveContribute(changes: Partial<Settings>) {
@@ -700,6 +721,24 @@ ipcMain.handle('home:contribute-audio', (event, appId: unknown, jobId: unknown) 
   if (!APP_ID.test(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(jobId)) return null;
   return readAudio(app.getPath('userData'), appId, jobId);
 });
+/** Saves an item's record and audio in a folder the user names (#843); its path, or null. */
+ipcMain.handle(
+  'home:contribute-save-record',
+  async (event, appId: unknown, jobId: unknown, at: unknown) => {
+    if (!fromHome(event) || !home) return null;
+    const item = historyItems().find((i) => i.appId === appId && i.jobId === jobId && i.at === at);
+    if (!item) return null;
+    const { canceled, filePath } = await dialog.showSaveDialog(home, {
+      title: 'Save record',
+      buttonLabel: 'Save',
+      defaultPath: `${item.appId}-${item.key.replace(/[^\w.-]+/g, '_')}-record`,
+      message: 'A folder with record.json and the audio',
+    });
+    if (canceled || !filePath) return null;
+    saveRecord(app.getPath('userData'), item, filePath);
+    return filePath;
+  },
+);
 ipcMain.handle(
   'home:contribute-report',
   (event, appId: unknown, jobId: unknown, good: unknown, note: unknown) => {

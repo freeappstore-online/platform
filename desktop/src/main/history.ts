@@ -20,7 +20,8 @@ export interface HistoryItem {
   key: string;
   /** When the job was claimed (ms epoch). */
   at: number;
-  outcome: 'submitted' | 'skipped' | 'stopped' | 'failed';
+  /** `in_progress`: the job in hand (#838), from its claim until it ends. */
+  outcome: 'in_progress' | 'submitted' | 'skipped' | 'stopped' | 'failed';
   reason: string | null;
   /** The input, cut at TEXT_CHARS; `chars` is its whole length. */
   text: string;
@@ -45,10 +46,21 @@ const MAX_ITEMS = 200;
 const KEEP_AUDIO = 20;
 export const TEXT_CHARS = 4000;
 
+/** Why an item still In progress when the history is read again ended: its run went with the app. */
+export const INTERRUPTED = 'interrupted: FreeAppStore closed before it finished';
+
+/**
+ * The history as saved. An item still `in_progress` was cut off by a quit or crash (#838): it is
+ * `stopped`, interrupted. Its record is not sent: the server counts a lease that ran out unreleased
+ * as interrupted and offers the job again (#841).
+ */
 export function loadHistory(dir: string): HistoryItem[] {
   try {
     const items = JSON.parse(readFileSync(join(dir, FILE), 'utf8'));
-    return Array.isArray(items) ? (items as HistoryItem[]) : [];
+    if (!Array.isArray(items)) return [];
+    return (items as HistoryItem[]).map((item) =>
+      item.outcome === 'in_progress' ? { ...item, outcome: 'stopped', reason: INTERRUPTED } : item,
+    );
   } catch {
     return []; // none yet, or unreadable: start a new one
   }
@@ -101,6 +113,20 @@ export function readAudio(
     audio: new Uint8Array(readFileSync(`${base}.m4a`)),
     meta: JSON.parse(readFileSync(`${base}.json`, 'utf8')),
   };
+}
+
+/**
+ * An item's full record and its audio, for a bug report (#843): `record.json` (the item, with the
+ * audio's sentence timings when kept) and `audio.m4a`, in a new folder `target`.
+ */
+export function saveRecord(dir: string, item: HistoryItem, target: string): void {
+  const kept = readAudio(dir, item.appId, item.jobId);
+  mkdirSync(target, { recursive: true });
+  writeFileSync(
+    join(target, 'record.json'),
+    `${JSON.stringify({ ...item, ...(kept && { meta: kept.meta }) }, null, 2)}\n`,
+  );
+  if (kept) writeFileSync(join(target, 'audio.m4a'), kept.audio);
 }
 
 /** The #813 reason for how a job ended on this computer. */

@@ -8,9 +8,14 @@ files:
   - dist/**
   - assets/**
   - package.json
+  # Contribute's TTS (#837): only this app's CPU of sherpa-onnx's native packages (both are installed to build
+  # the x64 and arm64 Macs on one runner; pnpm-workspace.yaml)
+  - "!**/node_modules/sherpa-onnx-*-!(${arch})/**"
 # The stdio MCP entry (#815) runs as a plain file in node mode (ELECTRON_RUN_AS_NODE), outside the archive.
+# sherpa-onnx's addon and the libraries it loads (onnxruntime) must be real files too.
 asarUnpack:
   - dist/stdio/**
+  - "**/node_modules/sherpa-onnx-*/**"
 mac:
   category: public.app-category.productivity
   icon: build/icon.png

@@ -54,16 +54,13 @@ export interface RegistryApp {
 
 declare global {
   interface Window {
-    /** The hidden Contribute window's preload (src/preload/contribute.cts, #826). */
+    /** The hidden Contribute window's preload (src/preload/contribute.cts, #826, #837). */
     fasContribute: {
-      /** Messages from the main process for the model worker, `terminate` or `delete-model`. */
+      /** Encoder requests from the main process (`EncoderRequest`). */
       onMessage(listener: (message: unknown) => void): void;
-      fromWorker(message: unknown): void;
-      engine(engine: {
-        encoder: AudioEncoderConfig | null;
-        device: string;
-        downloaded: boolean;
-      }): void;
+      reply(message: unknown): void;
+      /** Whether this computer can encode AAC: the encoder settings, or null. */
+      engine(engine: { encoder: AudioEncoderConfig | null }): void;
     };
     fasDesktop: {
       state(): Promise<DesktopState>;
@@ -98,6 +95,8 @@ declare global {
         history(): Promise<HistoryItem[]>;
         /** A kept attempt's audio and meta `{ segments }`, or null once pruned. */
         audio(appId: string, jobId: string): Promise<{ audio: Uint8Array; meta: unknown } | null>;
+        /** Saves an attempt's record and audio in a folder the user names (#843); its path or null. */
+        saveRecord(appId: string, jobId: string, at: number): Promise<string | null>;
         /** This account's Good / Not good (and note) for an uploaded attempt (#831). */
         report(appId: string, jobId: string, good: boolean, note: string): Promise<unknown>;
       };

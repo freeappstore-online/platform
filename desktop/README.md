@@ -52,6 +52,7 @@ Development environment variables (dev builds, i.e. not packaged):
 | `FAS_DESKTOP_PORT`                         | Listen on another port (default `47821`)                                                    |
 | `FAS_DESKTOP_USER_DATA`                    | Use another profile directory (token, settings, app data); never registers a login item     |
 | `FAS_DEV_API_ORIGIN=http://127.0.0.1:8787` | Contribute talks to this API instead of `https://api.freeappstore.online`                   |
+| `FAS_DEV_MODEL_URL`                        | Contribute downloads the model package from here (it must still match the pinned SHA-256)   |
 
 Dev builds also accept bridge connections from `http://localhost:*` and `http://127.0.0.1:*` pages. Dev builds
 never register a login item either.
@@ -101,9 +102,9 @@ How an app offers tools (`exposeTools` from `@freeappstore/sdk/bridge`): [docs/m
 ## Contribute
 
 Contribute (#826) lends this computer to community generation ([docs/community-generation.md](../docs/community-generation.md)):
-it generates narration jobs for the store apps you opt in to, with the SDK's shared Kokoro runner
-(`@freeappstore/sdk/generation-kokoro`, the one Books and the console's Generate page use), and keeps going while the
-window is closed, as long as FreeAppStore runs in the tray.
+it generates narration jobs for the store apps you opt in to, with the phones' engine (#837: Kokoro v1.0 through
+sherpa-onnx, CPU, the same model package, voices and language rule as android `Kokoro.kt`, so English, Spanish and
+Mandarin), and keeps going while the window is closed, as long as FreeAppStore runs in the tray.
 
 - **Connect**: the desktop app has no FreeAppStore sign-in of its own, so **Connect this computer** uses the phones'
   device pairing ([docs/native-companion.md](../docs/native-companion.md)): the browser opens the pairing page, you sign
@@ -111,27 +112,36 @@ window is closed, as long as FreeAppStore runs in the tray.
   credential, kept in userData as `device-token` (mode `0600`, never logged; 90 days). **Disconnect** revokes it on the
   server and deletes it. A credential the server refuses (expired, revoked) is dropped and the page asks to connect
   again. Submissions from the desktop are `device_kind` `native`.
-- **Opt in** per app from discovery (`GET /v1/generation/open`; apps whose sets this runner can't do are listed
-  with why), and **Download the model** after seeing its size (WebGPU fp32 about 326 MB, else WebAssembly q8 about
-  92 MB, from Hugging Face; kept in the hidden window's Cache Storage until **Delete model**). Nothing is claimed
-  before both.
+- **Opt in** per app from discovery (`GET /v1/generation/open`; apps whose sets this engine can't do are listed
+  with why: `kokoroProblem` in `src/main/kokoro.ts`), and **Download the model** after seeing its size: the phones'
+  `kokoro-multi-lang-v1_0.tar.bz2` (350 MB) from sherpa-onnx's GitHub release, checked against its pinned SHA-256
+  before anything is unpacked (regular files and directories only, inside the folder), unpacked to
+  `userData/kokoro` (about 400 MB) until **Delete model** (`src/main/model.ts`). Download and unpacking (about two
+  minutes of bzip2) run in the TTS process. Nothing is claimed before both.
 - **Loop**, in the main process: discovery, then one job from each opted-in app in turn until none has work, then a
   new look every 15 minutes (or at once after a setting changes). Claim retries, the upload resend and lease
   extension are the SDK's (`Generation.contribute`): the same behaviour as the phones (#819) and the browser. The
   main process makes every API call with the device credential (plain `fetch`, no CORS, no page sees the
   credential). Pause (home or tray) stops the job in hand at once; its lease runs out on the server.
-- **Model**: the main process has no WebCodecs, so synthesis and AAC encoding run in a module Web Worker in a hidden
-  window (`src/renderer/contribute.*`, `backgroundThrottling: false`, sandboxed, a preload that only relays worker
-  messages). `RelayWorker` in `src/main/contribute.ts` is the `Worker` the SDK's `KokoroRunner` talks to; a finished
-  file crosses IPC as bytes. The worker is disposed after each run, freeing the model's memory. Electron 45 on macOS
-  refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz (the SDK's fallback).
+- **Engine**: synthesis runs in an Electron utility process (`src/main/tts.ts`) with `sherpa-onnx-node` (its prebuilt
+  addon for mac arm64/x64, Windows x64 and Linux x64, unpacked from the archive by electron-builder), up to 4 threads,
+  Mandarin with its own engine and the package's number and date rules. `NativeRunner` (`src/main/kokoro.ts`) speaks
+  a job a sentence at a time (the phones' splitting for English, Spanish and Mandarin, Books' 0.4 s / 0.8 s pauses,
+  audio under a second padded), and stands in for the SDK's `KokoroRunner` in `contributeKokoroApps`. The main
+  process has no WebCodecs, so AAC encoding runs in a hidden window (`src/renderer/contribute.*`,
+  `backgroundThrottling: false`, sandboxed, a preload that only relays encoder messages): samples go over a sentence
+  at a time, the MP4 comes back as bytes (`src/main/engine.ts`). The TTS process ends after each run, freeing the
+  model's memory. Electron 45 on macOS refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz there.
 - The **Contribute** page shows the status (running with app, job and sentence n of N, idle and why, or paused), the
-  counts since the app started, the model and the apps with their switches, and the **History** (#827): every job this
-  computer tried (`userData/contribute-history.json`, 200 newest) with the server's verdict and the attempt's numbers
+  counts since the app started, the engine, its languages and the model, and the apps with their switches, and the
+  **History** (#827): the job in hand as **In progress** from its claim (#838; its detail follows it live: engine,
+  sentence n of N, elapsed and CPU time, computer, lease expiry, then the audio once encoded; a run cut off by a quit
+  or crash is closed at the next start as stopped, interrupted), and every job this computer tried (`userData/contribute-history.json`, 200 newest) with the server's verdict and the attempt's numbers
   (how it ended, foreground or background, wall time per stage, CPU time and memory of all FreeAppStore processes from
   `app.getAppMetrics()`, plugged in or on battery and the macOS thermal state from `powerMonitor`), and playback with
   sentence highlighting of the 20 latest attempts' audio (`userData/contribute-audio`). The numbers, not the text or
-  audio, go to `…/generation/events` (`src/main/history.ts`).
+  audio, go to `…/generation/events` (`src/main/history.ts`). **Save record…** in an item's detail (#843) writes a
+  folder you name with `record.json` (the item with its numbers, verdict and sentence timings) and `audio.m4a`.
 
 ## Security
 
@@ -161,8 +171,10 @@ The end-to-end test serves a toy app that runs the SDK's `packages/sdk/src/bridg
 keep its screenshots.
 
 `e2e/contribute.spec.ts` runs Contribute with the real model against a stand-in API: it downloads the model, closes
-the window, and checks the uploaded file is mono AAC in MP4 whose length matches its sentence timings and is not
-silent (`ffprobe`/`ffmpeg`). It downloads Kokoro, so it runs only with `FAS_E2E_MODEL=1`:
+the window, generates an English (`books`) and a Mandarin (`dialogue`, `zh`) job, and checks each upload is mono AAC
+in MP4 whose length matches its sentence timings and is not silent (`ffprobe`/`ffmpeg`); the files are left in
+`test-results/uploads`. It downloads the model package, so it runs only with `FAS_E2E_MODEL=1`;
+`FAS_E2E_MODEL_FILE` serves an already downloaded `kokoro-multi-lang-v1_0.tar.bz2` from the stand-in instead:
 
 ```bash
 pnpm --dir desktop build && FAS_E2E_MODEL=1 pnpm --dir desktop exec playwright test e2e/contribute.spec.ts
@@ -209,19 +221,21 @@ since the previous desktop tag. Dev builds never check.
 
 ## Layout
 
-| Path                               | What                                                                                   |
-| ---------------------------------- | -------------------------------------------------------------------------------------- |
-| `src/main/index.ts`                | Electron: windows, tray, login item, navigation guards, IPC                            |
-| `src/main/server.ts`               | Loopback HTTP server: `/mcp` (Streamable HTTP, stateless) and `/bridge` (WebSocket)    |
-| `src/main/mcp.ts`                  | The four MCP tools                                                                     |
-| `src/main/hub.ts`                  | Connected apps, call routing, timeouts, activity log                                   |
-| `src/main/security.ts`, `token.ts` | Origin rules, token check and storage                                                  |
-| `src/main/integrations.ts`         | Connect / Disconnect for Claude Code and Claude Desktop                                |
-| `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login, Contribute, update and Store settings; the tray menu             |
-| `src/main/updates.ts`              | Update checks, download and install (electron-updater)                                 |
-| `src/main/contribute.ts`           | Contribute's loop and state, `RelayWorker` to the hidden window's model worker         |
-| `src/main/device.ts`               | Device pairing (`ndev_` credential), its storage, the account from `/native/me`        |
-| `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                         |
-| `assets/`                          | Tray icons: `trayTemplate*.png` (macOS, from `brand/assets/mark-mono.svg`), `tray.png` |
-| `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI), `contribute.cts`           |
-| `src/renderer/`                    | Home UI (React + Tailwind 4 on the FAS tokens); `contribute.*`: the hidden model page  |
+| Path                               | What                                                                                    |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `src/main/index.ts`                | Electron: windows, tray, login item, navigation guards, IPC                             |
+| `src/main/server.ts`               | Loopback HTTP server: `/mcp` (Streamable HTTP, stateless) and `/bridge` (WebSocket)     |
+| `src/main/mcp.ts`                  | The four MCP tools                                                                      |
+| `src/main/hub.ts`                  | Connected apps, call routing, timeouts, activity log                                    |
+| `src/main/security.ts`, `token.ts` | Origin rules, token check and storage                                                   |
+| `src/main/integrations.ts`         | Connect / Disconnect for Claude Code and Claude Desktop                                 |
+| `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login, Contribute, update and Store settings; the tray menu              |
+| `src/main/updates.ts`              | Update checks, download and install (electron-updater)                                  |
+| `src/main/contribute.ts`           | Contribute's loop and state                                                             |
+| `src/main/kokoro.ts`, `model.ts`   | The phones' Kokoro rules and `NativeRunner`; the model package's install                |
+| `src/main/tts.ts`, `engine.ts`     | The TTS utility process (sherpa-onnx); its client and the hidden window's encoder relay |
+| `src/main/device.ts`               | Device pairing (`ndev_` credential), its storage, the account from `/native/me`         |
+| `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                          |
+| `assets/`                          | Tray icons: `trayTemplate*.png` (macOS, from `brand/assets/mark-mono.svg`), `tray.png`  |
+| `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI), `contribute.cts`            |
+| `src/renderer/`                    | Home UI (React + Tailwind 4 on the FAS tokens); `contribute.*`: the hidden encoder page |

@@ -10,8 +10,6 @@ export interface Settings {
   /** Contribute (#826): the apps this computer generates for, and whether it is paused. */
   contributeApps: string[];
   contributePaused: boolean;
-  /** The user agreed to the voice model's download and it completed. */
-  contributeModel: boolean;
   /** Look for a new version on start and daily (#839). On by default. */
   autoUpdate: boolean;
   /** Store (#840): apps opened on this computer, most recent first, and the starred ones. */
@@ -25,7 +23,6 @@ const DEFAULTS: Settings = {
   openAtLogin: true,
   contributeApps: [],
   contributePaused: false,
-  contributeModel: false,
   autoUpdate: true,
   recentApps: [],
   favoriteApps: [],
@@ -50,7 +47,6 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
       openAtLogin: bool(saved.openAtLogin, DEFAULTS.openAtLogin),
       contributeApps: strings(saved.contributeApps),
       contributePaused: bool(saved.contributePaused, DEFAULTS.contributePaused),
-      contributeModel: bool(saved.contributeModel, DEFAULTS.contributeModel),
       autoUpdate: bool(saved.autoUpdate, DEFAULTS.autoUpdate),
       recentApps: strings(saved.recentApps),
       favoriteApps: strings(saved.favoriteApps),

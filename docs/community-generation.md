@@ -237,19 +237,19 @@ claimed. Runners today:
 | Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 32 kbps, 24 kHz mono; [#798](https://github.com/freeappstore-online/platform/issues/798)) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
 | iOS companion ([#733](https://github.com/freeappstore-online/platform/issues/733)) | same | same | same | same |
 | Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC-LC 32 kbps mono, 24 kHz, else 48 kHz where the browser refuses 24 kHz) | same | English voices only |
-| FAS desktop app ([#826](https://github.com/freeappstore-online/platform/issues/826); `desktop/`, Electron) | same as the browser (the same SDK runner, in a hidden window) | same; 48 kHz on macOS, whose Electron build refuses 24 kHz AAC | same | English voices only |
+| FAS desktop app ([#826](https://github.com/freeappstore-online/platform/issues/826), [#837](https://github.com/freeappstore-online/platform/issues/837); `desktop/`, Electron) | same as the phones (`sherpa-onnx-node` in a utility process, CPU) | WebCodecs AAC-LC 32 kbps mono in a hidden window; 48 kHz on macOS, whose Electron build refuses 24 kHz AAC | same | same as the phones |
 
 A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
 `formats`, params other than `voice` and `speed`, or a voice it doesn't have. Language
 ([#812](https://github.com/freeappstore-online/platform/issues/812)):
 
-- **Android and iOS** take a set's `language` when it names one: `en` with an English voice, `es` with
+- **Android, iOS and desktop** take a set's `language` when it names one: `en` with an English voice, `es` with
   `ef_`/`em_`, or `zh` (any `zh-…` tag) with `zf_`/`zm_`; any other language, or a voice of another
   language, is skipped with reason `language`. A set naming none goes by the voice as before
   (`zf_`/`zm_` are Mandarin). English and Spanish text is split into sentences as Books does;
   Mandarin at 。！？；… (and `. ! ? ;`), with Mandarin number and date reading. Audio under a second
   gets silence at the end, so a two-character phrase such as `对。` passes verification.
-- **Browser and desktop** speak English only: `kokoroProblem` skips a set naming a language other than `en`, or
+- **Browser** speaks English only: `kokoroProblem` skips a set naming a language other than `en`, or
   using a non-English voice, with the reason (for example `language zh: this browser runner speaks
   English only`). Browser Mandarin needs sherpa-onnx
 WASM (kokoro-js phonemizes English only); Kokoro v1.1-zh (more Mandarin voices) is held in reserve
@@ -266,8 +266,8 @@ Set `language` on sets whose text is not English (#810): it picks the characters
 
 ### Browser and desktop runner behaviour
 
-The console's Generate page and the desktop app run the same SDK code (`Generation.contribute` and
-`contributeKokoroApps`) and behave like the phones ([#819](https://github.com/freeappstore-online/platform/issues/819)):
+The console's Generate page and the desktop app run the same SDK loop (`Generation.contribute` and
+`contributeKokoroApps`; the desktop with its own sherpa-onnx runner in place of the browser's `KokoroRunner`) and behave like the phones ([#819](https://github.com/freeappstore-online/platform/issues/819)):
 
 - **Order**: one job from each opted-in app in turn; an app leaves the run when it has no job for this user or a
   job of it is not submitted (skipped, lease ran out, failed). The opt-ins are read again before each turn.
@@ -324,8 +324,8 @@ here: Safari's behaviour in the background and in a Dock web app is not document
 
 **Limits no page can avoid**: the browser must stay open and the computer awake; closing the tab or window,
 quitting the browser, sleep, a Memory Saver discard or a crash ends the run and loses the job in hand (its lease
-expires; nothing partial is uploaded). For generating with no window open, use the desktop app, which runs the same
-runner in a hidden window with background throttling turned off and keeps going from the tray.
+expires; nothing partial is uploaded). For generating with no window open, use the desktop app, which generates in a
+utility process (encoding in a hidden window with background throttling turned off) and keeps going from the tray.
 
 ## Limits
 

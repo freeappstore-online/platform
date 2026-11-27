@@ -601,7 +601,6 @@ function Store({ store }: { store: DesktopState['store'] }) {
   );
 }
 
-const DEVICE_LABEL = { webgpu: 'WebGPU', wasm: 'WebAssembly' } as const;
 const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000).toLocaleString()} MB`;
 
 /**
@@ -637,7 +636,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
       <ContributeStatus state={state} />
       <ContributeModel state={state} />
       <ContributeApps state={state} />
-      <ContributeHistory version={state.historyVersion} />
+      <ContributeHistory state={state} />
     </Section>
   );
 }
@@ -715,7 +714,7 @@ function ContributeModel({ state }: { state: DesktopContribute }) {
     <section className={`${card} mb-6 p-5`} aria-label="Voice model">
       <h3 className="mt-0 mb-2 text-base font-bold">Voice model</h3>
       <p className="mt-0 mb-3 text-sm">
-        Kokoro TTS v1.0 on {DEVICE_LABEL[model.device]} · {size}
+        {model.engine} · speaks {model.languages} · {size}
       </p>
       {model.ready ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -728,13 +727,13 @@ function ContributeModel({ state }: { state: DesktopContribute }) {
         <ProgressBar
           value={Math.round(model.loading * 100)}
           max={100}
-          label={`Downloading the model: ${Math.round(model.loading * 100)}%`}
+          label={`${model.stage === 'download' ? 'Downloading' : 'Unpacking'} the model: ${Math.round(model.loading * 100)}%`}
         />
       ) : (
         <>
           <p className="mt-0 mb-3 text-sm text-muted">
-            Generating downloads the model ({size}) from Hugging Face once and keeps it on this
-            computer until you delete it.
+            Generating downloads the model ({size}, the one the phone apps use) from sherpa-onnx's
+            GitHub release once, checks it and keeps it on this computer until you delete it.
           </p>
           <button
             type="button"
@@ -814,6 +813,7 @@ const ms = (n: number) =>
       ? `${(n / 1000).toFixed(1)} s`
       : `${Math.round(n)} ms`;
 const OUTCOME: Record<HistoryItem['outcome'], string> = {
+  in_progress: 'In progress',
   submitted: 'Uploaded',
   skipped: 'Skipped',
   stopped: 'Stopped',
@@ -867,8 +867,34 @@ function attemptRows(item: HistoryItem): [string, string][] {
   return rows.filter((row): row is [string, string] => !!row[1]);
 }
 
+type Current = NonNullable<DesktopContribute['current']>;
+
+/** The job in hand's live numbers (#838), as label/value rows; `now` ticks the elapsed time. */
+function liveRows(item: HistoryItem, current: Current, engine: string, now: number) {
+  const r = item.record;
+  const { sentence, sentences } = current;
+  return [
+    ['Status', current.encoded ? 'Encoded, uploading' : 'Generating'],
+    ['Engine', engine],
+    [
+      'Progress',
+      sentences
+        ? `Sentence ${sentence} of ${sentences} (${Math.round((sentence / sentences) * 100)}%)`
+        : 'Starting',
+    ],
+    ['Elapsed', ms(Math.max(0, now - current.at))],
+    ['CPU so far', current.cpuMs === null ? undefined : ms(current.cpuMs)],
+    [
+      'Computer',
+      [r.device, r.os, r.appVersion && `FreeAppStore ${r.appVersion}`].filter(Boolean).join(' · '),
+    ],
+    ['Lease expires', new Date(current.leaseExpiresAt).toLocaleTimeString()],
+  ].filter((row): row is [string, string] => !!row[1]);
+}
+
 /** This computer's attempts (#827): what it generated, how it went, and playback of its audio. */
-function ContributeHistory({ version }: { version: number }) {
+function ContributeHistory({ state }: { state: DesktopContribute }) {
+  const version = state.historyVersion;
   const [items, setItems] = useState<HistoryItem[] | null>(null);
   // By key, so the detail stays open when the history is read again (a report was sent)
   const [open, setOpen] = useState<string | null>(null);
@@ -909,7 +935,19 @@ function ContributeHistory({ version }: { version: number }) {
                     {new Date(item.at).toLocaleString()}
                   </span>
                 </button>
-                {open === key && <HistoryDetail item={item} />}
+                {open === key && (
+                  <HistoryDetail
+                    item={item}
+                    inHand={
+                      item.outcome === 'in_progress' &&
+                      state.current?.jobId === item.jobId &&
+                      state.current.at === item.at
+                        ? state.current
+                        : null
+                    }
+                    engine={state.model?.engine ?? ''}
+                  />
+                )}
               </li>
             );
           })}
@@ -919,11 +957,30 @@ function ContributeHistory({ version }: { version: number }) {
   );
 }
 
-function HistoryDetail({ item }: { item: HistoryItem }) {
+function HistoryDetail({
+  item,
+  inHand,
+  engine,
+}: {
+  item: HistoryItem;
+  /** The job in hand's live state, while it is this item (#838). */
+  inHand: Current | null;
+  engine: string;
+}) {
   const [audio, setAudio] = useState<{ url: string; segments: Segment[] } | null | undefined>();
   const [time, setTime] = useState(-1);
+  const [now, setNow] = useState(Date.now());
+  const [saved, setSaved] = useState<string | null>(null);
   const markRef = useRef<HTMLElement>(null);
+  const live = inHand !== null;
+  const encoded = inHand?.encoded ?? item.outcome !== 'in_progress';
   useEffect(() => {
+    if (!live) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [live]);
+  useEffect(() => {
+    if (!encoded) return; // the job in hand's audio is kept once it is encoded
     let url: string | null = null;
     let closed = false;
     void desktop.contribute.audio(item.appId, item.jobId).then((kept) => {
@@ -937,7 +994,7 @@ function HistoryDetail({ item }: { item: HistoryItem }) {
       closed = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [item.appId, item.jobId]);
+  }, [item.appId, item.jobId, encoded]);
   const current = audio?.segments.find(([, , start, end]) => time >= start && time < end);
   const marked = current && current[1] <= item.text.length ? current : null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the sentence being read
@@ -947,7 +1004,7 @@ function HistoryDetail({ item }: { item: HistoryItem }) {
   return (
     <div className="pb-4">
       <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        {attemptRows(item).map(([name, value]) => (
+        {(inHand ? liveRows(item, inHand, engine, now) : attemptRows(item)).map(([name, value]) => (
           <div key={name} className="contents">
             <dt className="text-muted">{name}</dt>
             <dd className="m-0 break-words min-w-0">{value}</dd>
@@ -984,6 +1041,20 @@ function HistoryDetail({ item }: { item: HistoryItem }) {
         {item.text.length < item.chars ? '…' : ''}
       </p>
       {item.verdict?.submissionId && <ReportForm item={item} />}
+      {item.outcome !== 'in_progress' && (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            className={secondary}
+            onClick={async () =>
+              setSaved(await desktop.contribute.saveRecord(item.appId, item.jobId, item.at))
+            }
+          >
+            Save record…
+          </button>
+          {saved && <span className="text-xs text-muted break-all">Saved to {saved}</span>}
+        </div>
+      )}
     </div>
   );
 }

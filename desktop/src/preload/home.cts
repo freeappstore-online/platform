@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('fasDesktop', {
     history: () => ipcRenderer.invoke('home:contribute-history'),
     audio: (appId: string, jobId: string) =>
       ipcRenderer.invoke('home:contribute-audio', appId, jobId),
+    saveRecord: (appId: string, jobId: string, at: number) =>
+      ipcRenderer.invoke('home:contribute-save-record', appId, jobId, at),
     report: (appId: string, jobId: string, good: boolean, note: string) =>
       ipcRenderer.invoke('home:contribute-report', appId, jobId, good, note),
   },

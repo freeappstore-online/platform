@@ -15,6 +15,4 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: { input: [page('index.html'), page('contribute.html')] },
   },
-  // The model worker loads its runtime with import(), so it can't be a classic script
-  worker: { format: 'es' },
 });

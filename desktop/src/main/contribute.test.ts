@@ -1,23 +1,20 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  Contribute,
-  type ContributeHost,
-  contributeStatus,
-  type Reading,
-  RelayWorker,
-} from './contribute.js';
+import { Contribute, type ContributeHost, contributeStatus, type Reading } from './contribute.js';
 import { deleteDeviceToken, loadDeviceToken, pairDevice, saveDeviceToken } from './device.js';
 import {
   endReason,
   type HistoryItem,
+  INTERRUPTED,
   keepAudio,
   loadHistory,
   readAudio,
   saveHistory,
+  saveRecord,
 } from './history.js';
+import { NativeRunner } from './kokoro.js';
 
 const api = 'https://api.test/v1';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -56,58 +53,44 @@ async function until(check: () => boolean) {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('RelayWorker', () => {
-  it('posts to the hidden window and turns finished audio back into a Blob', async () => {
-    const post = vi.fn();
-    const relay = new RelayWorker(post);
-    relay.postMessage({ type: 'load', id: 1 });
-    relay.terminate();
-    expect(post.mock.calls).toEqual([[{ type: 'load', id: 1 }], [{ type: 'terminate' }]]);
-    const got: unknown[] = [];
-    relay.addEventListener('message', (e) => got.push((e as MessageEvent).data));
-    relay.receive({ type: 'done', file: new Uint8Array([1, 2, 3]).buffer });
-    relay.receive({ type: 'progress' });
-    const done = got[0] as { file: Blob };
-    expect(done.file).toBeInstanceOf(Blob);
-    expect([done.file.type, done.file.size]).toEqual(['audio/mp4', 3]);
-    expect(got[1]).toEqual({ type: 'progress' });
-  });
-});
-
 describe('Contribute', () => {
   let history: HistoryItem[] = [];
   /** What the host reads of this computer, in turn: start, each sentence, generated, end. */
   let readings: Reading[] = [];
+  let spoken: { text: string; sid: number; speed: number; mandarin: boolean }[] = [];
   function setup(over: Partial<ContributeHost> = {}) {
-    let relay: RelayWorker | null = null;
     history = [];
     readings = [];
-    // The hidden window's worker: narrates any job in one sentence
-    const createWorker = () => {
-      relay = new RelayWorker((message) => {
-        const msg = message as { type: string; id: number };
-        if (msg.type !== 'narrate') return;
-        queueMicrotask(() => {
-          relay!.receive({ type: 'progress', id: msg.id, done: 1, total: 2, chars: 4 } as never);
-          relay!.receive({
-            type: 'done',
-            id: msg.id,
-            file: new Uint8Array(8).buffer,
-            segments: [[0, 4, 0, 1]],
-            timing: { loadMs: 700, synthMs: 500, encodeMs: 20 },
-          } as never);
-        });
+    spoken = [];
+    // The TTS process speaks a second of samples per sentence (loading the model first); the
+    // hidden window's encoder returns 8 bytes
+    let loaded = false;
+    const createRunner = () =>
+      new NativeRunner({
+        say: async (text, sid, speed, mandarin) => {
+          spoken.push({ text, sid, speed, mandarin });
+          const loadMs = loaded ? 0 : 700;
+          loaded = true;
+          return { samples: new Float32Array(24_000), sampleRate: 24_000, loadMs };
+        },
+        encode: () => ({
+          write: () => {},
+          finish: async () => new Uint8Array(8),
+          cancel: () => {},
+        }),
+        bitrate: 32_000,
+        dispose: () => {
+          loaded = false;
+        },
       });
-      return relay;
-    };
     const host: ContributeHost = {
       token: () => 'ndev_x',
       optedIn: () => ['books'],
       paused: () => false,
       modelReady: () => true,
-      setModelReady: vi.fn(),
-      engine: async () => ({ encoder, device: 'wasm', downloaded: true }),
-      createWorker,
+      installModel: vi.fn(async () => {}),
+      engine: async () => ({ encoder }),
+      createRunner,
       deleteModel: vi.fn(async () => {}),
       signedOut: vi.fn(),
       changed: vi.fn(),
@@ -164,7 +147,8 @@ describe('Contribute', () => {
     const { contribute, host } = setup();
     readings.push(
       { cpuMs: 1000, memMb: 300, charging: true, thermal: 'nominal', foreground: true },
-      { memMb: 900, foreground: true },
+      { cpuMs: 2000, memMb: 900, foreground: true },
+      { cpuMs: 3000, memMb: 700, foreground: true },
       { memMb: 700, foreground: false },
       { cpuMs: 4500, memMb: 400, charging: false, thermal: 'fair', foreground: true },
     );
@@ -192,8 +176,8 @@ describe('Contribute', () => {
           device: 'Apple M3 arm64',
           background: true,
           loadMs: 700,
-          synthMs: 500,
-          encodeMs: 20,
+          synthMs: expect.any(Number),
+          encodeMs: expect.any(Number),
           cpuMs: 3500,
           peakMemMb: 900,
           chargingStart: true,
@@ -201,8 +185,7 @@ describe('Contribute', () => {
           thermalStart: 'nominal',
           thermalEnd: 'fair',
           bytes: 8,
-          durationMs: 1000,
-          rtf: 0.5,
+          durationMs: 2400,
           uploadMs: expect.any(Number),
         }),
       }),
@@ -210,20 +193,28 @@ describe('Contribute', () => {
     expect(host.keepAudio).toHaveBeenCalledWith(
       'books',
       'j1',
-      expect.objectContaining({ meta: { segments: [[0, 4, 0, 1]] } }),
+      expect.objectContaining({
+        meta: {
+          segments: [
+            [0, 4, 0, 1],
+            [5, 9, 1.4, 2.4],
+          ],
+        },
+      }),
     );
+    // Spoken by the phones' engine, a sentence at a time, with af_heart's speaker id
+    expect(spoken).toEqual([
+      { text: 'One.', sid: 3, speed: 1, mandarin: false },
+      { text: 'Two.', sid: 3, speed: 1, mandarin: false },
+    ]);
     const sent = fetch.mock.calls.find(([url]) => url.endsWith('/events'))!;
     expect(JSON.parse(String(sent[1]!.body)).events).toEqual([
       { jobId: 'j1', ...history[0]!.record },
     ]);
     expect(contribute.state.apps).toEqual([
       { appId: 'books', oneliner: 'Free books', open: 3, problem: null },
-      {
-        appId: 'dialogue',
-        oneliner: null,
-        open: 0,
-        problem: 'language zh: this browser runner speaks English only',
-      },
+      // Mandarin is spoken here as on the phones (#837)
+      { appId: 'dialogue', oneliner: null, open: 3, problem: null },
     ]);
     expect(contribute.state.message).toMatch(/^No more work for now/);
     const calls = fetch.mock.calls.map(([url, init]) => [init?.method ?? 'GET', url]);
@@ -266,14 +257,19 @@ describe('Contribute', () => {
     const noModel = setup({ modelReady: () => false }).contribute;
     noModel.wake();
     await until(() => noModel.state.message === 'Download the voice model to start.');
-    expect(noModel.state.model).toMatchObject({ device: 'wasm', bytes: 92_361_116, ready: false });
+    expect(noModel.state.model).toMatchObject({
+      engine: 'Kokoro v1.0 (sherpa-onnx, CPU)',
+      languages: 'English, Spanish, Mandarin',
+      bytes: 349_886_476,
+      ready: false,
+    });
 
     const none = setup({ optedIn: () => [] }).contribute;
     none.wake();
     await until(() => none.state.message === 'Choose the apps to generate for.');
 
     const noAac = setup({
-      engine: async () => ({ encoder: null, device: 'wasm', downloaded: false }),
+      engine: async () => ({ encoder: null }),
     }).contribute;
     noAac.wake();
     await until(() => noAac.state.encoder === false);
@@ -301,7 +297,7 @@ describe('Contribute', () => {
       paused: () => paused,
       engine: () =>
         new Promise((resolve) => {
-          loaded = () => resolve({ encoder, device: 'wasm', downloaded: true });
+          loaded = () => resolve({ encoder });
         }),
     });
     contribute.wake();
@@ -377,46 +373,112 @@ describe('Contribute', () => {
     contribute.stop();
   });
 
-  it('downloads the model only when asked, through the hidden window', async () => {
+  it('downloads the model only when asked, off the main thread, with its progress', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => json({ apps: [] })),
     );
     let ready = false;
-    const posted: unknown[] = [];
-    const createWorker = () => {
-      const relay: RelayWorker = new RelayWorker((message) => {
-        posted.push(message);
-        const msg = message as { type: string; id: number };
-        if (msg.type === 'load')
-          queueMicrotask(() => {
-            relay.receive({ type: 'loading', progress: 0.5 } as never);
-            relay.receive({ type: 'loaded', id: msg.id } as never);
-          });
-      });
-      return relay;
-    };
-    const setModelReady = vi.fn((r: boolean) => {
-      ready = r;
-    });
+    const stages: unknown[] = [];
     const { contribute } = setup({
       modelReady: () => ready,
-      setModelReady,
-      createWorker,
-      engine: async () => ({ encoder, device: 'webgpu', downloaded: ready }),
+      installModel: async (progress) => {
+        progress('download', 0.5);
+        stages.push(contribute.state.model?.stage, contribute.state.model?.loading);
+        progress('unpack', 0.25);
+        stages.push(contribute.state.model?.stage, contribute.state.model?.loading);
+        ready = true;
+      },
+      changed: () => {},
     });
     await contribute.downloadModel();
-    expect(setModelReady).toHaveBeenCalledWith(true);
-    expect(posted).toEqual([{ type: 'load', id: 1, device: 'webgpu' }, { type: 'terminate' }]);
+    expect(stages).toEqual(['download', 0.5, 'unpack', 0.25]);
     expect(contribute.state.model).toMatchObject({ ready: true, loading: null });
     contribute.stop();
+  });
+
+  it('puts the job in hand on the record as In progress, with its live detail (#838)', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const claims = [json({ job }), new Response(null, { status: 204 })];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/generation/open'))
+          return json({
+            apps: [
+              {
+                appId: 'books',
+                oneliner: null,
+                sets: [kokoroSet('s1', { voice: 'af_heart' }, null)],
+              },
+            ],
+          });
+        if (url.endsWith('/claim')) return claims.shift()!;
+        if (url.endsWith('/result')) return json({ submissionId: 'x', status: 'pending' }, 202);
+        if (url.endsWith('/events')) return json({ recorded: 1 });
+        return json({ submissions: [] });
+      }),
+    );
+    // The second sentence waits, so the job is seen in hand
+    const { contribute: held } = setup({
+      createRunner: () =>
+        new NativeRunner({
+          say: async (text) => {
+            if (text === 'Two.') await gate;
+            return { samples: new Float32Array(24_000), sampleRate: 24_000, loadMs: 0 };
+          },
+          encode: () => ({
+            write: () => {},
+            finish: async () => new Uint8Array(8),
+            cancel: () => {},
+          }),
+          bitrate: 32_000,
+          dispose: () => {},
+        }),
+    });
+    readings.push({ cpuMs: 100, foreground: true }, { cpuMs: 600, foreground: true });
+    held.wake();
+    await until(() => held.state.current?.sentence === 1);
+    expect(history).toEqual([
+      expect.objectContaining({ jobId: 'j1', outcome: 'in_progress', text: 'One. Two.' }),
+    ]);
+    expect(held.state.current).toMatchObject({
+      appId: 'books',
+      jobId: 'j1',
+      key: 'book/0',
+      at: history[0]!.at,
+      sentence: 1,
+      sentences: 2,
+      cpuMs: 500,
+      leaseExpiresAt: job.leaseExpiresAt,
+      encoded: false,
+    });
+    release();
+    await until(() => held.state.submitted === 1);
+    // Ended in place: one item, no longer In progress
+    expect(history.map((i) => i.outcome)).toEqual(['submitted']);
+    held.stop();
   });
 
   it('describes itself in one tray line', () => {
     const state = new Contribute(setup().host).state;
     expect(contributeStatus(state)).toBe('Contribute: idle');
     expect(contributeStatus({ ...state, status: 'paused' })).toBe('Contribute: paused');
-    const current = { appId: 'books', key: 'k', sentence: 3, sentences: 40, charsPerSecond: 20 };
+    const current = {
+      appId: 'books',
+      jobId: 'j',
+      key: 'k',
+      at: 0,
+      sentence: 3,
+      sentences: 40,
+      charsPerSecond: 20,
+      cpuMs: null,
+      leaseExpiresAt: 0,
+      encoded: false,
+    };
     expect(contributeStatus({ ...state, status: 'running', current })).toBe(
       'Contribute: books, sentence 3 of 40',
     );
@@ -502,6 +564,39 @@ describe('history (#827)', () => {
       expect(readAudio(dir, 'books', 'j2')).not.toBeNull();
       expect(readAudio(dir, 'books', 'j1')).toBeNull();
       expect(readAudio(dir, 'books', 'j0')).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('closes an item left In progress by a quit as interrupted, and saves a record (#838, #843)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fas-history-'));
+    try {
+      const item = {
+        appId: 'books',
+        jobId: 'j1',
+        key: 'book/0',
+        at: 5,
+        outcome: 'in_progress',
+        reason: null,
+        text: 'One.',
+        chars: 4,
+        record: { runner: 'desktop', reason: 'user_stop' },
+        verdict: null,
+      } as HistoryItem;
+      saveHistory(dir, [item]);
+      const [closed] = loadHistory(dir);
+      expect(closed).toMatchObject({ outcome: 'stopped', reason: INTERRUPTED });
+      keepAudio(dir, 'books', 'j1', new Uint8Array([1, 2]), { segments: [[0, 4, 0, 1]] });
+      const target = join(dir, 'saved');
+      saveRecord(dir, closed!, target);
+      expect(JSON.parse(readFileSync(join(target, 'record.json'), 'utf8'))).toEqual({
+        ...closed,
+        meta: { segments: [[0, 4, 0, 1]] },
+      });
+      expect(new Uint8Array(readFileSync(join(target, 'audio.m4a')))).toEqual(
+        new Uint8Array([1, 2]),
+      );
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
