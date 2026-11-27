@@ -27,7 +27,8 @@ describe('getOAuth2Token', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     releases[0]?.(token('t1'));
     releases[1]?.(token('t2'));
-    expect(await Promise.all([a, b])).toEqual(['t1', 't2']);
+    // Each awaits its own digest first, so either may reach fetch first: only that each got its own token matters.
+    expect((await Promise.all([a, b])).sort()).toEqual(['t1', 't2']);
   });
 
   it('serves a cached token and retries after a failed refresh', async () => {
