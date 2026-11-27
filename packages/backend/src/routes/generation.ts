@@ -282,6 +282,8 @@ const reportInfo = (x: {
     ? null
     : { good: !!x.report_good, note: x.report_note, at: x.reported_at! };
 
+/** Review statuses an owner can record. */
+const REVIEWS = ['reviewed', 'needs_changes'];
 /** The owner's review of an artifact version (#787, #831); null: not reviewed. */
 const reviewInfo = (x: {
   review: string | null;
@@ -547,7 +549,13 @@ async function ownerJobs(
   c: Ctx,
   appId: string,
   setId: string,
-  q: { status: string | null; cursor: string; limit: number; jobId?: string },
+  q: {
+    status: string | null;
+    review?: string | null;
+    cursor: string;
+    limit: number;
+    jobId?: string;
+  },
 ) {
   const { results: rows } = await c.env.DB.prepare(
     `SELECT j.id, j.key, j.status, j.created_at,
@@ -559,9 +567,10 @@ async function ownerJobs(
      LEFT JOIN generation_submissions x ON x.id = a.submission_id
      LEFT JOIN users r ON r.id = x.reviewed_by
      WHERE j.set_id = ?1 AND (?2 IS NULL OR j.status = ?2) AND j.key > ?3 AND (?6 IS NULL OR j.id = ?6)
+       AND (?7 IS NULL OR (a.submission_id IS NOT NULL AND coalesce(x.review, 'unreviewed') = ?7))
      ORDER BY j.key LIMIT ?4`,
   )
-    .bind(setId, q.status, q.cursor, q.limit + 1, PREVIEW_CHARS, q.jobId ?? null)
+    .bind(setId, q.status, q.cursor, q.limit + 1, PREVIEW_CHARS, q.jobId ?? null, q.review ?? null)
     .all<{
       id: string;
       key: string;
@@ -677,7 +686,9 @@ async function ownerJobs(
 
 /**
  * A set's jobs by key, paged with `cursor` (the last key of the previous page)
- * and `limit` (50, at most 200); `status` filters by `open` or `accepted`.
+ * and `limit` (50, at most 200); `status` filters by `open` or `accepted`, `review` the accepted
+ * ones by the owner's review of their current version (#787): `unreviewed`, `reviewed` or
+ * `needs_changes`.
  */
 generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
   const appId = c.req.param('appId');
@@ -687,16 +698,24 @@ generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
   const status = c.req.query('status');
   if (status !== undefined && status !== 'open' && status !== 'accepted')
     throw new HttpError(400, 'status must be open or accepted');
+  const review = c.req.query('review');
+  if (review !== undefined && review !== 'unreviewed' && !REVIEWS.includes(review))
+    throw new HttpError(400, 'review must be unreviewed, reviewed or needs_changes');
   const limit = queryLimit(c.req.query('limit'), 50, 200);
   const { jobs, more } = await ownerJobs(c, appId, set.id, {
     status: status ?? null,
+    review: review ?? null,
     cursor: c.req.query('cursor') ?? '',
     limit,
   });
   return c.json({ jobs, nextCursor: more ? jobs.at(-1)!.key : null });
 });
 
-/** One job as the list shows it, plus its whole input (the list has a 200-character preview) (#795). */
+/**
+ * One job as the list shows it, plus its whole input (the list has a 200-character preview) (#795)
+ * and every review the owner recorded on any of its versions, newest first (#791), from the audit
+ * log: `{ submissionId, status, note, by, at }`.
+ */
 generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs/:jobId', async (c) => {
   const appId = c.req.param('appId');
   await owner(c, appId);
@@ -706,10 +725,33 @@ generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs/:jobId', async (c
   const q = { status: null, cursor: '', limit: 1, jobId };
   const [job] = (await ownerJobs(c, appId, set.id, q)).jobs;
   if (!job) throw new HttpError(404, 'job not found');
-  const row = await c.env.DB.prepare('SELECT input FROM generation_jobs WHERE id = ?')
-    .bind(jobId)
-    .first<{ input: string }>();
-  return c.json({ job: { ...job, input: JSON.parse(row!.input) as { text: string } } });
+  const [row, history] = await Promise.all([
+    c.env.DB.prepare('SELECT input FROM generation_jobs WHERE id = ?')
+      .bind(jobId)
+      .first<{ input: string }>(),
+    c.env.DB.prepare(
+      `SELECT g.target, g.actor, u.github_login, g.detail, g.created_at FROM generation_audit g
+       LEFT JOIN users u ON u.id = g.actor
+       WHERE g.app_id = ?1 AND g.action = 'artifact.review'
+         AND g.target IN (SELECT id FROM generation_submissions WHERE job_id = ?2)
+       ORDER BY g.created_at DESC, g.id DESC`,
+    )
+      .bind(appId, jobId)
+      .all<{
+        target: string;
+        actor: string;
+        github_login: string | null;
+        detail: string;
+        created_at: number;
+      }>(),
+  ]);
+  const reviews = history.results.map((g) => ({
+    submissionId: g.target,
+    ...(JSON.parse(g.detail) as { status: string; note: string | null }),
+    by: g.github_login ?? g.actor,
+    at: g.created_at,
+  }));
+  return c.json({ job: { ...job, input: JSON.parse(row!.input) as { text: string }, reviews } });
 });
 
 generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
@@ -1041,8 +1083,6 @@ generationRoutes.put('/apps/:appId/generation/submissions/:submissionId/report',
   await autoBlock(c.env, appId, who.id);
   return c.json({ report });
 });
-
-const REVIEWS = ['reviewed', 'needs_changes'];
 
 /**
  * The owner's review of the job's current artifact (#787, #831), on a console session: `status`

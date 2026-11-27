@@ -306,6 +306,8 @@ export interface GenerationJobSummary {
 /** One job with its whole input (`getJob`). */
 export interface GenerationJobDetail extends GenerationJobSummary {
   input: { text: string };
+  /** Every review the owner recorded on any version of the job, newest first (#791). */
+  reviews: (GenerationReview & { submissionId: string })[];
 }
 
 /** A set with jobs the caller could claim now (`openWork`). */
@@ -391,10 +393,18 @@ export class Generation {
       .sets;
   }
 
-  /** A page of a set's jobs by key; pass `nextCursor` back as `cursor` for the next page. */
+  /**
+   * A page of a set's jobs by key; pass `nextCursor` back as `cursor` for the next page. `review`
+   * keeps the accepted jobs whose current version has that review (#787).
+   */
   async listJobs(
     setId: string,
-    opts: { status?: 'open' | 'accepted'; cursor?: string; limit?: number } = {},
+    opts: {
+      status?: 'open' | 'accepted';
+      review?: 'unreviewed' | GenerationReview['status'];
+      cursor?: string;
+      limit?: number;
+    } = {},
   ): Promise<{ jobs: GenerationJobSummary[]; nextCursor: string | null }> {
     const query = new URLSearchParams();
     for (const [name, value] of Object.entries(opts))

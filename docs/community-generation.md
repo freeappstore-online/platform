@@ -36,7 +36,8 @@ Each runner's history (Android, iOS, desktop, the console's Generate page) has *
 an optional note for every upload the device made; it is sent to `…/submissions/:id/report` and the
 owner sees it on that submission. In the Generation tab the owner listens to the accepted audio and
 marks that exact version **Reviewed** or **Needs changes** with a note (`…/artifacts/:jobId/review`,
-audited), or withdraws it. An artifact is shown as *Not reviewed* until then, and a version generated
+audited), or withdraws it. The jobs list filters by review, and **History** lists every review of every version of
+the job. An artifact is shown as *Not reviewed* until then, and a version generated
 again (after a withdrawal) is a new, unreviewed one: a review is never carried over. A review or report
 never publishes, withdraws or changes the manifest.
 
@@ -103,8 +104,8 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 | `PUT /apps/:appId/generation/artifacts/:jobId/review` | `{ submissionId, status: 'reviewed' \| 'needs_changes', note? }`; console session of the owner only | `{ review: { status, note, by, at } }`; `409` when `submissionId` is no longer the job's artifact |
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
 | `GET /apps/:appId/generation/sets` | | `{ sets: [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }] }`, newest first |
-| `GET /apps/:appId/generation/sets/:setId/jobs?status=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
-| `GET /apps/:appId/generation/sets/:setId/jobs/:jobId` | | `{ job: { ...as listed, input: { text } } }`, the whole input |
+| `GET /apps/:appId/generation/sets/:setId/jobs?status=&review=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
+| `GET /apps/:appId/generation/sets/:setId/jobs/:jobId` | | `{ job: { ...as listed, input: { text }, reviews: [{ submissionId, status, note, by, at }] } }`: the whole input, and every review recorded on any version of the job, newest first, from the audit log |
 | `GET /apps/:appId/generation/review?setId=` | | `{ items: [{ jobId, setId, key, submissionId, url, metaUrl, bytes, durationMs, acceptedAt, contributor, report, inputPreview, inputChars }] }`: the review queue (#842), accepted artifacts not yet reviewed, those the device reported not good first, then unreported, then reported good, oldest first within each; at most 100 |
 | `GET /apps/:appId/generation/contributors` | | `{ autoBlockBelow, autoBlockMinJudged, contributors: [{ contributor, submissions, accepted, judged, good, goodRate, reviewed, needsChanges, reportedGood, reportedNotGood, blocked }] }`, most submissions first |
 | `PUT /apps/:appId/generation/settings` | `{ autoBlockBelow: 0-1 \| null }`; console session of the owner only | `{ autoBlockBelow }`; audited |
@@ -122,7 +123,8 @@ Set counts: `open` and `accepted` count jobs by status, `leased` live leases, an
 and `withdrawn` submissions (`withdrawn`: rejected because the owner withdrew the artifact or blocked
 its contributor; `rejected` excludes those).
 
-Jobs are ordered by key. `status` is `open` or `accepted`; `limit` is 50 by default, at most 200; pass
+Jobs are ordered by key. `status` is `open` or `accepted`; `review` keeps the accepted jobs whose current version is
+`unreviewed`, `reviewed` or `needs_changes`; `limit` is 50 by default, at most 200; pass
 `nextCursor` (the page's last key, `null` on the last page) as `cursor`. `inputPreview` is the first 200
 characters of the text and `inputChars` its length. `artifact` is `null` or `{ url, submissionId,
 durationMs, bytes, contributor, acceptedAt, review }` (`url` as in the manifest; `review` is `{ status,

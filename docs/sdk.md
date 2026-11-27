@@ -449,10 +449,10 @@ await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Call me I
 await fas.generation.withdraw(jobId);           // the job reopens
 await fas.generation.blockContributor(userId);  // withdraws everything they contributed
 const sets = await fas.generation.listSets();   // [{ ...set, createdAt, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }]
-const { jobs, nextCursor } = await fas.generation.listJobs(set.id, { status: 'accepted', cursor, limit: 50 });
+const { jobs, nextCursor } = await fas.generation.listJobs(set.id, { status: 'accepted', cursor, limit: 50 }); // review: 'unreviewed' | 'reviewed' | 'needs_changes' filters by the current version's review
 // jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact: { url, submissionId, durationMs, bytes, contributor, acceptedAt, review } | null, submissions: [{ ..., report, record }], attempts }]
 await fas.generation.review(jobId, artifact.submissionId, 'needs_changes', 'mumbles in the second sentence'); // or 'reviewed'; the owner's console session only; 409 once the artifact is another version
-const job = await fas.generation.getJob(set.id, jobId); // one job as listed, plus its whole input: { ..., input: { text } }
+const job = await fas.generation.getJob(set.id, jobId); // one job as listed, plus its whole input and review history: { ..., input: { text }, reviews: [{ submissionId, status, note, by, at }] }
 
 // Contributor: claim → generate → submit until there is no work
 const controller = new AbortController();

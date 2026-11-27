@@ -688,6 +688,28 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
         detail: JSON.stringify({ status: 'needs_changes', note }),
       },
     ]);
+    // Filter by review (#787); the history (#791) keeps every review of every version, newest first.
+    const byReview = async (r: string) =>
+      ((await (await s.request(`/sets/${setId}/jobs?review=${r}`)).json()) as Judged).jobs.length;
+    expect([
+      await byReview('needs_changes'),
+      await byReview('reviewed'),
+      await byReview('unreviewed'),
+    ]).toEqual([1, 0, 0]);
+    expect((await s.request(`/sets/${setId}/jobs?review=great`)).status).toBe(400);
+    await review({ submissionId, status: 'reviewed' });
+    const history = async () =>
+      (
+        (await (await s.request(`/sets/${setId}/jobs/${job.id}`)).json()) as {
+          job: { reviews: unknown[] };
+        }
+      ).job.reviews;
+    expect(await history()).toEqual([
+      { submissionId, status: 'reviewed', note: null, by: 'alice', at: expect.any(Number) },
+      { submissionId, status: 'needs_changes', note, by: 'alice', at: expect.any(Number) },
+    ]);
+    expect((await s.request(`/sets/${setId}/jobs/${job.id}`, { user: 'u2' })).status).toBe(403);
+    await review({ submissionId, status: 'needs_changes', note });
     // A review changes nothing public.
     const manifest = await (await s.request(`/sets/${setId}/manifest`, { user: null })).json();
     expect((manifest as { artifacts: unknown[] }).artifacts).toHaveLength(1);
@@ -703,6 +725,12 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
       expect.objectContaining({ submissionId: next.submissionId, review: null }),
     );
     expect((await review(reviewed)).status).toBe(409);
+    expect(await byReview('unreviewed')).toBe(1);
+    expect((await history()).map((r) => (r as { submissionId: string }).submissionId)).toEqual([
+      submissionId,
+      submissionId,
+      submissionId,
+    ]);
   });
 
   it('review queue, contributor good rates and the owner-set auto-block (#842)', async () => {
@@ -1089,7 +1117,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
     expect(r.status).toBe(200);
     const { job: one } = (await r.json()) as { job: Listed['jobs'][number] & { input: unknown } };
     const [listed] = ((await (await s.request(`/sets/${setId}/jobs`)).json()) as Listed).jobs;
-    expect(one).toEqual({ ...listed, input: { text } });
+    expect(one).toEqual({ ...listed, input: { text }, reviews: [] });
   });
 
   it('discovery shows what the caller could claim, under the claim rules', async () => {
