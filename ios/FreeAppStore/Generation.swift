@@ -290,9 +290,24 @@ enum GenerationPolicy {
         case "model", "format", "input", "params", "language", "max_bytes": "unsupported"
         case "lease_expired": leaseRevoked ? "lease_403" : "lease_cap"
         case "too_large", "user_stop", "thermal", "background_expired", "unplugged", "network": local
-        case "opted_out": "user_stop"
+        // A condition that failed (#830) is an interruption (#841), named after what it is about.
+        case "battery_low", "low_power": "unplugged"
+        case "no_network", "mobile_data", "data_cap": "network"
+        case "opted_out", "off", "quiet_hours", "daily_max": "user_stop"
         default: "other"
         }
+    }
+
+    /// Local reasons of a job this phone stopped part-way rather than refused or failed (#841): the server gives such a
+    /// job back, and this phone takes it again. Never one it uploaded.
+    static let interrupted: Set<String> = ["user_stop", "opted_out", "stopped", "background_expired", "unplugged", "thermal", "network",
+                                           "interrupted", "lease_expired", "left_app", "battery_low", "low_power", "no_network",
+                                           "mobile_data", "data_cap", "off", "quiet_hours", "daily_max"]
+
+    /// Whether this phone may take a job on its record again when the server offers it (#841).
+    static func retryable(_ row: Contribution) -> Bool {
+        ["skipped", "failed", "generating"].contains(row.status) && row.submissionId.isEmpty
+            && (row.status == "generating" || interrupted.contains(row.reason))
     }
 
     /// The #813 end reason of an attempt that failed with `error` during `stage`.
@@ -428,23 +443,32 @@ final class Contributor {
     private let sentence: (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void
     private let probes: DeviceProbes
     private let audio: AttemptAudio?
+    private let condition: () -> String?
+    private let rest: Duration
+    private let uploaded: (Int64) -> Void
     private static let logger = Logger(subsystem: "online.freeappstore.companion", category: "contribute")
     /// Whether the last `run` left no job to claim (#836): every app left the rotation finding no open job (or turned off,
     /// or no longer claiming). False once an app left after a job it did not submit, such as one whose lease ran out, so
     /// jobs may be left.
     private(set) var drained = true
+    /// The condition that ended the last `run` (#830), its local reason, or nil.
+    private(set) var paused: String?
 
     /// `stopReason` names why `keepGoing` turned false, for the record. While `hot()` (the phone is too warm) the work
     /// waits between sentences and before claiming, checking every `coolDown` and keeping the lease alive, then goes on.
-    /// Each attempt is measured with `probes` (#827); its audio is kept in `audio` when given.
+    /// Each attempt is measured with `probes` (#827); its audio is kept in `audio` when given. `pause` names a condition
+    /// that failed (#830), checked before each claim and between sentences: a job in hand then stops, unless nearly done.
+    /// `rest` is waited after each sentence; `uploaded` hears of each upload's bytes.
     init(client: GenerationClient, log: ContributionLog, synth: Synthesizer, encoder: @escaping (URL, Int) throws -> AudioSink, workDir: URL,
          attestation: Attestation = .none, now: @escaping () -> Int64 = CompanionRepository.now,
          stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }, coolDown: Duration = .seconds(10),
          retry: NetworkRetry = NetworkRetry(), sentence: @escaping (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void = { _, _, _ in },
-         probes: DeviceProbes = DeviceProbes(), audio: AttemptAudio? = nil) {
+         probes: DeviceProbes = DeviceProbes(), audio: AttemptAudio? = nil, pause: @escaping () -> String? = { nil }, rest: Duration = .zero,
+         uploaded: @escaping (Int64) -> Void = { _ in }) {
         self.client = client; self.log = log; self.synth = synth; self.encoder = encoder; self.workDir = workDir
         self.attestation = attestation; self.now = now; self.stopReason = stopReason; self.hot = hot; self.coolDown = coolDown
         self.retry = retry; self.sentence = sentence; self.probes = probes; self.audio = audio
+        self.condition = pause; self.rest = rest; self.uploaded = uploaded
     }
 
     /// Takes one job from each app in turn (#819), so every app moves forward, until none has a job left or `keepGoing`
@@ -457,9 +481,11 @@ final class Contributor {
         var submitted = 0
         var rotation = apps
         drained = true
-        while !rotation.isEmpty && keepGoing() && mayClaim() {
+        paused = nil
+        while !rotation.isEmpty && keepGoing() && mayClaim() && paused == nil {
             for app in rotation {
                 if !mayClaim() { break }
+                if let reason = condition() { paused = reason; drained = false; break }
                 let go = { keepGoing() && optedIn(app) }
                 var stays = false
                 while hot() && go() { try await Task.sleep(for: coolDown) }
@@ -474,7 +500,7 @@ final class Contributor {
                     }
                 }
                 if !stays { rotation.removeAll { $0 == app } }
-                if !keepGoing() { break }
+                if !keepGoing() || paused != nil { break }
             }
         }
         return submitted
@@ -516,7 +542,7 @@ final class Contributor {
         try log.record(started)
         do {
             guard let (narrated, durationMs) = try await narrate(job, file, lease, keepGoing, meter) else {
-                let reason = keepGoing() ? "lease_expired" : stopped()
+                let reason = keepGoing() ? paused ?? "lease_expired" : stopped()
                 meter.reason = GenerationPolicy.endReason(reason, leaseRevoked: lease.revoked)
                 try log.record(row("skipped", reason))
                 return false
@@ -552,6 +578,7 @@ final class Contributor {
                 }
             }
             try log.updateStatus(job.id, status: "pending", reason: "", submissionId: submissionId, durationMs: nil, input: nil, report: nil)
+            uploaded(bytes)
             meter.reason = "submitted"
             return true
         } catch is RetryStopped {
@@ -612,6 +639,12 @@ final class Contributor {
                 sentence(i + 1, sentences.count, Double(length) / Double(rate))
                 progress(job, meter, lease, done: i + 1, total: sentences.count)
             }
+            // A failed condition (#830) stops the job unless it is nearly done; the run then claims nothing more.
+            if let reason = condition() {
+                paused = reason
+                if !ContributeConditions.nearlyDone(i, sentences.count) { return nil }
+            }
+            if i > 0 && rest > .zero { try await Task.sleep(for: rest) }
             while hot() && keepGoing() && lease.held {
                 try await lease.renew()
                 try await Task.sleep(for: coolDown)

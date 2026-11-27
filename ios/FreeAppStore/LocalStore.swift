@@ -442,19 +442,47 @@ final class LocalStore: @unchecked Sendable {
         set { try? setSetting("modelWanted", newValue ? "1" : "0") }
     }
 
-    /// Background runs wait for external power (#820). On by default.
-    var chargingOnly: Bool {
-        get { setting("chargingOnly") != "0" }
-        set { try? setSetting("chargingOnly", newValue ? "1" : "0") }
+    /// The mode and conditions (#830). Before they existed the only one was `chargingOnly` (#820), which carries over.
+    var contributePrefs: ContributePrefs {
+        get {
+            if let raw = setting("contributePrefs"), let prefs = try? JSONDecoder().decode(ContributePrefs.self, from: Data(raw.utf8)) { return prefs }
+            var prefs = ContributePrefs()
+            prefs.chargingOnly = setting("chargingOnly") != "0"
+            return prefs
+        }
+        set { try? setSetting("contributePrefs", String(decoding: (try? JSONEncoder().encode(newValue)) ?? Data(), as: UTF8.self)) }
     }
 
-    /// Newest first; only `jobId`'s row when given.
-    func contributions(limit: Int = 30, jobId: String? = nil) throws -> [Contribution] {
+    /// Mobile data Contribute used this month (#830): the model download and uploads, counted on this phone. A new month
+    /// starts again from 0.
+    func cellularBytes(month: String) -> Int64 {
+        setting("cellularMonth") == month ? Int64(setting("cellularBytes") ?? "") ?? 0 : 0
+    }
+
+    func addCellular(_ bytes: Int64, month: String) {
+        lock.lock(); defer { lock.unlock() }
+        let used = cellularBytes(month: month)
+        try? setSetting("cellularMonth", month)
+        try? setSetting("cellularBytes", String(used + max(bytes, 0)))
+    }
+
+    /// The overnight summary (#844): it covers work since `summaryFrom`, and is due at `summaryAt` (ms epoch, 0 for none).
+    var summaryFrom: Int64 {
+        get { Int64(setting("summaryFrom") ?? "") ?? 0 }
+        set { try? setSetting("summaryFrom", String(newValue)) }
+    }
+    var summaryAt: Int64 {
+        get { Int64(setting("summaryAt") ?? "") ?? 0 }
+        set { try? setSetting("summaryAt", String(newValue)) }
+    }
+
+    /// Newest first; only `jobId`'s row when given, only rows since `since` when given.
+    func contributions(limit: Int = 30, jobId: String? = nil, since: Int64 = 0) throws -> [Contribution] {
         try query("""
             SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, record, submission_id,
               report_good, report_note, reported_at FROM generation_jobs
-            WHERE ?1 IS NULL OR job_id = ?1 ORDER BY at DESC LIMIT ?2
-            """, [jobId ?? NSNull(), Int64(limit)]) { row in
+            WHERE (?1 IS NULL OR job_id = ?1) AND at >= ?3 ORDER BY at DESC LIMIT ?2
+            """, [jobId ?? NSNull(), Int64(limit), since]) { row in
             Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
                          key: String(cString: sqlite3_column_text(row, 2)), at: sqlite3_column_int64(row, 3),
                          status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)),
@@ -556,8 +584,10 @@ final class LocalStore: @unchecked Sendable {
 }
 
 extension LocalStore: ContributionLog {
+    /// A job this phone stopped part-way (#841) is not handled: the server gives it back only after such an interruption.
     func handled(_ jobId: String) -> Bool {
-        !((try? query("SELECT 1 FROM generation_jobs WHERE job_id = ?", [jobId], row: { _ in true })) ?? []).isEmpty
+        guard let row = try? contributions(limit: 1, jobId: jobId).first else { return false }
+        return !GenerationPolicy.retryable(row)
     }
 
     func record(_ contribution: Contribution) throws {

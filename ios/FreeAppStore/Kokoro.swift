@@ -240,8 +240,10 @@ final class KokoroSynthesizer: Synthesizer {
     private let files: KokoroModel
     private var tts: OpaquePointer?
     private var mandarin = false
+    /// sherpa-onnx threads, from the CPU setting (#830).
+    private let threads: Int
 
-    init(files: KokoroModel) { self.files = files }
+    init(files: KokoroModel, threads: Int = min(max(ProcessInfo.processInfo.activeProcessorCount, 1), 4)) { self.files = files; self.threads = threads }
 
     func accepts(_ params: [String: Any]) -> Bool { KokoroModel.params(params) != nil }
 
@@ -301,7 +303,7 @@ final class KokoroSynthesizer: Synthesizer {
         // in lexicon-zh character by character, longest phrase first (`lang` and the jieba `dict_dir` are ignored too).
         config.model.kokoro.lexicon = c(["lexicon-us-en.txt", "lexicon-zh.txt"].map { root.appendingPathComponent($0).path }.joined(separator: ","))
         config.model.kokoro.length_scale = 1
-        config.model.num_threads = Int32(min(max(ProcessInfo.processInfo.activeProcessorCount, 1), 4))
+        config.model.num_threads = Int32(threads)
         config.model.provider = c("cpu")
         config.max_num_sentences = 1
         config.silence_scale = 0.2

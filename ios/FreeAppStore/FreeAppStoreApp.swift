@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UserNotifications
 
 @main
 struct FreeAppStoreApp: App {
@@ -11,7 +12,7 @@ struct FreeAppStoreApp: App {
 }
 
 @MainActor
-final class AppDelegate: NSObject, UIApplicationDelegate {
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let model = CompanionModel()
     let catalogue = CatalogueStore()
 
@@ -21,6 +22,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // collection is not paused and an app still has a grant.
         model.collector.evaluate()
         model.contribute.register()
+        UNUserNotificationCenter.current().delegate = self
         return true
+    }
+
+    /// The overnight summary (#844) opens Contribute's Activity.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        guard response.notification.request.identifier == ContributeRunner.summaryId else { return }
+        await MainActor.run { model.showActivity = true }
     }
 }

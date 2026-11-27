@@ -44,7 +44,10 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     @Published private(set) var todayCounts: [String: Int] = [:]
     /// Open jobs this phone could take now, by app, from discovery; empty until loaded.
     @Published private(set) var openJobs: [String: Int] = [:]
-    @Published private(set) var chargingOnly = true
+    /// The mode and conditions (#830).
+    @Published private(set) var prefs = ContributePrefs()
+    /// Opens Contribute's Activity, from the overnight summary (#844).
+    @Published var showActivity = false
     /// `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself.
     @Published var linkedContribute: String?
     private var error = ""
@@ -94,7 +97,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         let today = SharingTimeline.today().lowerBound
         contributedToday = Dictionary(uniqueKeysWithValues: contributeApps.map { ($0, (try? local.contributedSince($0, from: today)) ?? 0) })
         todayCounts = (try? local.contributionCounts(since: today)) ?? [:]
-        chargingOnly = local.chargingOnly
+        prefs = local.contributePrefs
         message = error.isEmpty ? local.message : error
     }
 
@@ -187,6 +190,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         do {
             try local.setContributing(appId, on)
             if on && !contribute.kokoro.installed { local.modelWanted = true }
+            if on { contribute.askForSummaryPermission() }
         } catch { self.error = error.localizedDescription }
         contribute.schedule(); refresh()
     }
@@ -213,7 +217,10 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     func loadOpenJobs() async {
         if let counts = try? await contribute.openJobs() { openJobs = counts }
     }
-    func setChargingOnly(_ on: Bool) { local.chargingOnly = on; contribute.schedule(); refresh() }
+    func setPrefs(_ prefs: ContributePrefs) {
+        if prefs.summary && !self.prefs.summary { contribute.askForSummaryPermission() }
+        contribute.apply(prefs); refresh()
+    }
     func stopContributing() { contribute.stop(); refresh() }
 
     func enable(_ app: ConnectedApp) {
@@ -299,6 +306,7 @@ struct ContentView: View {
             } else { model.resignActive() }
         }
         .onOpenURL { model.handle($0) }
+        .onChange(of: model.showActivity) { _, show in if show { tab = .contribute } }
         .sheet(item: $model.consent) { app in disclosure(app) }
         .contributeAlert(name: model.linkedContribute.map(catalogue.name) ?? "", isPresented: Binding(
             get: { model.signedIn && model.linkedContribute != nil },

@@ -17,7 +17,7 @@ final class ContributeTests: XCTestCase {
 
     final class FakeLog: ContributionLog {
         var rows: [String: Contribution] = [:]
-        func handled(_ jobId: String) -> Bool { rows[jobId] != nil }
+        func handled(_ jobId: String) -> Bool { rows[jobId].map { !GenerationPolicy.retryable($0) } ?? false }
         func record(_ contribution: Contribution) { rows[contribution.jobId] = contribution }
         func updateStatus(_ jobId: String, status: String, reason: String, submissionId: String?, durationMs: Int64?, input: String?,
                           report: SubmissionReport?) {
@@ -896,16 +896,22 @@ final class ContributeTests: XCTestCase {
         XCTAssertTrue(ContributeFilter.all.shows("failed"))
         XCTAssertFalse(ContributeFilter.accepted.shows("pending"))
         func state(running: Bool = false, cooling: Bool = false, hasApps: Bool = true, model: ModelState = .installed, lastStop: String? = nil,
-                   charging: Bool = true) -> (title: String, why: String) {
+                   charging: Bool = true, pause: ContributePause? = nil) -> (title: String, why: String) {
             ContributeText.state(running: running, cooling: cooling, downloading: false, hasApps: hasApps, model: model, lastStop: lastStop,
-                                 charging: charging, chargingOnly: true)
+                                 pause: pause, charging: charging)
         }
         XCTAssertEqual(state(running: true).title, "Running")
         XCTAssertEqual(state(running: true, cooling: true).title, "Paused")
         XCTAssertEqual(state(hasApps: false).title, "Idle")
         XCTAssertEqual(state(model: .waiting).title, "Waiting")
         XCTAssertEqual(state(lastStop: "unplugged").why, "Stopped because the phone was unplugged.")
-        XCTAssertTrue(state(charging: false).why.hasPrefix("Waiting for the phone to charge"))
+        XCTAssertEqual(state(charging: false, pause: .unplugged).why, "Paused: not charging.")
+        // #830: Off says so plainly, whatever else holds; a failed condition says which.
+        XCTAssertEqual(state(hasApps: false, pause: .off).title, "Off")
+        XCTAssertEqual(state(pause: .off).why, "Contribute is off. It will not start again until you turn it on.")
+        XCTAssertEqual(state(pause: .battery(level: 28, min: 40)).why, "Paused: battery 28% (min 40%).")
+        XCTAssertEqual(state(pause: .noNetwork).title, "Waiting")
+        XCTAssertEqual(state(lastStop: "user_stop", pause: .mobileData).why, "Paused: on mobile data (Wi-Fi only).", "the condition now wins")
         XCTAssertTrue(state(charging: true).why.contains("iOS decides when background runs start"), "#836: says what iOS controls")
     }
 
@@ -926,6 +932,148 @@ final class ContributeTests: XCTestCase {
         _ = try await contributor.run(["books"], keepGoing: { true })
         XCTAssertEqual(log.rows["j2"]?.reason, "lease_expired")
         XCTAssertFalse(contributor.drained, "a job not done: jobs may be left")
+    }
+
+    /// #830: the conditions, decided on the phone. Defaults: Auto, Wi-Fi only, charging only, 40% minimum, pause when hot.
+    func testConditionsDecideWhenToRun() {
+        let p = ContributePrefs()
+        XCTAssertEqual([p.mode, p.cellular, p.chargingOnly, p.thermal, p.summary] as [AnyHashable], [ContributePrefs.Mode.auto, false, true, true, true])
+        XCTAssertEqual([p.minBattery, p.dailyJobs, p.dailyMinutes], [40, 0, 0])
+        XCTAssertEqual(p.cpu, .balanced)
+        let ok = DeviceNow(plugged: true, battery: 80, network: "wifi")
+        XCTAssertNil(ContributeConditions.pause(p, ok))
+        func with(_ change: (inout DeviceNow) -> Void, _ prefs: ContributePrefs = ContributePrefs()) -> ContributePause? {
+            var d = ok; change(&d); return ContributeConditions.pause(prefs, d)
+        }
+        var off = p; off.mode = .off
+        XCTAssertEqual(ContributeConditions.pause(off, ok), .off)
+        XCTAssertEqual(with { $0.network = "cellular" }, .mobileData)
+        XCTAssertEqual(with { $0.network = "none" }, .noNetwork)
+        var cellular = p; cellular.cellular = true; cellular.cellularCapMB = 100
+        XCTAssertNil(with({ $0.network = "cellular"; $0.cellularBytes = 99_000_000 }, cellular))
+        XCTAssertEqual(with({ $0.network = "cellular"; $0.cellularBytes = 100_000_000 }, cellular), .dataCap(capMB: 100))
+        XCTAssertEqual(with { $0.plugged = false }, .unplugged)
+        var battery = p; battery.chargingOnly = false
+        XCTAssertNil(with({ $0.plugged = false; $0.battery = 40 }, battery))
+        XCTAssertEqual(with({ $0.plugged = false; $0.battery = 28 }, battery), .battery(level: 28, min: 40))
+        XCTAssertNil(with({ $0.battery = 5 }, battery), "plugged in, the battery level does not matter")
+        XCTAssertEqual(with { $0.lowPower = true }, .lowPower)
+        XCTAssertEqual(with { $0.hot = true }, .hot)
+        var cool = p; cool.thermal = false
+        XCTAssertNil(with({ $0.hot = true }, cool))
+        XCTAssertEqual(with { $0.hot = true; $0.plugged = false }, .unplugged, "heat comes last: it only pauses a job in hand")
+        var daily = p; daily.dailyJobs = 10; daily.dailyMinutes = 30
+        XCTAssertNil(with({ $0.jobsToday = 9; $0.minutesToday = 29 }, daily))
+        XCTAssertEqual(with({ $0.jobsToday = 10 }, daily), .dailyJobs(10))
+        XCTAssertEqual(with({ $0.minutesToday = 30 }, daily), .dailyMinutes(30))
+        var quiet = p; quiet.quiet = true; quiet.quietFrom = 22; quiet.quietTo = 7
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "UTC")!
+        func at(_ hour: Int) -> Date { calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: hour))! }
+        XCTAssertEqual(with({ $0.calendar = calendar; $0.date = at(23) }, quiet), .quietHours(from: 22, to: 7))
+        XCTAssertEqual(with({ $0.calendar = calendar; $0.date = at(6) }, quiet), .quietHours(from: 22, to: 7))
+        XCTAssertNil(with({ $0.calendar = calendar; $0.date = at(7) }, quiet))
+        XCTAssertTrue(ContributeConditions.inQuietHours(from: 1, to: 5, hour: 3))
+        XCTAssertFalse(ContributeConditions.inQuietHours(from: 1, to: 5, hour: 5))
+        XCTAssertEqual(ContributeConditions.month(at(12), calendar: calendar), "2026-11")
+        XCTAssertTrue(ContributeConditions.nearlyDone(8, 10))
+        XCTAssertFalse(ContributeConditions.nearlyDone(7, 10))
+        XCTAssertEqual(ContributePrefs.effort(.light, cores: 6).threads, 1)
+        XCTAssertEqual(ContributePrefs.effort(.balanced, cores: 6).threads, 2)
+        XCTAssertEqual(ContributePrefs.effort(.full, cores: 6).threads, 4)
+        XCTAssertEqual(ContributePrefs.effort(.full, cores: 6).rest, .zero)
+        // Each condition stops a job with an interrupted end reason (#841), so the server gives the job back.
+        let interrupted = ["user_stop", "unplugged", "thermal", "background_expired", "network"]
+        for pause in [ContributePause.off, .quietHours(from: 1, to: 2), .dailyJobs(1), .dailyMinutes(1), .noNetwork, .mobileData,
+                      .dataCap(capMB: 1), .unplugged, .battery(level: 1, min: 2), .lowPower, .hot] {
+            XCTAssertTrue(interrupted.contains(GenerationPolicy.endReason(pause.reason)), pause.reason)
+            XCTAssertTrue(GenerationPolicy.interrupted.contains(pause.reason), pause.reason)
+        }
+        XCTAssertEqual(GenerationPolicy.endReason("mobile_data"), "network")
+        XCTAssertEqual(GenerationPolicy.endReason("battery_low"), "unplugged")
+    }
+
+    /// #830: a failed condition stops the job in hand (not uploaded, recorded with why) and nothing more is claimed.
+    func testAFailedConditionStopsTheJobUnlessNearlyDone() async throws {
+        server.jobs = [job("j1", text: "One. Two. Three. Four. Five."), job("j2")]
+        var condition: String?
+        synth.say = { text, _ in if text == "Two." { condition = "mobile_data" }; return Audio(samples: [0], sampleRate: 24_000) }
+        let submitted = try await Contributor(client: client, log: log, synth: synth, encoder: { try FakeSink($0, $1) }, workDir: dir,
+                                              now: { [now] in now }, pause: { condition }).run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"].map { [$0.status, $0.reason] }, ["skipped", "mobile_data"])
+        XCTAssertEqual(server.events.first?["reason"] as? String, "network", "#841: an interruption")
+        XCTAssertEqual(server.claimed, ["books"], "nothing more is claimed")
+
+        // Nearly done (four of five sentences): the job is finished and uploaded, then the run pauses.
+        log = FakeLog(); synth = FakeSynth(); condition = nil
+        server.jobs = [job("j3", text: "One. Two. Three. Four. Five."), job("j4")]
+        synth.say = { text, _ in if text == "Four." { condition = "unplugged" }; return Audio(samples: [0], sampleRate: 24_000) }
+        let finisher = Contributor(client: client, log: log, synth: synth, encoder: { try FakeSink($0, $1) }, workDir: dir,
+                                   now: { [now] in now }, pause: { condition })
+        let finished = try await finisher.run(["books"], keepGoing: { true })
+        XCTAssertEqual(finished, 1)
+        XCTAssertEqual(log.rows["j3"]?.status, "pending")
+        XCTAssertNil(log.rows["j4"], "not claimed")
+        XCTAssertEqual(finisher.paused, "unplugged")
+    }
+
+    /// #841: the server gives back a job this phone stopped part-way; the phone takes it again. One it refused, failed or
+    /// uploaded stays handled.
+    func testAJobThisPhoneStoppedIsTakenAgainWhenOffered() async throws {
+        for reason in ["user_stop", "background_expired", "interrupted", "unplugged", "mobile_data", "off"] {
+            XCTAssertTrue(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "skipped", reason: reason)), reason)
+        }
+        XCTAssertTrue(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "failed", reason: "network")))
+        XCTAssertFalse(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "skipped", reason: "params")))
+        XCTAssertFalse(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "failed", reason: "400 bad")))
+        XCTAssertFalse(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "uploading")))
+        XCTAssertFalse(GenerationPolicy.retryable(Contribution(jobId: "j", appId: "books", key: "k", at: 0, status: "rejected")))
+        log.record(Contribution(jobId: "j1", appId: "books", key: "book/j1", at: now, status: "skipped", reason: "interrupted"))
+        server.jobs = [job("j1")]
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(server.uploads.count, 1)
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+    }
+
+    /// #844: the overnight summary's text and when it is due.
+    func testOvernightSummary() {
+        var cpu = AttemptRecord(); cpu.cpuMs = 70 * 60_000
+        let rows = [Contribution(jobId: "a", appId: "books", key: "a", at: 0, status: "accepted", record: cpu),
+                    Contribution(jobId: "b", appId: "books", key: "b", at: 0, status: "pending"),
+                    Contribution(jobId: "c", appId: "books", key: "c", at: 0, status: "skipped", reason: "user_stop")]
+        XCTAssertEqual(ContributeSummary.text(rows), "Generated 2 clips, 1 accepted, 1 h 10 min CPU")
+        XCTAssertNil(ContributeSummary.text([rows[2]]), "nothing generated: no notification")
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(identifier: "UTC")!
+        let night = calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 2))!
+        let noon = calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 12))!
+        XCTAssertEqual(ContributeSummary.morning(after: night, calendar: calendar), calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 8)))
+        XCTAssertEqual(ContributeSummary.morning(after: noon, calendar: calendar), calendar.date(from: DateComponents(year: 2026, month: 11, day: 28, hour: 8)))
+        var wall = AttemptRecord(); wall.wallMs = 125 * 60_000
+        XCTAssertEqual(ContributeConditions.usage(rows + [Contribution(jobId: "d", appId: "books", key: "d", at: 0, status: "skipped", record: wall)]).jobs, 2)
+        XCTAssertEqual(ContributeConditions.usage([Contribution(jobId: "d", appId: "books", key: "d", at: 0, status: "skipped", record: wall)]).minutes, 125)
+    }
+
+    /// #843: Share record writes every field of the row and its attempt record, and adds the kept audio.
+    func testShareRecordHasEveryFieldAndTheAudio() throws {
+        var record = AttemptRecord(reason: "submitted", device: "iPhone16,1", cpuMs: 900)
+        record.sentencesTotal = 3
+        let row = Contribution(jobId: "j1", appId: "books", key: "book/1", at: 5, status: "accepted", input: "Hi.", setId: "s1", durationMs: 1_000,
+                               bytes: 2_000, record: record, submissionId: "sub-1", report: SubmissionReport(good: true, note: nil, at: 6))
+        let kept = AttemptAudio(dir: dir.appendingPathComponent("kept"))
+        let file = dir.appendingPathComponent("a.m4a")
+        try Data([1, 2]).write(to: file)
+        try kept.save("j1", file: file, segments: [])
+        let urls = ContributionDetailView.share(row, appName: "Books", kept: kept)
+        XCTAssertEqual(urls.map(\.lastPathComponent), ["j1.json", "j1.m4a"])
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: urls[0])) as? [String: Any])
+        XCTAssertEqual(Set(json.keys), ["jobId", "appId", "appName", "key", "at", "status", "reason", "input", "setId", "durationMs", "bytes",
+                                        "submissionId", "record", "report"])
+        let attempt = try XCTUnwrap(json["record"] as? [String: Any])
+        XCTAssertEqual(attempt["device"] as? String, "iPhone16,1")
+        XCTAssertEqual(attempt["sentencesTotal"] as? Int, 3, "device-only fields are in the shared record")
+        XCTAssertEqual((json["report"] as? [String: Any])?["good"] as? Bool, true)
     }
 
     func testParsesIsoLeaseExpiryAndRejectsOddJobIds() throws {
@@ -1147,13 +1295,44 @@ final class ContributionStoreTests: XCTestCase {
         try local.closeInterrupted()
         XCTAssertEqual(try local.contributions(limit: 1, jobId: "j4").first.map { [$0.status, $0.reason] }, ["skipped", "interrupted"])
         XCTAssertEqual(try local.contributions(limit: 1, jobId: "j3").first?.status, "accepted")
-        XCTAssertTrue(local.chargingOnly)
-        local.chargingOnly = false
-        XCTAssertFalse(local.chargingOnly)
+        XCTAssertEqual(local.contributePrefs, ContributePrefs())
         try local.clear() // Disconnect
         XCTAssertFalse(local.handled("j1"))
         XCTAssertEqual(local.contributeApps(), [])
         XCTAssertFalse(local.modelWanted)
+    }
+
+    /// #830: "Only while charging" turned off before the conditions existed carries over; the rest take their defaults.
+    /// Off and the other settings survive a relaunch; mobile data is counted per month.
+    func testMigratesChargingOnlyAndKeepsTheConditions() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(directory.appendingPathComponent(LocalStore.fileName).path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, """
+            CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            INSERT INTO settings VALUES ('chargingOnly', '0');
+            """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let local = try LocalStore(directory: directory)
+        var expected = ContributePrefs()
+        expected.chargingOnly = false
+        XCTAssertEqual(local.contributePrefs, expected)
+        expected.mode = .off; expected.dailyJobs = 50
+        local.contributePrefs = expected
+        local.addCellular(3_000_000, month: "2026-11")
+        local.addCellular(2_000_000, month: "2026-11")
+        local.close()
+        let reopened = try LocalStore(directory: directory)
+        defer { reopened.close() }
+        XCTAssertEqual(reopened.contributePrefs, expected, "Off survives a relaunch")
+        XCTAssertEqual(reopened.cellularBytes(month: "2026-11"), 5_000_000)
+        XCTAssertEqual(reopened.cellularBytes(month: "2026-12"), 0, "a new month starts again")
+        reopened.addCellular(1_000_000, month: "2026-12")
+        XCTAssertEqual(reopened.cellularBytes(month: "2026-12"), 1_000_000)
+        // A newer field missing from what an older app saved takes its default.
+        XCTAssertEqual(try JSONDecoder().decode(ContributePrefs.self, from: Data(#"{"mode":"off"}"#.utf8)).minBattery, 40)
     }
 
     /// #820: a record kept since #733 gains Activity's columns and keeps its rows.

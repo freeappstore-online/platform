@@ -2,6 +2,7 @@ import BackgroundTasks
 import Foundation
 import OSLog
 import UIKit
+import UserNotifications
 
 /// Contribute (#733), the iOS counterpart of the Android ContributeWorker: downloads the voice model when asked, then
 /// works through the opted-in apps' open jobs, one app at a time in turn. Runs as a BGProcessingTask, which iOS starts
@@ -11,7 +12,9 @@ import UIKit
 /// (#828). The server refuses a claim once the day's contribution limit is reached; the run then ends. Each run logs how
 /// it ended. iOS alone decides when a background run starts and how long it lasts (#836): this asks for the next one
 /// straight away when a run ends with jobs left and when the phone is plugged in while the app runs, otherwise in 15
-/// minutes.
+/// minutes. The mode and conditions (#830) are this phone's: Off cancels every request until turned on again; in Auto a
+/// background run checks the conditions before each claim and between sentences, and stops the job in hand (unless nearly
+/// done) when one fails. Run now ignores them, apart from pausing while hot.
 @MainActor
 final class ContributeRunner: ObservableObject {
     static let taskId = "online.freeappstore.companion.contribute"
@@ -33,7 +36,11 @@ final class ContributeRunner: ObservableObject {
     @Published private(set) var downloaded: Double?
     /// Why the last run stopped before it ran out of work (a `StopFlag` reason), until the next run starts. In memory only.
     @Published private(set) var lastStop: String?
+    /// The run in hand is the background task, not Run now.
+    @Published private(set) var background = false
     let kokoro: KokoroModel
+    /// The phone's power and network, for the conditions.
+    let watch: DeviceWatch
     private let repository: CompanionRepository
     private let client: GenerationClient
     private var stopFlag: StopFlag?
@@ -44,6 +51,7 @@ final class ContributeRunner: ObservableObject {
     init(repository: CompanionRepository, kokoro: KokoroModel = KokoroModel(), api: FasApi = FasApi(resourceTimeout: 600)) {
         self.repository = repository
         self.kokoro = kokoro
+        watch = DeviceWatch()
         client = GenerationClient(api: api, credential: { [repository] in repository.token() })
     }
 
@@ -53,7 +61,6 @@ final class ContributeRunner: ObservableObject {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskId, using: .main) { [weak self] task in
             MainActor.assumeIsolated { self?.handle(task as! BGProcessingTask) }
         }
-        UIDevice.current.isBatteryMonitoringEnabled = true
         NotificationCenter.default.addObserver(forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, Self.pluggedIn, !self.running else { return }
@@ -76,23 +83,50 @@ final class ContributeRunner: ObservableObject {
         }
     }
 
-    /// Asks iOS for a background run while paired with something to do: an app opted in, or the model asked for. `soon`
-    /// (a Run now cut short by leaving the app, #819) asks for it as soon as iOS allows rather than in 15 minutes; it
-    /// still needs external power and a network connection.
+    /// Asks iOS for a background run while paired with something to do (an app opted in, or the model asked for) and not
+    /// Off (#830). `soon` (a Run now cut short by leaving the app, #819) asks for it as soon as iOS allows rather than in 15
+    /// minutes; it still needs a network connection, and external power unless the conditions allow battery.
     func schedule(soon: Bool = false) {
         let todo = !local.contributeApps().isEmpty || (local.modelWanted && !kokoro.installed)
-        guard repository.token() != nil, todo else {
+        let prefs = local.contributePrefs
+        guard repository.token() != nil, todo, prefs.mode != .off else {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskId)
             return
         }
         let request = BGProcessingTaskRequest(identifier: Self.taskId)
-        request.requiresExternalPower = local.chargingOnly
+        request.requiresExternalPower = prefs.chargingOnly
         request.requiresNetworkConnectivity = true
         request.earliestBeginDate = soon ? nil : Date(timeIntervalSinceNow: 15 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
 
+    /// Saves the mode and conditions (#830). Off stops the job in hand and cancels the background request; nothing starts
+    /// again until it is turned on.
+    func apply(_ prefs: ContributePrefs) {
+        local.contributePrefs = prefs
+        if prefs.mode == .off { stopFlag?.stop("off") }
+        if !prefs.summary { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [Self.summaryId]) }
+        schedule()
+    }
+
+    /// Mobile data used this month, MB (#830).
+    func cellularMB() -> Int64 { local.cellularBytes(month: ContributeConditions.month(Date())) / 1_000_000 }
+
+    /// Why Contribute would not run in the background now (#830), or nil when every condition holds.
+    func pause() -> ContributePause? {
+        let prefs = local.contributePrefs
+        var now = watch.now(hot: DeviceWatch.hot)
+        let rows = (try? local.contributions(limit: 100_000, since: SharingTimeline.today().lowerBound)) ?? []
+        (now.jobsToday, now.minutesToday) = ContributeConditions.usage(rows)
+        now.cellularBytes = local.cellularBytes(month: ContributeConditions.month(now.date))
+        return ContributeConditions.pause(prefs, now)
+    }
+
     private func handle(_ task: BGProcessingTask) {
+        guard local.contributePrefs.mode != .off else { // a request left from before Off
+            task.setTaskCompleted(success: true)
+            return
+        }
         schedule() // the next one
         let flag = StopFlag()
         task.expirationHandler = { flag.stop("background_expired") }
@@ -100,6 +134,7 @@ final class ContributeRunner: ObservableObject {
             // A Run now that just lost the foreground ends at its next sentence; this run then takes over.
             while running && !flag.stopped { try? await Task.sleep(for: .seconds(1)) }
             if await run(flag, background: true) { schedule(soon: true) } // jobs left (#836): as soon as iOS allows
+            await summarize()
             task.setTaskCompleted(success: !flag.stopped)
         }
     }
@@ -109,6 +144,8 @@ final class ContributeRunner: ObservableObject {
     /// for straight away (#819), so the work goes on once the phone is charging.
     func runNow() {
         guard !running else { return }
+        var prefs = local.contributePrefs
+        if prefs.mode == .off { prefs.mode = .auto; apply(prefs) } // Run now turns Off back to Auto
         let flag = StopFlag()
         let id = Box(UIBackgroundTaskIdentifier.invalid)
         id.value = UIApplication.shared.beginBackgroundTask(withName: "Contribute") {
@@ -161,6 +198,7 @@ final class ContributeRunner: ObservableObject {
     private func run(_ flag: StopFlag, background: Bool, mayClaim: @escaping () -> Bool = { true }) async -> Bool {
         guard stopFlag == nil, repository.token() != nil else { return false }
         stopFlag = flag
+        self.background = background
         lastError = ""
         lastStop = nil
         // No job is in progress outside a run (#835): one left `generating` is closed as interrupted, now and at the end.
@@ -170,51 +208,73 @@ final class ContributeRunner: ObservableObject {
         var submitted = 0
         var failed: String?
         var drained = true
-        func end() -> String { flag.reason ?? failed ?? (mayClaim() ? "no_work" : "left_app") }
+        var paused: String? // the condition that ended the run (#830)
+        func end() -> String { flag.reason ?? failed ?? paused ?? (mayClaim() ? "no_work" : "left_app") }
         defer {
             let reason = end()
             Self.logger.notice("Run ended: \(reason, privacy: .public) · \(submitted) submitted (\(background ? "background task" : "run now", privacy: .public), \(Int(Date().timeIntervalSince(began))) s)")
         }
-        defer { stopFlag = nil; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason }
-        // A background run asked for external power: unplugging stops it (iOS would end it soon anyway).
-        UIDevice.current.isBatteryMonitoringEnabled = true
-        let unplugged = background && local.chargingOnly ? NotificationCenter.default.addObserver(
-            forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { _ in
-            if UIDevice.current.batteryState == .unplugged { flag.stop("unplugged") }
-        } : nil
-        defer { unplugged.map(NotificationCenter.default.removeObserver) }
+        defer { stopFlag = nil; self.background = false; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason ?? paused }
         let keepGoing: () -> Bool = { !flag.stopped }
+        let prefs = local.contributePrefs
+        // The conditions (#830), in the background only: Run now ignores them. Heat is left to `hot`, which waits.
+        let store = self.local
+        let watch = self.watch
+        let usage = Box((jobs: 0, minutes: 0, at: Date.distantPast))
+        let pause: () -> String? = background ? {
+            var now = watch.now(hot: false)
+            if Date().timeIntervalSince(usage.value.at) > 30 { // today's usage, read at most every 30 s
+                let rows = (try? store.contributions(limit: 100_000, since: SharingTimeline.today().lowerBound)) ?? []
+                let (jobs, minutes) = ContributeConditions.usage(rows)
+                usage.value = (jobs, minutes, Date())
+            }
+            (now.jobsToday, now.minutesToday) = (usage.value.jobs, usage.value.minutes)
+            now.cellularBytes = store.cellularBytes(month: ContributeConditions.month(now.date))
+            return ContributeConditions.pause(prefs, now)?.reason
+        } : { nil }
+        if let reason = pause() { // nothing to do until it holds; the next request is already in
+            paused = reason
+            return false
+        }
+        // Mobile data counted on this phone (#830): the model download and uploads.
+        let cellular: (Int64) -> Void = { bytes in
+            if watch.path.type == "cellular" { store.addCellular(bytes, month: ContributeConditions.month(Date())) }
+        }
+        // While a Run now is on screen, "run slower" uses the Light setting.
+        let effort = ContributePrefs.effort(!background && prefs.inUse == .slower ? .light : prefs.cpu)
         // Best effort: while the phone is hot (thermal state serious or critical) the work waits, and goes on once it is
-        // back to fair or nominal.
+        // back to fair or nominal; unless the thermal condition is turned off.
         let hot: () -> Bool = { [weak self] in
-            let hot = ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue
+            let hot = prefs.thermal && DeviceWatch.hot
             Task { @MainActor in if self?.cooling != hot { self?.cooling = hot } }
             return hot
         }
         do {
             if local.modelWanted && !kokoro.installed {
                 status = "Downloading the voice model"
-                _ = try await kokoro.install(cellular: !background, progress: { bytes in
+                let counted = Box(Int64(0))
+                _ = try await kokoro.install(cellular: !background || prefs.cellular, progress: { bytes in
+                    cellular(bytes - counted.value)
+                    counted.value = bytes
                     Task { @MainActor in
                         self.status = "Downloading the voice model · \(bytes * 100 / KokoroModel.downloadBytes)%"
                         self.downloaded = min(Double(bytes) / Double(KokoroModel.downloadBytes), 1)
                     }
-                }, keepGoing: keepGoing)
+                }, keepGoing: { keepGoing() && pause() == nil })
                 downloaded = nil
             }
             let apps = local.contributeApps().sorted()
             guard kokoro.installed, !apps.isEmpty else { return false }
             status = "Looking for jobs"
-            let synth = KokoroSynthesizer(files: kokoro)
+            let synth = KokoroSynthesizer(files: kokoro, threads: effort.threads)
             defer { synth.close() }
-            let local = self.local
             for app in apps {
                 if !keepGoing() { break }
                 do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
             }
             let started = Box(Date())
             let (path, appState) = (NetworkPath(), AppBackground()) // what each attempt's record says of the phone (#827)
-            let contributor = Contributor(client: client, log: local, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
+            let contributor = Contributor(client: client, log: store, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
                                           workDir: FileManager.default.temporaryDirectory, stopReason: { flag.reason ?? "stopped" }, hot: hot,
                                           sentence: { done, total, audio in
                 let elapsed = Date().timeIntervalSince(started.value)
@@ -222,12 +282,14 @@ final class ContributeRunner: ObservableObject {
                     self.sentences = (done, total)
                     self.speed = done > 0 && elapsed > 0 ? audio / elapsed : nil
                 }
-            }, probes: .phone(path: path, background: { background || appState.now }), audio: AttemptAudio(dir: AttemptAudio.defaultDirectory))
-            submitted = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }, mayClaim: mayClaim) { app, job in
+            }, probes: .phone(path: path, background: { background || appState.now }), audio: AttemptAudio(dir: AttemptAudio.defaultDirectory),
+               pause: pause, rest: effort.rest, uploaded: cellular)
+            submitted = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { store.contributeApps().contains($0) }, mayClaim: mayClaim) { app, job in
                 started.value = Date()
                 Task { @MainActor in self.app = app; self.job = job.key; self.sentences = nil; self.speed = nil; self.status = "Generating \(job.key)" }
             }
             drained = contributor.drained
+            paused = contributor.paused
         } catch let failure as ApiFailure where failure.status == 401 {
             failed = "401"
             try? await repository.sync() // the connection expired: the sync marks it, and the expired card says so
@@ -239,8 +301,43 @@ final class ContributeRunner: ObservableObject {
     }
 }
 
-/// Set from an expiration handler, Stop or unplugging, read between sentences on the generating thread. The first reason
-/// is kept for the record: `user_stop`, `background_expired` or `unplugged`.
+// MARK: The overnight summary (#844)
+
+extension ContributeRunner {
+    nonisolated static let summaryId = "contribute-summary"
+
+    /// After background work: one quiet notification, due the next morning at 8, saying what was done since the last one
+    /// was shown. Each background run brings it up to date; nothing is shown for a night with nothing generated.
+    func summarize() async {
+        let center = UNUserNotificationCenter.current()
+        guard local.contributePrefs.summary, await center.notificationSettings().authorizationStatus == .authorized else { return }
+        let now = CompanionRepository.now()
+        if local.summaryAt > 0 && local.summaryAt <= now { local.summaryFrom = local.summaryAt } // that one was shown
+        if local.summaryFrom == 0 { local.summaryFrom = now - 24 * 3_600_000 }
+        guard let rows = try? local.contributions(limit: 100_000, since: local.summaryFrom), let text = ContributeSummary.text(rows) else { return }
+        let at = ContributeSummary.morning(after: Date())
+        let content = UNMutableNotificationContent()
+        content.title = "Contribute"
+        content.body = text
+        content.interruptionLevel = .passive
+        let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: at), repeats: false)
+        try? await center.add(UNNotificationRequest(identifier: Self.summaryId, content: content, trigger: trigger))
+        local.summaryAt = Int64(at.timeIntervalSince1970 * 1000)
+    }
+
+    /// Asks for notification permission once, when the summary is on and the user has just done something it is about:
+    /// turned it on, or opted in to an app.
+    func askForSummaryPermission() {
+        guard local.contributePrefs.summary else { return }
+        Task {
+            let center = UNUserNotificationCenter.current()
+            if await center.notificationSettings().authorizationStatus == .notDetermined { _ = try? await center.requestAuthorization(options: [.alert]) }
+        }
+    }
+}
+
+/// Set from an expiration handler, Stop or Off, read between sentences on the generating thread. The first reason is kept
+/// for the record: `user_stop`, `background_expired` or `off`.
 final class StopFlag: @unchecked Sendable {
     private let lock = NSLock()
     private var value: String?

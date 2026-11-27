@@ -107,6 +107,8 @@ struct ContributionDetailView: View {
     @State private var note = ""
     @State private var sending = false
     @State private var sendError = ""
+    /// The job's full record as JSON, and its audio while this phone keeps it (#843), for Share record.
+    @State private var shared: [URL] = []
 
     init(contribution: Contribution, appName: String, kept: AttemptAudio = AttemptAudio(dir: AttemptAudio.defaultDirectory),
          reload: @escaping (String) -> Contribution? = { _ in nil }, send: @escaping (_ good: Bool, _ note: String) async throws -> SubmissionReport) {
@@ -147,6 +149,9 @@ struct ContributionDetailView: View {
                     Text(player.highlighted(contribution.input)).textSelection(.enabled)
                 }
                 if !contribution.submissionId.isEmpty { reportControls }
+                if !shared.isEmpty {
+                    ShareLink(items: shared) { Label("Share record", systemImage: "square.and.arrow.up") }.buttonStyle(.bordered)
+                }
                 if let record = contribution.record {
                     Text("On this phone").font(.headline)
                     if generating {
@@ -170,6 +175,7 @@ struct ContributionDetailView: View {
         .navigationTitle(contribution.key)
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
+        .task(id: contribution.status) { shared = Self.share(contribution, appName: appName, kept: kept) }
         .task {
             while ["generating", "uploading"].contains(contribution.status), !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
@@ -212,6 +218,28 @@ struct ContributionDetailView: View {
         .buttonStyle(.bordered)
         .disabled(good == nil || sending)
         if !sendError.isEmpty { Text(sendError).foregroundStyle(.red) }
+    }
+
+    /// Everything this phone knows of the job (#843), for a bug report: the row and its attempt record, device-only fields
+    /// included.
+    static func record(_ c: Contribution, appName: String) -> [String: Any] {
+        var out: [String: Any] = ["jobId": c.jobId, "appId": c.appId, "appName": appName, "key": c.key, "at": c.at, "status": c.status,
+                                  "reason": c.reason, "input": c.input, "setId": c.setId, "durationMs": c.durationMs, "bytes": c.bytes,
+                                  "submissionId": c.submissionId]
+        if let record = c.record, let data = try? JSONEncoder().encode(record), let json = try? JSONSerialization.jsonObject(with: data) { out["record"] = json }
+        if let report = c.report { out["report"] = ["good": report.good, "note": report.note ?? NSNull(), "at": report.at] }
+        return out
+    }
+
+    /// Writes `<jobId>.json` to a temporary folder and returns it with the kept audio, if any.
+    static func share(_ c: Contribution, appName: String, kept: AttemptAudio) -> [URL] {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("share", isDirectory: true)
+        let json = dir.appendingPathComponent("\(c.jobId).json")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: record(c, appName: appName), options: [.prettyPrinted, .sortedKeys]).write(to: json)
+        } catch { return [] }
+        return [json] + (kept.load(c.jobId).map { [$0.audio] } ?? [])
     }
 
     /// "Sentence 3 of 12 · 17%": the one being spoken (#835).

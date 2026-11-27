@@ -1,7 +1,8 @@
 import SwiftUI
+import UserNotifications
 
-/// Contribute's settings (#820), behind the tab's gear: the apps, the voice model, when background runs happen and the
-/// space it all takes.
+/// Contribute's settings (#820), behind the tab's gear: the apps, the voice model, the conditions for background runs
+/// (#830), the overnight summary (#844) and the space it all takes.
 struct ContributeSettingsView: View {
     @ObservedObject var model: CompanionModel
     @ObservedObject var runner: ContributeRunner
@@ -9,6 +10,7 @@ struct ContributeSettingsView: View {
     @State private var deletePrompt = false
     /// Bytes on this phone: the voice model's folder, and the database holding the contribution record.
     @State private var storage: (model: Int64, record: Int64)?
+    @State private var notifications = UNAuthorizationStatus.notDetermined
 
     var body: some View {
         ScrollView {
@@ -16,14 +18,8 @@ struct ContributeSettingsView: View {
                 StatusMessages(model: model)
                 apps
                 voiceModel
-                GroupBox {
-                    VStack(alignment: .leading, spacing: 8) {
-                        AdaptiveToggle(title: "Only while charging", isOn: Binding(get: { model.chargingOnly }, set: model.setChargingOnly))
-                        Text("Background runs wait for the phone to be charging and online. iOS decides when each one starts and how long it lasts; plugging in, and a run ending with jobs left, ask it for the next one straight away. Turned off, iOS may also run them on battery, at its discretion. Run now works either way.")
-                            .font(.footnote).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                conditions
+                summary
                 if let storage {
                     Text("Storage").font(.title3.bold())
                     Text("Voice model: \(Self.size(storage.model))")
@@ -63,6 +59,77 @@ struct ContributeSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+
+    private func bind<T>(_ key: WritableKeyPath<ContributePrefs, T>) -> Binding<T> {
+        Binding(get: { model.prefs[keyPath: key] }, set: { var prefs = model.prefs; prefs[keyPath: key] = $0; model.setPrefs(prefs) })
+    }
+
+    private func note(_ text: String) -> some View { Text(text).font(.footnote).foregroundStyle(.secondary) }
+
+    /// When background runs may happen (#830). Every condition is checked before each claim and between sentences.
+    @ViewBuilder private var conditions: some View {
+        Text("When to run").font(.title3.bold())
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Connection", selection: bind(\.cellular)) {
+                    Text("Wi-Fi only").tag(false)
+                    Text("Wi-Fi + mobile data").tag(true)
+                }
+                .pickerStyle(.segmented)
+                if model.prefs.cellular {
+                    Stepper("Mobile data: \(model.prefs.cellularCapMB) MB a month", value: bind(\.cellularCapMB), in: 100...20_000, step: 100)
+                    note("Used this month: \(runner.cellularMB()) MB, counted on this phone (the voice model download and uploads). It starts again each month.")
+                }
+                Picker("Power", selection: bind(\.chargingOnly)) {
+                    Text("Charging only").tag(true)
+                    Text("Also on battery").tag(false)
+                }
+                .pickerStyle(.segmented)
+                if !model.prefs.chargingOnly {
+                    Stepper("Minimum battery: \(model.prefs.minBattery)%", value: bind(\.minBattery), in: 10...95, step: 5)
+                }
+                AdaptiveToggle(title: "Pause when the phone is hot", isOn: bind(\.thermal))
+                Picker("CPU", selection: bind(\.cpu)) {
+                    Text("Light").tag(ContributePrefs.Cpu.light)
+                    Text("Balanced").tag(ContributePrefs.Cpu.balanced)
+                    Text("Full").tag(ContributePrefs.Cpu.full)
+                }
+                .pickerStyle(.segmented)
+                note("Light uses one core and rests a second between sentences; Balanced two cores with a short rest; Full up to four cores without rests.")
+                Picker("While the phone is in use", selection: bind(\.inUse)) {
+                    Text("Pause").tag(ContributePrefs.InUse.pause)
+                    Text("Run slower").tag(ContributePrefs.InUse.slower)
+                }
+                note("iOS only runs background work while the phone is not in use, so this changes Run now: Run slower uses Light while FreeAppStore is on screen.")
+                Stepper(model.prefs.dailyJobs == 0 ? "Daily maximum: no limit on jobs" : "Daily maximum: \(model.prefs.dailyJobs) jobs",
+                        value: bind(\.dailyJobs), in: 0...10_000, step: 10)
+                Stepper(model.prefs.dailyMinutes == 0 ? "Daily maximum: no limit on time" : "Daily maximum: \(model.prefs.dailyMinutes) minutes",
+                        value: bind(\.dailyMinutes), in: 0...1_440, step: 15)
+                AdaptiveToggle(title: "Quiet hours", isOn: bind(\.quiet))
+                if model.prefs.quiet {
+                    Picker("From", selection: bind(\.quietFrom)) { ForEach(0..<24, id: \.self) { Text(ContributePause.hour($0)).tag($0) } }
+                    Picker("To", selection: bind(\.quietTo)) { ForEach(0..<24, id: \.self) { Text(ContributePause.hour($0)).tag($0) } }
+                }
+                note("Low Power Mode always pauses. When a condition stops holding, the job in hand is finished if it is nearly done, otherwise it stops and goes back to the app; Auto carries on by itself once every condition holds again. iOS decides when each background run starts and how long it lasts; plugging in, and a run ending with jobs left, ask it for the next one straight away. Run now ignores these conditions, apart from pausing when hot.")
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The overnight summary (#844).
+    private var summary: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                AdaptiveToggle(title: "Overnight summary", isOn: bind(\.summary))
+                note("One quiet notification the morning after background work, such as \"Generated 42 clips, 38 accepted, 1 h 10 min CPU\". Tap it to open Activity.")
+                if model.prefs.summary && notifications == .denied {
+                    note("Notifications are off for FreeAppStore. Turn them on in the Settings app to see the summary.")
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .task(id: model.prefs.summary) { notifications = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus }
     }
 
     private var downloadMB: Int64 { KokoroModel.downloadBytes / 1_000_000 }

@@ -213,10 +213,43 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   the last report (sent from here or read from the submissions route's `report` on refresh), so it shows offline and can
   be changed. The gear opens **Contribute settings**: the apps opted in or with open jobs
   (`GET /generation/open`, Kokoro sets only) with their switch and open-job count, the voice model download, progress
-  and delete, **Only while charging** (on by default; off, the background task no longer asks for external power and
-  unplugging no longer stops it), and the space the model and the record take. A **Contribute from this phone** switch
+  and delete, **When to run** (the conditions, below), **Overnight summary**, and the space the model and the record
+  take. A **Contribute from this phone** switch
   is also on each app's Store page while signed in, and the link `freeappstore://native/contribute/<appId>`. Each asks
   first; a link never opts in by itself.
+- **Modes and conditions** (#830), all on the phone (the server has no per-user cap). The status card starts with
+  **Auto · Run now · Off**. **Auto** (default) runs in the background whenever every condition holds and always says
+  why it is not running ("Paused: on mobile data (Wi-Fi only).", "Paused: battery 28% (min 40%).", "Waiting: no
+  connection."). **Run now** is one run that ignores the conditions (apart from pausing while hot), then Auto again; it
+  also turns Off back to Auto. **Off** is a hard stop: it stops the job in hand, cancels the `BGProcessingTask` request
+  (`BGTaskScheduler.cancel`) and any reschedule, a request iOS still delivers ends at once, and it is stored on the phone
+  so it survives relaunches and updates ("Contribute is off. It will not start again until you turn it on."). The
+  conditions, defaults in brackets: connection **Wi-Fi only** / **Wi-Fi + mobile data** with a monthly MB allowance
+  [Wi-Fi only, 500 MB] (`NWPathMonitor`; mobile data used by the model download and uploads is counted on the phone and
+  starts again each month); power **Charging only** / **Also on battery** at or above a minimum [charging only, 40%]
+  (the request's `requiresExternalPower` follows it); **Pause when hot** at `ProcessInfo.thermalState` serious or above
+  [on] (the job waits, lease kept, and goes on once cool); **Low Power Mode** always pauses; **CPU** Light (1 thread, 1 s
+  rest between sentences) / Balanced (2 threads, 0.25 s) / Full (up to 4 threads, no rest) [Balanced]; **While the
+  phone is in use** Pause / Run slower [Pause] (iOS only runs background work while the phone is not in use, so on
+  iPhone this only changes Run now, which uses Light while on screen with Run slower); optional daily maximums of jobs
+  and of minutes worked; optional quiet hours. A background run checks them before each claim and between sentences.
+  When one fails, the job in hand is finished and uploaded if at least 80% of its sentences are done; otherwise it stops,
+  is recorded `skipped` with the condition (`off`, `quiet_hours`, `daily_max`, `no_network`, `mobile_data`, `data_cap`,
+  `unplugged`, `battery_low`, `low_power`) and its attempt record is sent with an interrupted end reason (`user_stop`,
+  `network` or `unplugged`), so the server gives the job back (#841). There is no lease release route: the lease lapses
+  or is released by this runner's next claim. The run then claims nothing more, and asks iOS for the next one 15 minutes
+  out. "Only while charging" from before (#820) carries over as the power condition.
+- **Jobs given back** (#841): a job this phone stopped part-way (`skipped` or `failed` for an interruption, such as
+  `user_stop`, `background_expired`, `interrupted`, `network`, `lease_expired` or a condition above, with no upload) is
+  taken again when the server offers it. One it refused, failed on otherwise or uploaded is never generated again.
+- **Overnight summary** (#844): after background work, one quiet (`passive`) local notification is due the next morning
+  at 8:00, such as "Generated 42 clips, 38 accepted, 1 h 10 min CPU" for the work since the last one shown; each
+  background run brings it up to date, and a night with nothing generated shows none. Tapping it opens Activity. On by
+  default in Contribute settings; notification permission is asked only when it is turned on or when an app is opted
+  in, and the settings say so if notifications are off for FreeAppStore.
+- **Share record** (#843): a job's detail has **Share record**, which shares `<jobId>.json` (every field of the row and
+  its attempt record, device-only progress fields included, and the report) and the audio while this phone keeps it,
+  through the share sheet.
 - **Runtime**: the official sherpa-onnx `2.0.3` iOS xcframework with onnxruntime linked in
   (`sherpa-onnx-v2.0.3-ios-shared-onnxruntime-static.xcframework.zip`), called through its C API. The scheme's build
   pre-action (`ios/scripts/fetch-sherpa-onnx.sh`) fetches it into the untracked `ios/Vendor/` and refuses it unless its
@@ -242,8 +275,8 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   screen awake, which stays the user's choice. Once the app has left the screen, Run now
   claims nothing more (#828): the job in hand may finish in the seconds left, then the background task carries on.
   The daily limit's `429` at the claim ends a run; each run logs `Run ended: <reason>` (subsystem
-  `online.freeappstore.companion`, category `Contribute`). Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
-  `unplugged`, `opted_out` or `lease_expired`, shown in the tab's recent results.
+  `online.freeappstore.companion`, category `Contribute`). Unplugging, with Charging only, stops a background run (unless the job is nearly done). A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
+  `opted_out`, `lease_expired` or a condition above, shown in the tab's recent results.
 - **Order** (#819): one job per opted-in app in turn (Books, then Dialogue, then Books, …), so every app moves forward;
   an app leaves the rotation for the run when it has no open job, is turned off, or a job of it is not submitted.
 - **Network** (#819): claims, uploads and verdict refreshes are tried again after passing failures (no connection, DNS,

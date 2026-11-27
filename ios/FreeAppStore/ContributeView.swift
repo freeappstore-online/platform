@@ -28,28 +28,34 @@ enum ContributeText {
         "stopped": "stopped", "language": "this phone can't speak the set's language in that voice",
         "network": "no connection to FreeAppStore before the job's time ran out",
         "interrupted": "FreeAppStore was closed or stopped before the job finished",
+        // A condition that failed (#830).
+        "off": "you turned Contribute off", "quiet_hours": "quiet hours began", "daily_max": "today's maximum was reached",
+        "no_network": "the connection was lost", "mobile_data": "the phone moved to mobile data", "data_cap": "this month's mobile data was used",
+        "battery_low": "the battery fell below your minimum", "low_power": "Low Power Mode came on", "thermal": "the phone was hot",
     ]
 
-    /// The status card's headline and why (#820). `downloading`: the run is fetching the voice model.
+    /// The status card's headline and why (#820). `downloading`: the run is fetching the voice model. `pause`: why it
+    /// would not run in the background now (#830), Off included.
     static func state(running: Bool, cooling: Bool, downloading: Bool, hasApps: Bool, model: ModelState, lastStop: String?,
-                      charging: Bool, chargingOnly: Bool) -> (title: String, why: String) {
+                      pause: ContributePause?, charging: Bool) -> (title: String, why: String) {
         if running {
             if cooling { return ("Paused", "The phone is hot. It goes on by itself once it cools down.") }
             return ("Running", downloading ? "Downloading the voice model." : "Generating audio on this phone.")
         }
+        if pause == .off { return ("Off", ContributePause.off.text) }
         if !hasApps { return ("Idle", "No apps turned on. Turn one on in settings, on an app's page in the Store, or from an app that asks for help.") }
         switch model {
         case .none: return ("Idle", "The voice model isn't on this phone. Download it in settings.")
         case .waiting: return ("Waiting", "The voice model downloads while the phone charges on Wi-Fi, or tap Run now.")
         case .installed: break
         }
+        if let pause { return (pause == .noNetwork ? "Waiting" : "Paused", pause.text) }
         if let lastStop { return ("Stopped", "Stopped because \(reasons[lastStop] ?? lastStop).") }
-        if chargingOnly && !charging { return ("Idle", "Waiting for the phone to charge. Background runs need power and a connection.") }
         if charging {
-            return ("Idle", "Plugged in. iOS decides when background runs start and how long they last, most often with the phone locked. "
+            return ("Auto", "Plugged in. iOS decides when background runs start and how long they last, most often with the phone locked. "
                 + "When one ends with jobs left, FreeAppStore asks iOS for the next straight away.")
         }
-        return ("Idle", "Runs in the background when iOS allows, most often while the phone charges.")
+        return ("Auto", "Runs in the background when iOS allows, most often while the phone charges.")
     }
 }
 
@@ -147,6 +153,7 @@ struct ContributeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle("Contribute")
+            .navigationDestination(isPresented: $model.showActivity) { ContributeActivityView(model: model, catalogue: catalogue) }
             .toolbar {
                 if model.signedIn {
                     NavigationLink { ContributeSettingsView(model: model, runner: runner, catalogue: catalogue) } label: {
@@ -158,14 +165,34 @@ struct ContributeView: View {
         .onAppear { UIDevice.current.isBatteryMonitoringEnabled = true }
     }
 
+    /// Auto, Run now or Off (#830). Run now is one run that ignores the conditions, then Auto again.
+    enum Mode: String, CaseIterable, Identifiable { case auto = "Auto", runNow = "Run now", off = "Off"; var id: Self { self } }
+
+    private var mode: Binding<Mode> {
+        Binding(get: { model.prefs.mode == .off ? .off : runner.running && !runner.background ? .runNow : .auto }, set: { mode in
+            var prefs = model.prefs
+            switch mode {
+            case .auto:
+                if runner.running && !runner.background { model.stopContributing() }
+                prefs.mode = .auto; model.setPrefs(prefs)
+            case .runNow: model.contributeNow()
+            case .off: prefs.mode = .off; model.setPrefs(prefs)
+            }
+        })
+    }
+
     private var status: some View {
         let state = ContributeText.state(running: runner.running, cooling: runner.cooling, downloading: runner.downloaded != nil,
                                          hasApps: !model.contributeApps.isEmpty, model: model.modelState, lastStop: runner.lastStop,
-                                         charging: [.charging, .full].contains(UIDevice.current.batteryState), chargingOnly: model.chargingOnly)
+                                         pause: runner.pause(), charging: [.charging, .full].contains(UIDevice.current.batteryState))
         return GroupBox {
             VStack(alignment: .leading, spacing: 8) {
+                Picker("Mode", selection: mode) {
+                    ForEach(Mode.allCases) { Text($0.rawValue).tag($0) }
+                }
+                .pickerStyle(.segmented)
                 Text(state.title).font(.title3.bold())
-                Text(state.why).foregroundStyle(runner.running && runner.cooling ? .orange : .secondary)
+                Text(state.why).foregroundStyle(runner.running && runner.cooling || state.title == "Paused" ? .orange : .secondary)
                 if let app = runner.app, let job = runner.job {
                     Text("\(catalogue.name(app)) · \(job)").font(.headline)
                 }
@@ -180,13 +207,10 @@ struct ContributeView: View {
                     ProgressView(value: downloaded) { Text("Voice model \(Int(downloaded * 100))%") }
                 }
                 if !runner.lastError.isEmpty { Text(runner.lastError).foregroundStyle(.red) }
-                Text("Run now needs FreeAppStore open on screen and keeps the screen on meanwhile; leaving the app stops the job in hand without uploading.")
+                Text("Auto runs in the background whenever your conditions in settings hold. Run now ignores them for one run, needs FreeAppStore open on screen and keeps the screen on meanwhile; leaving the app stops the job in hand without uploading. Off stops everything until you turn it on.")
                     .font(.footnote).foregroundStyle(.secondary)
                 if runner.running {
                     Button("Stop") { model.stopContributing() }.buttonStyle(.bordered)
-                } else {
-                    Button("Run now") { model.contributeNow() }.buttonStyle(.borderedProminent)
-                        .disabled(model.modelState == .none || (model.contributeApps.isEmpty && model.modelState == .installed))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
