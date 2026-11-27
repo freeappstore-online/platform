@@ -492,12 +492,15 @@ function engineWindowContents(): WebContents {
   });
   engineWindow = win;
   const contents = win.webContents;
-  engineReady = new Promise<Engine>((resolve) => {
+  engineReady = new Promise<Engine>((resolve, reject) => {
     ipcMain.removeAllListeners('contribute:engine');
     ipcMain.on('contribute:engine', (event, engine: Engine) => {
       if (event.sender === contents) resolve(engine);
     });
+    // Closed before it reported (a crash, a disconnect): the next look opens a new one
+    win.on('closed', () => reject(new Error('the generating window closed')));
   });
+  engineReady.catch(() => {}); // only a waiting engine() call cares
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   contents.on('will-navigate', (event) => event.preventDefault());
   // A crashed renderer takes the job in hand with it: stop, and start over on the next look

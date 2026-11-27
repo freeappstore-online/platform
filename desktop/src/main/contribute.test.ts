@@ -348,6 +348,23 @@ describe('Contribute', () => {
     contribute.stop();
   });
 
+  it('says so, and looks again later, when the hidden window closes before it reports', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ apps: [] })),
+    );
+    const { contribute } = setup({
+      engine: async () => {
+        throw new Error('the generating window closed');
+      },
+    });
+    contribute.wake();
+    await until(
+      () => contribute.state.message === "Couldn't start generating: the generating window closed",
+    );
+    contribute.stop();
+  });
+
   it('hands a refused device credential back to the app', async () => {
     vi.stubGlobal(
       'fetch',

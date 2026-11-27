@@ -258,7 +258,12 @@ export class Contribute {
         problem: runnable(app).length ? null : (app.sets.map((s) => kokoroProblem(s))[0] ?? null),
       })),
     });
-    const engine = await this.engine();
+    let engine: Engine;
+    try {
+      engine = await this.engine();
+    } catch (err) {
+      return this.set({ status: 'idle', message: `Couldn't start generating: ${errorText(err)}` });
+    }
     if (!engine.encoder)
       return this.set({ status: 'idle', message: "This computer can't encode AAC audio." });
     if (!this.state.model?.ready)
