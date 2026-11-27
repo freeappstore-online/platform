@@ -105,6 +105,21 @@ it('splits the page into Status, Activity and Settings tabs, with arrow keys bet
   expect(container.textContent).toContain('Apps with open work')
 })
 
+it('downloads nothing when the browser has no room for the model (#792)', async () => {
+  Object.defineProperty(navigator, 'storage', {
+    configurable: true, value: { estimate: async () => ({ quota: 400e6, usage: 300e6 }) },
+  })
+  try {
+    await render()
+    await tab('Settings')
+    await click(button('Download the model (326 MB)')!)
+    expect(load).not.toHaveBeenCalled()
+    expect(container.textContent).toContain("The model didn't download: this browser has 100 MB of storage left for the console and the model needs 326 MB")
+  } finally {
+    Reflect.deleteProperty(navigator, 'storage')
+  }
+})
+
 it('lists apps with open work, opts in per app, and downloads the model only after the creator agrees', async () => {
   await render()
   expect(container.textContent).toContain("The voice model isn't downloaded yet")

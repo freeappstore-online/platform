@@ -317,7 +317,7 @@ function ModelCard({ encoder, device, downloaded, onChanged }: {
   onChanged: () => void
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const { loading } = useGenerate()
+  const { loading, message } = useGenerate()
   const size = megabytes(KOKORO_DOWNLOAD_BYTES[device])
   return (
     <div className={card}>
@@ -343,6 +343,7 @@ function ModelCard({ encoder, device, downloaded, onChanged }: {
               Download the model ({size})
             </button>
           )}
+          {loading === null && message && <p role="status" className="mt-2 text-sm text-danger">{message}</p>}
         </div>
       )}
       <ConfirmDialog

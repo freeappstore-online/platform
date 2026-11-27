@@ -20,6 +20,7 @@ import {
   contributeKokoroApps,
   deleteKokoroModel,
   isKokoroDownloaded,
+  KOKORO_DOWNLOAD_BYTES,
   kokoroEndReason,
   kokoroProblem,
   KokoroRunner,
@@ -351,6 +352,14 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 export async function downloadModel(encoder: AudioEncoderConfig, device: KokoroDevice) {
   set({ loading: 0, message: null })
   try {
+    // Nothing is fetched when the browser says its storage for the console can't hold the model (#792).
+    const estimate = await navigator.storage?.estimate?.().catch(() => undefined)
+    const room = estimate?.quota !== undefined && estimate.usage !== undefined ? estimate.quota - estimate.usage : null
+    const need = KOKORO_DOWNLOAD_BYTES[device]
+    if (room !== null && room < need) {
+      const mb = (bytes: number) => `${Math.round(bytes / 1e6)} MB`
+      throw new Error(`this browser has ${mb(room)} of storage left for the console and the model needs ${mb(need)}`)
+    }
     await getRunner(encoder, device).load(progress => set({ loading: progress }))
     write(MODEL_KEY, '1')
   } catch (err) {
