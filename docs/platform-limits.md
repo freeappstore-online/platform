@@ -216,4 +216,4 @@ Deprecated for app data (ADR-004); existing apps only. See [Photo uploads](photo
 
 ## Community generation
 
-See [Community generation](community-generation.md): 200 submissions per user and 5,000 per app per UTC day, 15-minute leases (one open per user), 1-500 jobs per request, text at most 100,000 characters, 2,000 verifications per app per UTC day, `maxBytes` at most 25 MB, meta at most 64 KB, quarantine expires after 7 days.
+See [Community generation](community-generation.md): 5,000 submissions per app per UTC day and no per-user cap, 15-minute leases (one open per runner, at most 4 per user), 1-500 jobs per request, text at most 100,000 characters, 1-50 attempt records per request and 1,000 per user per UTC day, `maxBytes` at most 25 MB, meta at most 64 KB, quarantine expires after 7 days.

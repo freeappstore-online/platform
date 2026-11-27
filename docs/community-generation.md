@@ -308,7 +308,7 @@ runner in a hidden window with background throttling turned off and keeps going 
   set their own limits on the device ([#830](https://github.com/freeappstore-online/platform/issues/830)). Uploads
   past it are `429` (no `Retry-After`), and once it is reached a claim is `429` too and leases nothing, so a runner
   never generates a job it cannot upload ([#828](https://github.com/freeappstore-online/platform/issues/828)).
-- Leases: 15 minutes, extendable to at most 2 hours after the claim; one open per user.
+- Leases: 15 minutes, extendable to at most 2 hours after the claim; one open per runner, at most 4 per user.
 - Jobs: 1-500 per request; text at most 100,000 characters (8 MB per request). Sets: `maxBytes` at most 25 MB.
 
 ## Storage and lifecycle
@@ -319,5 +319,5 @@ deploy workflow). Artifacts `a/<app>/<job>/<submission>` are permanent until wit
 
 The 15-minute reaper (`pruneGenerated`) deletes artifacts, sets, jobs, submissions, blocks and audit
 rows of apps that were unpublished or deleted, and rejects submissions still pending after 6 days
-(their quarantined bytes are about to expire). Deleting an account removes that user's leases and
-submissions and clears the contributor on their accepted artifacts, which stay public.
+(their quarantined bytes are about to expire). Deleting an account removes that user's leases,
+submissions and attempt records and clears the contributor on their accepted artifacts, which stay public.
