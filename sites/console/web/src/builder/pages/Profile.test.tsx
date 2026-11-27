@@ -4,6 +4,7 @@ import { Profile } from "./Profile";
 
 vi.mock("../components/Nav", () => ({ Nav: () => <nav>Studio navigation</nav> }));
 vi.mock("../../AccountSettings", () => ({ AccountSettings: () => <div>Account actions</div> }));
+vi.mock("../../DevicesSettings", () => ({ DevicesSettings: () => <div>Paired devices</div> }));
 vi.mock("../components/AISettings", () => ({ AISettings: () => <div>Vault settings</div> }));
 vi.mock("../hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "1", login: "Creator" }, loading: false }) }));
 vi.mock("../hooks/useSpeech", () => ({ useSpeech: () => ({ supported: false }) }));
@@ -19,6 +20,7 @@ describe("Profile", () => {
     expect(html).toContain("Appearance");
     expect(html).toContain("Vault settings");
     expect(html).toContain("Account actions");
+    expect(html).toContain("Paired devices");
     expect(html).toContain("Text Size");
     expect(html).toContain("bg-accent");
     expect(html).not.toContain("style=");

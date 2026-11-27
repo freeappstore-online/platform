@@ -8,6 +8,12 @@ import type { Env } from '../types.js';
 import { HttpError } from './auth.js';
 
 export const NATIVE_RETENTION_MS = 7 * 24 * 60 * 60_000;
+export const NATIVE_DEVICE_MS = 90 * 24 * 60 * 60_000;
+/** How stale a device's last seen time may get before a request writes it again (#833). */
+const SEEN_MS = 15 * 60_000;
+/** How long a used or expired pairing code stays on record (#845). */
+const PAIR_CODE_RECORD_MS = 30 * 24 * 60 * 60_000;
+const CLIENTS = ['android', 'ios', 'desktop'];
 
 // Curated, reviewed recipients (list order is /native/me order). An app's own
 // declaration never grants a capability. Any wording change re-versions the
@@ -33,6 +39,9 @@ interface NativeDevice {
   label: string;
   created_at: number;
   expires_at: number;
+  app_version: string | null;
+  client: string | null;
+  last_seen_at: number | null;
 }
 export interface NativeGrant {
   id: string;
@@ -111,19 +120,98 @@ export async function nativeBody(
   return body as Record<string, unknown>;
 }
 
-/** The device behind an `ndev_` bearer credential. Never accepts a FAS session. */
+/**
+ * What the calling app says it is (#833): its version label (`X-FAS-App-Version`,
+ * "0.4.0 (57, abc1234)") and kind (`X-FAS-Client`: android, ios or desktop).
+ * Each is null when absent or malformed.
+ */
+export function nativeClient(c: Context<{ Bindings: Env }>) {
+  const version = c.req.header('X-FAS-App-Version')?.trim() ?? '';
+  const client = c.req.header('X-FAS-Client') ?? '';
+  return {
+    version: /^[\w .,()+-]{1,64}$/.test(version) ? version : null,
+    client: CLIENTS.includes(client) ? client : null,
+  };
+}
+
+/**
+ * The device behind an `ndev_` bearer credential. Never accepts a FAS session.
+ * Keeps the device's last seen version, kind and time (#833), writing only when
+ * one changed or the time is older than SEEN_MS, not on every request.
+ */
 export async function nativeDevice(c: Context<{ Bindings: Env }>): Promise<NativeDevice> {
   const token = c.req.header('Authorization')?.replace(/^Bearer /, '') ?? '';
   if (!/^ndev_[a-f0-9]{64}$/.test(token)) {
     throw new HttpError(401, 'Connect this device to FreeAppStore.');
   }
+  const now = Date.now();
   const row = await c.env.DB.prepare(
-    'SELECT id, user_id, label, created_at, expires_at FROM native_devices WHERE token_hash = ? AND expires_at > ?',
+    `SELECT id, user_id, label, created_at, expires_at, app_version, client, last_seen_at
+     FROM native_devices WHERE token_hash = ? AND expires_at > ?`,
   )
-    .bind(await nativeHash(token), Date.now())
+    .bind(await nativeHash(token), now)
     .first<NativeDevice>();
   if (!row) throw new HttpError(401, 'Device connection expired or was disconnected.');
+  const { version, client } = nativeClient(c);
+  if (
+    (version && version !== row.app_version) ||
+    (client && client !== row.client) ||
+    (row.last_seen_at ?? 0) < now - SEEN_MS
+  ) {
+    await c.env.DB.prepare(
+      'UPDATE native_devices SET app_version = COALESCE(?, app_version), client = COALESCE(?, client), last_seen_at = ? WHERE id = ?',
+    )
+      .bind(version, client, now, row.id)
+      .run();
+  }
   return row;
+}
+
+/**
+ * A new device credential for `userId` (#616, #845), with the caller's version
+ * and kind. Null when the account no longer exists: no foreign key to users.
+ */
+export async function createNativeDevice(
+  c: Context<{ Bindings: Env }>,
+  userId: string,
+  label: string,
+): Promise<{ token: string; deviceId: string } | null> {
+  const deviceId = nativeRandom();
+  const token = `ndev_${nativeRandom()}`;
+  const now = Date.now();
+  const { version, client } = nativeClient(c);
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at, app_version, client, last_seen_at)
+     SELECT ?, id, ?, ?, ?, ?, ?, ?, ? FROM users WHERE id = ?`,
+  )
+    .bind(
+      deviceId,
+      label,
+      await nativeHash(token),
+      now,
+      now + NATIVE_DEVICE_MS,
+      version,
+      client,
+      now,
+      userId,
+    )
+    .run();
+  return inserted.meta.changes ? { token, deviceId } : null;
+}
+
+// Crockford base32: no I, L, O or U, so a code read aloud or typed is unambiguous.
+const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** A pairing code (#845): 16 Crockford base32 characters, 80 random bits. */
+export function nativePairCode(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => CROCKFORD[b & 31]).join('');
+}
+
+/** A typed or scanned pairing code in its stored form, or null. Ignores case, spaces and dashes. */
+export function normalizePairCode(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 64) return null;
+  const code = value.toUpperCase().replace(/[\s-]/g, '').replace(/[IL]/g, '1').replace(/O/g, '0');
+  return /^[0-9A-HJKMNP-TV-Z]{16}$/.test(code) ? code : null;
 }
 
 /** This device's grants that still hold: current contract, same app owner. */
@@ -184,7 +272,7 @@ export function nativePoints(value: unknown, now: number): NativePoint[] {
   });
 }
 
-/** Physically drop expired points, pairings, devices and grants whose app changed hands. */
+/** Physically drop expired points, pairings, devices, old pairing codes and grants whose app changed hands. */
 export async function pruneNativeData(db: D1Database, now: number): Promise<void> {
   await db.batch([
     db
@@ -192,6 +280,9 @@ export async function pruneNativeData(db: D1Database, now: number): Promise<void
       .bind(now - NATIVE_RETENTION_MS),
     db.prepare('DELETE FROM native_pairings WHERE expires_at <= ?').bind(now),
     db.prepare('DELETE FROM native_devices WHERE expires_at <= ?').bind(now),
+    db
+      .prepare('DELETE FROM native_pair_codes WHERE expires_at <= ?')
+      .bind(now - PAIR_CODE_RECORD_MS),
     db.prepare(
       `DELETE FROM native_grants WHERE id NOT IN (SELECT g.id FROM native_grants g ${NATIVE_APP_JOIN})`,
     ),

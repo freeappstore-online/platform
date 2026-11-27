@@ -26,6 +26,19 @@ Device side, `Authorization: Bearer ndev_…`:
 | `DELETE /native/apps/:appId/location` | — | `{ revoked: true }` |
 | `POST /native/locations` | `{ points: [{ id, at, lat, lng, accuracy, grants }] }` (1–100) | `{ acknowledged: [id] }` |
 | `DELETE /native/device` | — | `{ disconnected: true }` |
+| `POST /native/auth/code` (no credential) | `{ code, label }` | `{ token, deviceId }`; `403` expired or used, `429` too many tries ([QR pairing](#qr-pairing-845)) |
+| `POST /native/pair-codes` | — | `{ code, url, expiresAt }` (a code for another phone, [below](#qr-pairing-845)) |
+
+Every device call (pairing included) should carry `X-FAS-App-Version: <version label>` and `X-FAS-Client:
+android | ios | desktop` ([below](#versions-and-the-device-list-833)).
+
+Console side, with a first-party (`console`) session:
+
+| Call | Response |
+|---|---|
+| `GET /native/devices` | `{ devices: [{ id, label, client, version, createdAt, lastSeenAt, expiresAt, pairedBy }] }`, most recently seen first |
+| `DELETE /native/devices/:id` | `{ revoked: true }`; `404` if it is not one of yours |
+| `POST /native/pair-codes` | `{ code, url, expiresAt }` |
 
 App side, with the app's own session (`aud` = app id):
 
@@ -42,9 +55,57 @@ browser pages on the API origin, opened by the phone.
 - Points are kept 7 days, then pruned by the `*/15` cron.
 - Turning an app off deletes its grant and every point under it.
 - Disconnecting the phone deletes the device, its grants and points.
-- Deleting your account (`DELETE /v1/auth/me`) deletes your devices and any pairing in progress.
+- Deleting your account (`DELETE /v1/auth/me`) deletes your devices, any pairing in progress and your pairing codes.
+- Pairing codes are kept 30 days after they expire, then pruned by the cron.
 - An app changing owner or being deleted revokes its grants.
 - Device credentials expire after 90 days.
+
+## Versions and the device list (#833)
+
+Each app sends its version label, the one its Contribute attempt records carry (`0.4.0 (57, abc1234)`, or `(dev, …)`
+for a local build), in `X-FAS-App-Version`, and its kind in `X-FAS-Client` (`android`, `ios` or `desktop`), on
+`POST /native/auth/complete`, `POST /native/auth/code` and every call with the device credential. The label is at most
+64 characters of letters, digits, space and `.,()+-_`; anything else, or another kind, is ignored. The backend keeps the
+last value of each on the device row (`native_devices.app_version`, `client`) with `last_seen_at`, and writes them only
+when one changed or `last_seen_at` is over 15 minutes old, so a busy device costs no write per request. A call without
+the headers still updates `last_seen_at` and keeps the last version.
+
+The console's **Settings > Devices** (`/app/build/profile`) lists the signed-in account's devices from
+`GET /native/devices` (label, kind, version, paired, last seen, expires, and whether it was paired by a code and from
+where) with **Revoke** (`DELETE /native/devices/:id`; the device's grants and points go with it, and its next call gets
+`401`).
+
+## QR pairing (#845)
+
+A phone can pair without the browser flow by scanning a code shown where the account is already signed in: the
+console's **Settings > Devices > Add a phone**, or the desktop app's **Account > Add a phone** (made with its device
+credential).
+
+- `POST /native/pair-codes` makes a code: 16 Crockford base32 characters (80 random bits), shown as
+  `ABCD-EFGH-JKMN-PQRS`, valid 5 minutes, usable once. Only its SHA-256 is stored, with who made it (`console` or
+  `ndev:<device id>`), when, and later the device it paired; the row stays 30 days after it expires as the record. Each
+  account may make 20 a day (`429` beyond).
+- The QR code holds `url`: `freeappstore://native/pair?code=ABCDEFGHJKMNPQRS` (the code without dashes). The code is
+  also shown as text, to type on a phone without a camera.
+
+**Phone side** (the contract for the Android and iOS apps):
+
+1. Offer **Scan a code** next to **Connect** while not connected. Scan with the camera in the app (CameraX/ML Kit
+   barcode or `AVCaptureMetadataOutput` `.qr`; no remote service), and also handle the deep link
+   `freeappstore://native/pair?code=…` (a QR scanned by the system camera opens it). Offer **Type the code** as well.
+2. Accept only `freeappstore://native/pair` with a `code` parameter; anything else is not a FreeAppStore code. Take the
+   code as typed or scanned: the server ignores case, spaces and dashes and reads `I`/`L` as `1` and `O` as `0`.
+3. Ask before pairing ("Connect this phone to the account that showed this code?"); a link never pairs by itself.
+4. `POST https://api.freeappstore.online/v1/native/auth/code` with `Content-Type: application/json`,
+   `X-FAS-App-Version` and `X-FAS-Client`, and `{ "code": "<code>", "label": "<the same label as the browser flow>" }`
+   (label 1-80 characters, body at most 4 KB).
+5. `200 { token, deviceId }`: store the `ndev_` token exactly as after the browser flow (same storage, same 90-day
+   expiry) and go on as connected (`GET /native/me`). `403`: expired or already used, ask for a new code. `400`: not a
+   code, or no label. `429`: too many tries from this network today (30 per IP), try again tomorrow. `401`: the
+   account was deleted meanwhile.
+6. Never log or keep the code; it is useless once used, but it is a credential until then.
+
+The console polls its device list while the code is shown and closes the dialog when the new device appears.
 
 ## Signed-in profile (#829)
 

@@ -1009,10 +1009,11 @@ authRoutes.delete('/auth/me', async (c) => {
     db.prepare('DELETE FROM idea_builders WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM agent_sessions WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(user.id),
-    // Cascades to the device's grants and points. A pairing holds the user id
-    // too, and no foreign key removes it.
+    // Cascades to the device's grants and points. A pairing and a pairing code
+    // hold the user id too, and no foreign key removes them.
     db.prepare('DELETE FROM native_devices WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM native_pairings WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM native_pair_codes WHERE user_id = ?').bind(user.id),
     // Community generation (#728): accepted artifacts stay public for everyone,
     // without the contributor; quarantined objects expire by R2 lifecycle.
     db.prepare('UPDATE generation_artifacts SET user_id = NULL WHERE user_id = ?').bind(user.id),

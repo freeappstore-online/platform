@@ -13,7 +13,14 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { HttpError } from '../lib/auth.js';
 import { exchangeAuthCode, s256Challenge } from '../lib/deliver-session.js';
 import { escapeHtml } from '../lib/email.js';
-import { isHex64, nativeBody, nativeHash, nativeRandom } from '../lib/native-companion.js';
+import {
+  createNativeDevice,
+  isHex64,
+  nativeBody,
+  nativeHash,
+  nativeRandom,
+  normalizePairCode,
+} from '../lib/native-companion.js';
 import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
 import { verifySession } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -23,7 +30,6 @@ export const nativeAuthRoutes = new Hono<{ Bindings: Env }>();
 const PREFIX = '/v1/native/auth';
 const COOKIE = '__Host-fas_native_pairing';
 const PAIRING_MS = 10 * 60_000;
-const DEVICE_MS = 90 * 24 * 60 * 60_000;
 const PAIRINGS_PER_IP_PER_DAY = 30;
 
 type Ctx = Context<{ Bindings: Env }>;
@@ -225,16 +231,49 @@ nativeAuthRoutes.post('/native/auth/complete', async (c) => {
     .bind(body.id, challenge, Date.now())
     .first<{ user_id: string; label: string }>();
   if (!consumed) throw new HttpError(409, 'Connection already used. Start again.');
-  const id = nativeRandom();
-  const token = `ndev_${nativeRandom()}`;
+  const device = await createNativeDevice(c, consumed.user_id, consumed.label);
+  if (!device) throw new HttpError(401, 'Account no longer exists.');
+  return c.json(device);
+});
+
+/** Over 80 random bits, 5 minutes and these tries, guessing a live code is hopeless. */
+const CODE_TRIES_PER_IP_PER_DAY = 30;
+
+/**
+ * QR pairing (#845): a phone redeems a code shown by the signed-in console or
+ * desktop (`POST /v1/native/pair-codes`) for its own device credential. The
+ * code is single use: the conditional write consumes it before a device exists.
+ */
+nativeAuthRoutes.post('/native/auth/code', async (c) => {
+  const ipHash = await nativeHash(c.req.header('cf-connecting-ip') ?? 'unknown');
+  const allowed = await d1UsageStore(c.env.DB).bumpIfBelow!(
+    `nativecode:${ipHash}`,
+    dayKey(Date.now()),
+    1,
+    CODE_TRIES_PER_IP_PER_DAY,
+  );
+  if (!allowed) throw new HttpError(429, 'Too many tries. Try again tomorrow.');
+  const body = await nativeBody(c);
+  const label = typeof body.label === 'string' ? body.label.trim() : '';
+  const code = normalizePairCode(body.code);
+  if (!code || !label || label.length > 80) throw new HttpError(400, 'Invalid pairing code.');
+  const codeHash = await nativeHash(code);
   const now = Date.now();
-  // No foreign key to users: an account deleted since sign-in gets no device.
-  const inserted = await c.env.DB.prepare(
-    `INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at)
-     SELECT ?, id, ?, ?, ?, ? FROM users WHERE id = ?`,
+  const claimed = await c.env.DB.prepare(
+    'UPDATE native_pair_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING user_id',
   )
-    .bind(id, consumed.label, await nativeHash(token), now, now + DEVICE_MS, consumed.user_id)
+    .bind(now, codeHash, now)
+    .first<{ user_id: string }>();
+  if (!claimed) {
+    throw new HttpError(
+      403,
+      'This code expired or was already used. Show a new one and scan again.',
+    );
+  }
+  const device = await createNativeDevice(c, claimed.user_id, label);
+  if (!device) throw new HttpError(401, 'Account no longer exists.');
+  await c.env.DB.prepare('UPDATE native_pair_codes SET device_id = ? WHERE code_hash = ?')
+    .bind(device.deviceId, codeHash)
     .run();
-  if (!inserted.meta.changes) throw new HttpError(401, 'Account no longer exists.');
-  return c.json({ token, deviceId: id });
+  return c.json(device);
 });

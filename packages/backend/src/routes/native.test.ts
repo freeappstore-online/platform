@@ -98,13 +98,16 @@ async function authorize(p: Awaited<ReturnType<typeof pairing>>, uid = 'gh:1') {
   expect(result.status).toBe(200);
 }
 
-async function device(uid = 'gh:1') {
+async function device(uid = 'gh:1', headers: Record<string, string> = {}) {
   const p = await pairing();
   await authorize(p, uid);
-  const response = await request('/native/auth/complete', 'POST', {
-    id: p.id,
-    verifier: p.verifier,
-  });
+  const response = await request(
+    '/native/auth/complete',
+    'POST',
+    { id: p.id, verifier: p.verifier },
+    undefined,
+    headers,
+  );
   expect(response.status).toBe(200);
   return (await response.json()) as { token: string; deviceId: string };
 }
@@ -612,6 +615,199 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
       await grant(d.token);
       db.exec('UPDATE native_devices SET expires_at=0');
       expect((await statusOf()).enabled).toBe(false);
+    });
+  });
+
+  describe('devices, versions and QR pairing (#833, #845)', () => {
+    const DESKTOP = { 'X-FAS-App-Version': '0.4.0 (57, abc1234)', 'X-FAS-Client': 'desktop' };
+    const PHONE = { 'X-FAS-App-Version': '1.2.0 (88, def5678)', 'X-FAS-Client': 'android' };
+    type Device = {
+      id: string;
+      label: string;
+      client: string | null;
+      version: string | null;
+      createdAt: number;
+      lastSeenAt: number | null;
+      expiresAt: number;
+      pairedBy: string | null;
+    };
+    const consoleToken = (uid = 'gh:1') => appToken(uid, 'console');
+    const devices = async (uid = 'gh:1') =>
+      (
+        (await (
+          await request('/native/devices', 'GET', undefined, await consoleToken(uid))
+        ).json()) as {
+          devices: Device[];
+        }
+      ).devices;
+    const newCode = async (token: string) => {
+      const response = await request('/native/pair-codes', 'POST', undefined, token);
+      expect(response.status).toBe(200);
+      return (await response.json()) as { code: string; url: string; expiresAt: number };
+    };
+    const redeem = (code: string, headers: Record<string, string> = PHONE, label = 'Pixel 9') =>
+      request('/native/auth/code', 'POST', { code, label }, undefined, headers);
+
+    it('keeps the version and kind a device last reported, writing only on change or every 15 minutes', async () => {
+      const d = await device('gh:1', DESKTOP);
+      const seen = () =>
+        db.prepare('SELECT app_version, client, last_seen_at FROM native_devices').get() as {
+          app_version: string;
+          client: string;
+          last_seen_at: number;
+        };
+      expect(seen()).toMatchObject({ app_version: '0.4.0 (57, abc1234)', client: 'desktop' });
+      // Within 15 minutes and unchanged: no write
+      db.exec(`UPDATE native_devices SET last_seen_at = ${Date.now() - 60_000}`);
+      const before = seen().last_seen_at;
+      await request('/native/me', 'GET', undefined, d.token, DESKTOP);
+      expect(seen().last_seen_at).toBe(before);
+      // A new version is written at once; a call without the headers keeps it
+      await request('/native/me', 'GET', undefined, d.token, {
+        ...DESKTOP,
+        'X-FAS-App-Version': '0.5.0 (60, 1234abc)',
+      });
+      expect(seen().app_version).toBe('0.5.0 (60, 1234abc)');
+      expect(seen().last_seen_at).toBeGreaterThan(before);
+      db.exec('UPDATE native_devices SET last_seen_at = 5');
+      await request('/generation/open', 'GET', undefined, d.token);
+      expect(seen()).toMatchObject({ app_version: '0.5.0 (60, 1234abc)', client: 'desktop' });
+      expect(seen().last_seen_at).toBeGreaterThan(5);
+      // Malformed values are ignored
+      await request('/native/me', 'GET', undefined, d.token, {
+        'X-FAS-App-Version': '<script>',
+        'X-FAS-Client': 'toaster',
+      });
+      expect(seen()).toMatchObject({ app_version: '0.5.0 (60, 1234abc)', client: 'desktop' });
+    });
+
+    it("lists and revokes only the signed-in user's own devices, with a console session only", async () => {
+      const mine = await device('gh:1', DESKTOP);
+      const theirs = await device('gh:2', PHONE);
+      const list = await devices();
+      expect(list).toEqual([
+        {
+          id: mine.deviceId,
+          label: 'iPhone (iOS 18.0)',
+          client: 'desktop',
+          version: '0.4.0 (57, abc1234)',
+          createdAt: expect.any(Number),
+          lastSeenAt: expect.any(Number),
+          expiresAt: expect.any(Number),
+          pairedBy: null,
+        },
+      ]);
+      expect((await request('/native/devices')).status).toBe(401);
+      expect((await request('/native/devices', 'GET', undefined, mine.token)).status).toBe(401);
+      expect(
+        (await request('/native/devices', 'GET', undefined, await appToken('gh:1'))).status,
+      ).toBe(403);
+      // Another user's device is not found, and stays
+      expect(
+        (
+          await request(
+            `/native/devices/${theirs.deviceId}`,
+            'DELETE',
+            undefined,
+            await consoleToken(),
+          )
+        ).status,
+      ).toBe(404);
+      expect((await request('/native/me', 'GET', undefined, theirs.token)).status).toBe(200);
+      const revoke = await request(
+        `/native/devices/${mine.deviceId}`,
+        'DELETE',
+        undefined,
+        await consoleToken(),
+      );
+      expect(await revoke.json()).toEqual({ revoked: true });
+      expect((await request('/native/me', 'GET', undefined, mine.token)).status).toBe(401);
+      expect(await devices()).toEqual([]);
+    });
+
+    it('pairs a phone by a code from the console or a device: hashed, single use, short-lived', async () => {
+      const shown = await newCode(await consoleToken());
+      expect(shown.code).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$/);
+      expect(shown.url).toBe(`freeappstore://native/pair?code=${shown.code.replaceAll('-', '')}`);
+      expect(shown.expiresAt - Date.now()).toBeLessThanOrEqual(5 * 60_000);
+      // Only the hash is stored
+      const stored = JSON.stringify(rows('SELECT * FROM native_pair_codes'));
+      expect(stored).not.toContain(shown.code.replaceAll('-', ''));
+      // Typed in lower case without dashes, it still works
+      const paired = await redeem(shown.code.replaceAll('-', '').toLowerCase());
+      expect(paired.status).toBe(200);
+      const { token, deviceId } = (await paired.json()) as { token: string; deviceId: string };
+      expect(token).toMatch(/^ndev_[a-f0-9]{64}$/);
+      expect((await request('/native/me', 'GET', undefined, token)).status).toBe(200);
+      expect((await redeem(shown.code)).status).toBe(403);
+      expect(await devices()).toEqual([
+        expect.objectContaining({
+          id: deviceId,
+          label: 'Pixel 9',
+          client: 'android',
+          version: '1.2.0 (88, def5678)',
+          pairedBy: 'console',
+        }),
+      ]);
+      expect(rows('SELECT created_by, device_id FROM native_pair_codes')).toEqual([
+        { created_by: 'console', device_id: deviceId },
+      ]);
+
+      // From the desktop, with its device credential
+      const desktop = await device('gh:1', DESKTOP);
+      const fromDesktop = await newCode(desktop.token);
+      const second = (await (await redeem(fromDesktop.code)).json()) as { deviceId: string };
+      expect((await devices()).find((d) => d.id === second.deviceId)?.pairedBy).toBe(
+        'iPhone (iOS 18.0)',
+      );
+
+      // Expired: refused
+      const late = await newCode(await consoleToken());
+      db.exec('UPDATE native_pair_codes SET expires_at = 1 WHERE used_at IS NULL');
+      expect((await redeem(late.code)).status).toBe(403);
+      // Malformed or unlabelled: 400
+      expect((await redeem('ABCD')).status).toBe(400);
+      expect((await redeem((await newCode(await consoleToken())).code, PHONE, '')).status).toBe(
+        400,
+      );
+    });
+
+    it('refuses to make codes without a console session or device, and caps them', async () => {
+      expect((await request('/native/pair-codes', 'POST')).status).toBe(401);
+      expect(
+        (await request('/native/pair-codes', 'POST', undefined, await appToken('gh:1'))).status,
+      ).toBe(403);
+      const session = await consoleToken();
+      for (let i = 0; i < 20; i++) await newCode(session);
+      expect((await request('/native/pair-codes', 'POST', undefined, session)).status).toBe(429);
+      // Per user: someone else still can
+      await newCode(await consoleToken('gh:2'));
+    });
+
+    it('caps code tries per IP per day', async () => {
+      const ip = { ...PHONE, 'cf-connecting-ip': '203.0.113.7' };
+      for (let i = 0; i < 30; i++)
+        expect((await redeem('0000-0000-0000-0000', ip)).status).toBe(403);
+      expect((await redeem('0000-0000-0000-0000', ip)).status).toBe(429);
+    });
+
+    it('a code outlives neither its account nor 30 days past expiry', async () => {
+      const shown = await newCode(await consoleToken());
+      db.exec("DELETE FROM users WHERE id = 'gh:1'");
+      expect((await redeem(shown.code)).status).toBe(401);
+      db.exec(
+        "INSERT INTO users (id, github_id, github_login, created_at) VALUES ('gh:1', 1, 'alice', 0)",
+      );
+      await newCode(await consoleToken());
+      expect((await request('/auth/me', 'DELETE', undefined, await consoleToken())).status).toBe(
+        200,
+      );
+      expect(rows('SELECT * FROM native_pair_codes')).toHaveLength(0);
+      await newCode(await consoleToken('gh:2'));
+      await pruneNativeData(env.DB, Date.now() + 5 * 60_000 + 29 * 24 * 60 * 60_000);
+      expect(rows('SELECT * FROM native_pair_codes')).toHaveLength(1);
+      await pruneNativeData(env.DB, Date.now() + 5 * 60_000 + 31 * 24 * 60 * 60_000);
+      expect(rows('SELECT * FROM native_pair_codes')).toHaveLength(0);
     });
   });
 

@@ -9,7 +9,13 @@
  */
 import { type Context, Hono } from 'hono';
 import { FAS_APP_ROWS } from '../lib/apps.js';
-import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
+import {
+  HttpError,
+  isAdminLogin,
+  isAdminUserId,
+  requireConsoleUser,
+  requireUser,
+} from '../lib/auth.js';
 import {
   NATIVE_APP_JOIN,
   NATIVE_RETENTION_MS,
@@ -17,6 +23,8 @@ import {
   nativeCatalog,
   nativeDevice,
   nativeGrants,
+  nativeHash,
+  nativePairCode,
   nativePoints,
   nativeRandom,
 } from '../lib/native-companion.js';
@@ -27,6 +35,9 @@ export const nativeRoutes = new Hono<{ Bindings: Env }>();
 
 // A 15 s upload cadence around the clock is 5,760 batches a day.
 const UPLOADS_PER_DEVICE_PER_DAY = 6_000;
+// QR pairing (#845): a code lives 5 minutes; a few a day is plenty for one person.
+const PAIR_CODE_MS = 5 * 60_000;
+const PAIR_CODES_PER_USER_PER_DAY = 20;
 
 nativeRoutes.use('/native/*', async (c, next) => {
   c.header('Cache-Control', 'private, no-store');
@@ -144,6 +155,80 @@ nativeRoutes.delete('/native/device', async (c) => {
   const device = await nativeDevice(c);
   await c.env.DB.prepare('DELETE FROM native_devices WHERE id = ?').bind(device.id).run();
   return c.json({ disconnected: true });
+});
+
+/**
+ * A pairing code for a phone to scan (#845), from the console (a first-party
+ * session) or from one of the user's devices (the desktop app). The phone
+ * redeems it at `POST /native/auth/code`. Only its hash is stored, with who
+ * made it, from where, and later the device it paired.
+ */
+nativeRoutes.post('/native/pair-codes', async (c) => {
+  let userId: string;
+  let createdBy: string;
+  if (c.req.header('Authorization')?.startsWith('Bearer ndev_')) {
+    const device = await nativeDevice(c);
+    userId = device.user_id;
+    createdBy = `ndev:${device.id}`;
+  } else {
+    userId = (await requireConsoleUser(c)).id;
+    createdBy = 'console';
+  }
+  const now = Date.now();
+  const allowed = await d1UsageStore(c.env.DB).bumpIfBelow!(
+    `nativeqr:${userId}`,
+    dayKey(now),
+    1,
+    PAIR_CODES_PER_USER_PER_DAY,
+  );
+  if (!allowed) throw new HttpError(429, 'Too many pairing codes today. Try again tomorrow.');
+  const code = nativePairCode();
+  await c.env.DB.prepare(
+    'INSERT INTO native_pair_codes (code_hash, user_id, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?)',
+  )
+    .bind(await nativeHash(code), userId, createdBy, now, now + PAIR_CODE_MS)
+    .run();
+  return c.json({
+    code: code.match(/.{4}/g)!.join('-'),
+    url: `freeappstore://native/pair?code=${code}`,
+    expiresAt: now + PAIR_CODE_MS,
+  });
+});
+
+/**
+ * The signed-in user's paired devices (#833): phones and computers, with the
+ * version each last reported. `pairedBy` is null for the browser flow, else
+ * `console` or the label of the device that showed the code (#845).
+ */
+nativeRoutes.get('/native/devices', async (c) => {
+  const user = await requireConsoleUser(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT d.id, d.label, d.client, d.app_version AS version, d.created_at AS createdAt,
+       d.last_seen_at AS lastSeenAt, d.expires_at AS expiresAt, p.created_by AS createdBy, s.label AS byLabel
+     FROM native_devices d
+     LEFT JOIN native_pair_codes p ON p.device_id = d.id
+     LEFT JOIN native_devices s ON p.created_by = 'ndev:' || s.id
+     WHERE d.user_id = ? AND d.expires_at > ?
+     ORDER BY COALESCE(d.last_seen_at, d.created_at) DESC`,
+  )
+    .bind(user.id, Date.now())
+    .all<{ createdBy: string | null; byLabel: string | null }>();
+  return c.json({
+    devices: (rows.results ?? []).map(({ createdBy, byLabel, ...d }) => ({
+      ...d,
+      pairedBy: createdBy === 'console' ? createdBy : createdBy && (byLabel ?? 'a removed device'),
+    })),
+  });
+});
+
+/** Revoke one of the signed-in user's devices: its grants and points go with it. */
+nativeRoutes.delete('/native/devices/:id', async (c) => {
+  const user = await requireConsoleUser(c);
+  const result = await c.env.DB.prepare('DELETE FROM native_devices WHERE id = ? AND user_id = ?')
+    .bind(c.req.param('id'), user.id)
+    .run();
+  if (!result.meta.changes) throw new HttpError(404, 'Device not found.');
+  return c.json({ revoked: true });
 });
 
 nativeRoutes.post('/native/locations', async (c) => {

@@ -9,6 +9,7 @@ import { useTheme } from "../lib/theme";
 import { useTextSize } from "../lib/text-size";
 import { getSession } from "../lib/api";
 import { AccountSettings } from "../../AccountSettings";
+import { DevicesSettings } from "../../DevicesSettings";
 import { BASE } from "../../SiteNav";
 
 function useNotificationState() {
@@ -292,6 +293,10 @@ export function Profile() {
           )}
         </Section>
       )}
+
+      <Section title="Devices">
+        <DevicesSettings getToken={() => getSession()?.token ?? null} />
+      </Section>
 
       <AccountSettings getToken={() => getSession()?.token ?? null} onSignedOut={leave} />
 
