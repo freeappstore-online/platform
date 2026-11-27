@@ -470,7 +470,13 @@ export class Contribute {
     };
     try {
       await contributeKokoroApps({ runner, signal: controller.signal, apps, onEvent });
-      end('stopped', 'stopped before it finished');
+      // A job still in hand when the run ends by itself ran out of lease (no event says so)
+      end(
+        'stopped',
+        controller.signal.aborted
+          ? 'stopped before it finished'
+          : 'the lease ran out before it finished',
+      );
       this.set({
         message: controller.signal.aborted
           ? null

@@ -314,6 +314,40 @@ describe('Contribute', () => {
     contribute.stop();
   });
 
+  it("records the run's last job as lease_cap when its lease ran out", async () => {
+    const claims = [
+      json({ job: { ...job, leaseExpiresAt: Date.now() - 1 } }),
+      new Response(null, { status: 204 }),
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/generation/open'))
+          return json({
+            apps: [
+              {
+                appId: 'books',
+                oneliner: null,
+                sets: [kokoroSet('s1', { voice: 'af_heart' }, null)],
+              },
+            ],
+          });
+        if (url.endsWith('/claim')) return claims.shift()!;
+        if (url.endsWith('/events')) return json({ recorded: 1 });
+        return json({ submissions: [] });
+      }),
+    );
+    const { contribute } = setup();
+    contribute.wake();
+    await until(() => history.length === 1 && contribute.state.status === 'idle');
+    expect(history[0]).toMatchObject({
+      jobId: 'j1',
+      outcome: 'stopped',
+      record: { reason: 'lease_cap' },
+    });
+    contribute.stop();
+  });
+
   it('hands a refused device credential back to the app', async () => {
     vi.stubGlobal(
       'fetch',
