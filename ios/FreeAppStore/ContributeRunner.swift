@@ -48,6 +48,14 @@ final class ContributeRunner: ObservableObject {
 
     var running: Bool { stopFlag != nil }
 
+    /// Copy diagnostics (#813): the capability report, how the last run ended, the settings and the latest jobs' records.
+    func diagnostics() -> String {
+        let prefs = local.contributePrefs
+        let rows = (try? local.contributions(limit: Diagnostics.jobs)) ?? []
+        return Diagnostics.text(Diagnostics.report(capabilities: Diagnostics.capabilities(kokoro: kokoro, cpu: prefs.cpu, now: watch.now(hot: DeviceWatch.hot)),
+                                                   lastStop: lastStop, lastError: lastError, prefs: prefs, contributions: rows, now: Date()))
+    }
+
     init(repository: CompanionRepository, kokoro: KokoroModel = KokoroModel(), api: FasApi = FasApi(resourceTimeout: 600)) {
         self.repository = repository
         self.kokoro = kokoro
@@ -217,6 +225,8 @@ final class ContributeRunner: ObservableObject {
         defer { stopFlag = nil; self.background = false; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason ?? paused }
         let keepGoing: () -> Bool = { !flag.stopped }
         let prefs = local.contributePrefs
+        let capabilities = Diagnostics.text(Diagnostics.capabilities(kokoro: kokoro, cpu: prefs.cpu, now: watch.now(hot: DeviceWatch.hot)))
+        Self.logger.notice("Capabilities: \(capabilities, privacy: .public)")
         // The conditions (#830), in the background only: Run now ignores them. Heat is left to `hot`, which waits.
         let store = self.local
         let watch = self.watch
@@ -270,7 +280,10 @@ final class ContributeRunner: ObservableObject {
             defer { synth.close() }
             for app in apps {
                 if !keepGoing() { break }
-                do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
+                do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {
+                    // The run goes on; Activity refreshes the verdicts again.
+                    Self.logger.error("Verdicts for \(app, privacy: .public) not refreshed: \(error.localizedDescription, privacy: .public)")
+                }
             }
             let started = Box(Date())
             let (path, appState) = (NetworkPath(), AppBackground()) // what each attempt's record says of the phone (#827)

@@ -11,6 +11,7 @@ struct ContributeSettingsView: View {
     /// Bytes on this phone: the voice model's folder, and the database holding the contribution record.
     @State private var storage: (model: Int64, record: Int64)?
     @State private var notifications = UNAuthorizationStatus.notDetermined
+    @State private var copied = false
 
     var body: some View {
         ScrollView {
@@ -25,6 +26,7 @@ struct ContributeSettingsView: View {
                     Text("Voice model: \(Self.size(storage.model))")
                     Text("Contribution record and other data on this phone: \(Self.size(storage.record))")
                 }
+                troubleshooting
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -133,6 +135,21 @@ struct ContributeSettingsView: View {
     }
 
     private var downloadMB: Int64 { KokoroModel.downloadBytes / 1_000_000 }
+
+    /// Copy diagnostics (#813), for a bug report.
+    private var troubleshooting: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Troubleshooting").font(.title3.bold())
+                note("Copies what this phone can run, how the last run ended and the latest \(Diagnostics.jobs) jobs' records, for a bug report. No text, audio or sign-in details.")
+                Button(copied ? "Copied" : "Copy diagnostics") {
+                    UIPasteboard.general.string = runner.diagnostics()
+                    copied = true
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
 
     private var voiceModel: some View {
         GroupBox {

@@ -719,8 +719,10 @@ private final class Lease: @unchecked Sendable {
             case 401: throw failure
             case 403: lock.withLock { expiresAt = 0 }
             case 409: lock.withLock { extendable = false }
-            default: break
+            default: break // tried again at the next renew, between sentences
             }
-        } catch {}
+        } catch {
+            // No answer (a network failure): tried again at the next renew, between sentences; the upload retries too.
+        }
     }
 }

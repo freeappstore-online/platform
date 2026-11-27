@@ -1375,4 +1375,25 @@ final class ContributionStoreTests: XCTestCase {
         model.handle(URL(string: "freeappstore://native/contribute/Books%2F..")!)
         XCTAssertNil(model.linkedContribute)
     }
+
+    /// Copy diagnostics (#813): the latest 50 jobs newest first with their records, never their text or report notes.
+    func testDiagnosticsKeepTheLatestJobsWithoutTextOrNotes() throws {
+        var record = AttemptRecord()
+        record.reason = "submitted"
+        let rows = (1...60).map { i in
+            Contribution(jobId: "j\(i)", appId: "books", key: "book/\(i)", at: Int64(i) * 1000, status: "rejected", reason: "audio is too short",
+                         input: "SECRET INPUT \(i)", durationMs: 1200, bytes: 4000, record: record, submissionId: "s\(i)",
+                         report: SubmissionReport(good: false, note: "SECRET NOTE", at: 5))
+        }
+        let report = Diagnostics.report(capabilities: ["runner": "ios"], lastStop: "unplugged", lastError: "", prefs: ContributePrefs(),
+                                        contributions: rows, now: Date(timeIntervalSince1970: 1000))
+        let jobs = try XCTUnwrap(report["jobs"] as? [[String: Any]])
+        XCTAssertEqual(jobs.count, Diagnostics.jobs)
+        XCTAssertEqual(jobs.first?["jobId"] as? String, "j60")
+        XCTAssertEqual((jobs.first?["attempt"] as? [String: Any])?["reason"] as? String, "submitted")
+        XCTAssertEqual(jobs.first?["reportedGood"] as? Bool, false)
+        XCTAssertEqual(report["lastStop"] as? String, "unplugged")
+        XCTAssertFalse(Diagnostics.text(report).contains("SECRET"))
+        XCTAssertTrue(Diagnostics.aacEncoder)
+    }
 }

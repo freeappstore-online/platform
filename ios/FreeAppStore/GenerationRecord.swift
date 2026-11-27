@@ -1,3 +1,4 @@
+import AudioToolbox
 import Darwin
 import Foundation
 import Network
@@ -304,4 +305,63 @@ struct AttemptAudio {
     }
 
     private func modified(_ url: URL) -> Date { (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast }
+}
+
+/// Copy diagnostics and the capability report (#813), for a bug report. Never the input text, the audio, notes typed into
+/// a report, or any credential.
+enum Diagnostics {
+    /// How many of the latest jobs Copy diagnostics includes.
+    static let jobs = 50
+
+    /// What this phone generates with, logged at the start of each run and part of Copy diagnostics: the runner and its
+    /// version, the voice model, the accelerator (sherpa-onnx runs Kokoro on the CPU), the AAC encoder, free storage, and
+    /// power, thermal state and network now.
+    static func capabilities(kokoro: KokoroModel, cpu: ContributePrefs.Cpu, now: DeviceNow) -> [String: Any] {
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let free = (try? URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
+            .volumeAvailableCapacityForImportantUsage
+        var out: [String: Any] = [
+            "runner": "ios", "appVersion": DeviceProbes.appVersion, "os": DeviceProbes.os, "device": DeviceProbes.device,
+            "model": "\(KokoroModel.id.model) \(KokoroModel.id.version)", "modelInstalled": kokoro.installed,
+            "accelerator": "cpu (sherpa-onnx, \(ContributePrefs.effort(cpu).threads) of \(cores) cores)",
+            "aacEncoder": aacEncoder, "thermal": DeviceProbes.name(ProcessInfo.processInfo.thermalState),
+            "lowPower": now.lowPower, "pluggedIn": now.plugged, "network": now.network,
+        ]
+        out["freeStorageMb"] = free.map { $0 / 1_000_000 }
+        out["battery"] = now.battery
+        return out
+    }
+
+    /// Whether AudioToolbox has an AAC encoder (what `AacEncoder` writes through ExtAudioFile).
+    static var aacEncoder: Bool {
+        var format = kAudioFormatMPEG4AAC
+        var size: UInt32 = 0
+        return AudioFormatGetPropertyInfo(kAudioFormatProperty_Encoders, UInt32(MemoryLayout.size(ofValue: format)), &format, &size) == noErr && size > 0
+    }
+
+    /// The report: `capabilities`, how the last run ended, the Contribute settings and the latest `jobs` jobs with their
+    /// status, reasons and attempt records.
+    static func report(capabilities: [String: Any], lastStop: String?, lastError: String, prefs: ContributePrefs,
+                       contributions: [Contribution], now: Date) -> [String: Any] {
+        let iso = ISO8601DateFormatter()
+        let jobs: [[String: Any]] = contributions.sorted { $0.at > $1.at }.prefix(Self.jobs).map { c in
+            var job: [String: Any] = [
+                "jobId": c.jobId, "appId": c.appId, "key": c.key, "status": c.status, "reason": c.reason,
+                "at": iso.string(from: Date(timeIntervalSince1970: Double(c.at) / 1000)), "durationMs": c.durationMs, "bytes": c.bytes,
+            ]
+            job["submissionId"] = c.submissionId.isEmpty ? nil : c.submissionId
+            job["reportedGood"] = c.report?.good
+            job["attempt"] = c.record.flatMap { try? JSONSerialization.jsonObject(with: JSONEncoder().encode($0)) }
+            return job
+        }
+        var out: [String: Any] = ["at": iso.string(from: now), "capabilities": capabilities, "lastError": lastError, "jobs": jobs]
+        out["lastStop"] = lastStop
+        out["settings"] = (try? JSONEncoder().encode(prefs)).flatMap { try? JSONSerialization.jsonObject(with: $0) }
+        return out
+    }
+
+    /// The report as pretty JSON, keys sorted.
+    static func text(_ report: [String: Any]) -> String {
+        (try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])).map { String(decoding: $0, as: UTF8.self) } ?? "{}"
+    }
 }
