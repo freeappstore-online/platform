@@ -15,7 +15,7 @@ fas publish
 The FreeAppStore desktop app's **Publish** page (#800) does the same with buttons: New app (`fas init`), Check
 (`fas check`), Publish (`fas publish`) and Push (commit and `git push` to the app's repository). It runs the `fas` CLI
 it bundles, with the CLI's sign-in (`~/.fas/config.json`), so it behaves exactly like the steps below. See
-[desktop/README.md](../desktop/README.md#publish).
+[`desktop/README.md`](https://github.com/freeappstore-online/platform/blob/main/desktop/README.md#publish).
 
 ### Via VibeCode (AI builder)
 
