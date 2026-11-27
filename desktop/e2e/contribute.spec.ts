@@ -5,6 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _electron, type ElectronApplication, expect, test } from '@playwright/test';
+import { homeWindow } from './home.js';
 
 // Contribute (#826, #837) with the real model, against a stand-in API: downloads the phones' Kokoro
 // package (350 MB from sherpa-onnx's GitHub release, or FAS_E2E_MODEL_FILE served by the stand-in),
@@ -133,7 +134,7 @@ test.afterAll(async () => {
 });
 
 test('downloads the model on request, then generates English and Mandarin with the window closed', async () => {
-  const home = await electron.firstWindow();
+  const home = await homeWindow(electron);
   await home.getByRole('button', { name: 'Contribute', exact: true }).click();
   await expect(home.getByLabel('Generate for books')).toBeChecked();
   // Mandarin is tickable: the phones' engine speaks it (#837)

@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _electron, type ElectronApplication, expect, test } from '@playwright/test';
+import { homeWindow } from './home.js';
 
 // The signed-in profile (#829) against a stand-in /native/me, Sign out revoking the credential, the
 // version sent with every call (#833), Add a phone (#845), and Contribute's history and opt-ins
@@ -80,7 +81,7 @@ async function launch(token: string | null) {
       FAS_DEV_API_ORIGIN: `http://127.0.0.1:${(api.address() as AddressInfo).port}`,
     } as Record<string, string>,
   });
-  return electron.firstWindow();
+  return homeWindow(electron);
 }
 
 const HISTORY = 'contribute-history.json';
