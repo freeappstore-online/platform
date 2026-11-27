@@ -120,9 +120,9 @@ class KokoroModel(private val dir: File) {
 /**
  * Kokoro through sherpa-onnx's offline TTS (JNI, CPU). Loads the model on first use; [close] frees it. Mandarin gets its
  * own engine with the Mandarin number and date rules (which would read digits in English text as Chinese), loaded in
- * place of the other one when the language changes.
+ * place of the other one when the language changes. [threads] is #830's CPU setting, at most the phone's cores.
  */
-class KokoroSynthesizer(private val files: KokoroModel) : Synthesizer, AutoCloseable {
+class KokoroSynthesizer(private val files: KokoroModel, private val threads: Int = 4) : Synthesizer, AutoCloseable {
     override val model = KokoroModel.ID
     private var engine: Pair<Boolean, OfflineTts>? = null
     override var loadedMs = 0L
@@ -140,9 +140,9 @@ class KokoroSynthesizer(private val files: KokoroModel) : Synthesizer, AutoClose
             lexicon = listOf("lexicon-us-en.txt", "lexicon-zh.txt").joinToString(",") { File(root, it).path },
             dictDir = File(root, "dict").takeIf { it.isDirectory }?.path ?: "",
         )
-        val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+        val cores = threads.coerceIn(1, Runtime.getRuntime().availableProcessors())
         val rules = if (mandarin) KokoroModel.MANDARIN_RULES.joinToString(",") { File(root, it).path } else ""
-        return OfflineTts(config = OfflineTtsConfig(model = OfflineTtsModelConfig(kokoro = kokoro, numThreads = threads), ruleFsts = rules))
+        return OfflineTts(config = OfflineTtsConfig(model = OfflineTtsModelConfig(kokoro = kokoro, numThreads = cores), ruleFsts = rules))
     }
     override fun accepts(params: JSONObject) = KokoroModel.params(params) != null
     override fun language(params: JSONObject, language: String?) = KokoroModel.language(params, language)

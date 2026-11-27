@@ -131,6 +131,27 @@ and verifies every upload; the phone is never trusted.
   `PUT …/jobs/:jobId/result` multipart (`file`, `audio/mp4`, and `meta`) with `X-Lease-Token`. Nothing is uploaded after
   the lease is within 30 s of expiry, above `maxBytes`, or with `meta` over 64 KB. A job is recorded before its upload
   starts and is never generated or uploaded again on this phone.
+- **When it runs** (#830), all on the phone (the server sets no per-user limits): **Auto** (default) runs by itself
+  whenever every condition holds and the status card says which one holds it ("Paused: Phone in use.", "Battery 28%
+  (min 40%).", "On mobile data. It runs on Wi‑Fi only.", "Waiting: no jobs right now"); **Run now** is one run that
+  ignores the conditions, then Auto; **Off** stops the job in hand and cancels the hourly work, the plug-in trigger and
+  chained runs, and stays off across restarts and updates ("Contribute is off. It will not start again until you turn it
+  on."). Conditions, defaults in brackets: connection Wi‑Fi only / Wi‑Fi + mobile data within a monthly allowance [Wi‑Fi
+  only, 500 MB]; power charging only / also on battery above a floor [charging only, 40%]; pause when hot (thermal
+  status moderate or worse) [on]; while the phone is in use (screen on and unlocked) pause / run slower [pause]; CPU
+  Light (1 thread, rests as long as each sentence) / Balanced (2 threads, short rests) / Full (up to 4, none)
+  [Balanced]; a daily maximum of jobs or minutes [none]; quiet hours [off]. They are checked before each claim and
+  between sentences: a job at least 80% done is finished, any other stops and its attempt record carries an interrupted
+  reason (`unplugged`, `thermal`, `network`, `user_stop`), so the server gives it back (#841). Mobile data (the model
+  download and uploads on a metered network) is counted on the phone and resets each month. A run held by use or heat
+  while plugged in looks again in 10 minutes. Phones that had "any time" on start with mobile data and battery allowed.
+- **Retrying** (#841): a job this phone was interrupted on (`skipped` `stopped` / `lease_expired` / `interrupted`, or
+  `failed` `network`) is generated again when the server offers it again; anything else stays done.
+- **Overnight summary** (#844): after background work, one quiet notification such as "Generated 42 clips, 38 accepted,
+  1 h 10 min CPU", once a morning (6 to noon) or after an hour of CPU; tapping it opens Activity. It is on by default,
+  can be turned off in Contribute settings, and needs the notification permission the app asks for once.
+- **Share record** (#843): a job's detail shares `fas-record-<job>.zip` (`record.json` with every field, the attempt
+  record and the sentence timings, plus `audio.m4a` while the audio is kept) through the share sheet (FileProvider).
 - **Network retries** (#819): a claim, the verdict refresh or an upload that fails with a transient error (no
   connection, DNS, timeout, connection reset, any `5xx`, or a `429` with `Retry-After`) is tried again after 2, 4, 8, 16,
   32, then 60 s (or the `Retry-After`). Claims and the refresh try for up to a minute. An upload sends the same encoded

@@ -27,6 +27,11 @@
                 <data android:scheme="freeappstore" android:host="native" />
             </intent-filter>
         </activity>
+        <!-- Share record (#843): the zip in cache/shared, read by the app the user picks in the share sheet. -->
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.files"
+            android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
+        </provider>
         <service android:name=".LocationService" android:exported="false" android:foregroundServiceType="location" />
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge" />
     </application>

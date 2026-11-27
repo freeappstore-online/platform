@@ -29,7 +29,7 @@ class ContributeTest {
         val rows = LinkedHashMap<String, Contribution>()
         val attempts = LinkedHashMap<String, JSONObject>()
         override fun attempt(jobId: String, record: JSONObject) { attempts[jobId] = record }
-        override fun handled(jobId: String) = jobId in rows
+        override fun handled(jobId: String) = rows[jobId]?.let { !Contribution.retryable(it.status, it.reason) } ?: false
         override fun record(contribution: Contribution) { rows[contribution.jobId] = contribution }
         override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
             rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason, durationMs = server?.durationMs ?: it.durationMs,
@@ -259,9 +259,9 @@ class ContributeTest {
         assertFalse("the file is removed once given up", File(dir, "contribution.m4a").exists())
         assertEquals("network", api.events.single().getString("reason"))
         api.uploadFailure = null; api.jobs += job("j1")
-        assertEquals("never generated or uploaded again", 0, contributor().run(books, { true }))
-        assertEquals(1, synth.spoken.size)
-        assertTrue(api.uploads.isEmpty())
+        // The server gives it back after a network end (#841): an upload that did land would have used the lease.
+        assertEquals("generated again when offered again", 1, contributor().run(books, { true }))
+        assertEquals(1, api.uploads.size)
     }
     @Test fun a429IsRetriedOnlyWhenItSaysWhen() {
         api.jobs += job("j1")
@@ -552,14 +552,120 @@ class ContributeTest {
         assertFalse(model.install(source = source.toURI().toURL(), sha256 = sha(source), keepGoing = { false }))
         assertFalse(model.installed)
     }
-    /** #806: plugged in, not charging, so a full battery on the charger keeps going; unplugged stops unless any time is allowed. */
-    @Test fun runsWhilePluggedInEvenWhenFull() {
-        val ac = android.os.BatteryManager.BATTERY_PLUGGED_AC
-        for (plugged in listOf(ac, android.os.BatteryManager.BATTERY_PLUGGED_USB, android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS, 8)) {
-            assertTrue("plugged $plugged", ContributePower.mayRun(anyTime = false, plugged = plugged))
+    private val idle = DeviceState(connected = true, unmetered = true, plugged = true, battery = 80, thermal = 0, inUse = false,
+        minuteOfDay = 3 * 60, mobileBytes = 0, jobsToday = 0, msToday = 0)
+    /** #830: the defaults (Wi‑Fi only, charging only, pause when hot or in use) and why each condition holds Contribute. */
+    @Test fun theConditionsSayWhyContributeWaits() {
+        val d = ContributeSettings()
+        fun hold(s: ContributeSettings = d, dev: DeviceState = idle, claiming: Boolean = true) = ContributeConditions.hold(s, dev, claiming)
+        assertNull(hold())
+        assertEquals(Hold("off", ContributeConditions.OFF), hold(d.copy(off = true)))
+        assertEquals(Hold("unplugged", "Not plugged in. It runs while charging."), hold(dev = idle.copy(plugged = false)))
+        assertNull("also on battery, above the floor", hold(d.copy(onBattery = true), idle.copy(plugged = false, battery = 41)))
+        assertEquals(Hold("battery", "Battery 28% (min 40%)."), hold(d.copy(onBattery = true), idle.copy(plugged = false, battery = 28)))
+        assertNull("the floor is for battery only", hold(dev = idle.copy(battery = 5)))
+        assertEquals("metered", hold(dev = idle.copy(unmetered = false))?.code)
+        assertNull(hold(d.copy(mobileData = true), idle.copy(unmetered = false, mobileBytes = 499_999_999)))
+        assertEquals(Hold("data_cap", "Mobile data allowance used: 500 of 500 MB this month."), hold(d.copy(mobileData = true), idle.copy(unmetered = false, mobileBytes = 500_000_000)))
+        assertEquals("offline", hold(dev = idle.copy(connected = false, unmetered = false))?.code)
+        assertNull("a job in hand needs no connection: its upload retries", hold(dev = idle.copy(connected = false, unmetered = false), claiming = false))
+        assertEquals(Hold("thermal", "The phone is hot."), hold(dev = idle.copy(thermal = ContributeConditions.THERMAL_PAUSE)))
+        assertNull("light is fine", hold(dev = idle.copy(thermal = 1)))
+        assertNull(hold(d.copy(thermalPause = false), idle.copy(thermal = 4)))
+        assertEquals(Hold("in_use", "Phone in use."), hold(dev = idle.copy(inUse = true)))
+        assertNull("run slower instead", hold(d.copy(slowerInUse = true), idle.copy(inUse = true)))
+        assertEquals(Hold("daily_max", "Daily maximum reached: 20 jobs."), hold(d.copy(dailyJobs = 20), idle.copy(jobsToday = 20)))
+        assertEquals(Hold("daily_max", "Daily maximum reached: 60 min."), hold(d.copy(dailyMinutes = 60), idle.copy(msToday = 3_600_000)))
+        assertNull("no maximum by default", hold(dev = idle.copy(jobsToday = 10_000, msToday = 86_400_000)))
+        assertEquals(Hold("quiet_hours", "Quiet hours until 07:00."), hold(d.copy(quietHours = true)))
+        assertNull(hold(d.copy(quietHours = true), idle.copy(minuteOfDay = 7 * 60)))
+        assertTrue(ContributeConditions.within(23 * 60, 22 * 60, 7 * 60)); assertFalse(ContributeConditions.within(12 * 60, 22 * 60, 7 * 60))
+        assertTrue(ContributeConditions.within(13 * 60, 12 * 60, 14 * 60)); assertFalse(ContributeConditions.within(14 * 60, 12 * 60, 14 * 60))
+        // A job stopped by a condition sends an interrupted reason, so the server gives it back (#841).
+        assertEquals(mapOf("unplugged" to "unplugged", "battery" to "unplugged", "thermal" to "thermal", "metered" to "network",
+            "data_cap" to "network", "offline" to "network", "in_use" to "user_stop", "quiet_hours" to "user_stop", "daily_max" to "user_stop", "off" to "user_stop"),
+            listOf("unplugged", "battery", "thermal", "metered", "data_cap", "offline", "in_use", "quiet_hours", "daily_max", "off").associateWith { Hold(it, "").reason })
+    }
+    /** #830: nearly done finishes; the model waits for Wi‑Fi unless the allowance covers it; CPU rests. */
+    @Test fun nearlyDoneFinishesAndTheCpuSettingRests() {
+        assertTrue(ContributeConditions.finishes(0.8)); assertFalse(ContributeConditions.finishes(0.79))
+        assertTrue(ContributeConditions.modelFits(ContributeSettings(), idle))
+        assertTrue(ContributeConditions.modelFits(ContributeSettings(mobileData = true), idle.copy(unmetered = false)))
+        assertFalse("350 MB over what is left", ContributeConditions.modelFits(ContributeSettings(mobileData = true), idle.copy(unmetered = false, mobileBytes = 200_000_000)))
+        assertEquals(1_000L, ContributeConditions.restMs(1_000, ContributeSettings.Cpu.LIGHT, slower = false))
+        assertEquals(250L, ContributeConditions.restMs(1_000, ContributeSettings.Cpu.BALANCED, slower = false))
+        assertEquals(0L, ContributeConditions.restMs(1_000, ContributeSettings.Cpu.FULL, slower = false))
+        assertEquals("in use, run slower", 1_000L, ContributeConditions.restMs(1_000, ContributeSettings.Cpu.FULL, slower = true))
+        // The rest comes after each sentence, in steps a stop can cut short.
+        api.jobs += job("j1", "One. Two.")
+        val rested = Contributor(GenerationClient(api) { "ndev_test" }, log, object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { t += 2_500; return synth.synthesize(text, params, language, keepGoing) }
+        }, encoder, dir, now = { t }, sleep = sleep, rest = { it }, uploading = { uploaded += it })
+        assertEquals(1, rested.run(books, { true }))
+        assertEquals(listOf(1_000L, 1_000L, 500L, 1_000L, 1_000L, 500L), sleeps)
+        assertEquals("each upload is counted", listOf(api.uploads.single().bytes.size.toLong()), uploaded)
+    }
+    private val uploaded = mutableListOf<Long>()
+    /** #841: a job this phone was interrupted on is generated again when the server offers it; one that ended for good is not. */
+    @Test fun anInterruptedJobIsTriedAgain() {
+        for ((status, reason) in listOf("skipped" to "stopped", "skipped" to "lease_expired", "skipped" to "interrupted", "failed" to "network")) {
+            assertTrue("$status $reason", Contribution.retryable(status, reason))
         }
-        assertFalse("on battery", ContributePower.mayRun(anyTime = false, plugged = 0))
-        assertTrue("any time", ContributePower.mayRun(anyTime = true, plugged = 0))
+        for ((status, reason) in listOf("skipped" to "params", "skipped" to "too_large", "failed" to "500 Oops", "pending" to "", "rejected" to "x")) {
+            assertFalse("$status $reason", Contribution.retryable(status, reason))
+        }
+        api.jobs += job("j1")
+        var go = true
+        val stopping = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
+        }
+        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }, probes = DeviceProbes(stopReason = { "thermal" })).run(books, { go })
+        assertEquals("skipped" to "stopped", log.rows["j1"]!!.let { it.status to it.reason })
+        assertEquals("sent as an interruption", "thermal", api.events.last().getString("reason"))
+        assertEquals("may be tried again", retryText(log.rows["j1"]!!))
+        api.jobs += job("j1") // the server offers it again
+        assertEquals(1, contributor().run(books, { true }))
+        assertEquals("pending", log.rows["j1"]!!.status)
+        assertEquals(1, api.uploads.size)
+        api.jobs += job("j1") // never twice once uploaded
+        assertEquals(0, contributor().run(books, { true }))
+        assertEquals(1, api.uploads.size)
+    }
+    /** #844: the summary counts uploads, accepted ones and CPU since the last one; due once a morning or after a long run. */
+    @Test fun theOvernightSummary() {
+        fun c(id: String, status: String, at: Long, cpu: Long?) = Contribution(id, "books", id, at, status, record = cpu?.let { JSONObject().put("cpuMs", it).toString() })
+        val list = listOf(c("a", "accepted", 200, 3_000_000), c("b", "pending", 300, 1_200_000), c("c", "skipped", 300, 600_000),
+            c("d", "generating", 400, 60_000), c("e", "accepted", 50, 60_000))
+        val s = ContributeSummary.of(list, since = 100)
+        assertEquals(ContributeSummary(2, 1, 4_800_000), s)
+        assertEquals("Generated 2 clips, 1 accepted, 1 h 20 min CPU", s.text())
+        assertEquals("Generated 1 clip, 0 accepted, 12 min CPU", ContributeSummary(1, 0, 700_000).text())
+        assertTrue("a long run", ContributeSummary.due(s, hour = 2, shownToday = true))
+        val short = ContributeSummary(3, 3, 600_000)
+        assertTrue("morning", ContributeSummary.due(short, hour = 7, shownToday = false))
+        assertFalse("once a morning", ContributeSummary.due(short, hour = 8, shownToday = true))
+        assertFalse("not at night for a short run", ContributeSummary.due(short, hour = 2, shownToday = false))
+        assertFalse("nothing generated", ContributeSummary.due(ContributeSummary(0, 0, 9_000_000), hour = 7, shownToday = false))
+    }
+    /** #843: Share record is a zip with record.json (every field, the attempt and the timings) and the kept audio. */
+    @Test fun aSharedRecordHasEveryFieldAndTheAudio() {
+        val c = Contribution("j1", "books", "book/1", now, "accepted", "", "One.", 1_400, 33_600, "https://a/x", "https://a/x/meta",
+            JSONObject().put("cpuMs", 950).put("device", "Google Pixel 10a").toString(), "sub-1", Report(true, "fine", now))
+        val audio = File(dir, "a.m4a").apply { writeText("audio") }
+        val zip = writeRecordZip(File(dir, "shared"), c, "One. Two." to listOf(Segment(0, 4, 0, 500)), audio)
+        val entries = java.util.zip.ZipFile(zip).use { z -> z.entries().asSequence().associate { it.name to z.getInputStream(it).readBytes() } }
+        assertEquals(setOf("record.json", "audio.m4a"), entries.keys)
+        assertEquals("audio", String(entries["audio.m4a"]!!))
+        val json = JSONObject(String(entries["record.json"]!!))
+        assertEquals("One. Two.", json.getString("input"))
+        assertEquals("accepted", json.getString("status")); assertEquals("sub-1", json.getString("submissionId"))
+        assertEquals(950, json.getJSONObject("attempt").getInt("cpuMs"))
+        assertEquals(true, json.getJSONObject("report").getBoolean("good"))
+        assertEquals("[[0,4,0,0.5]]", json.getJSONArray("segments").toString())
+        assertEquals(java.time.Instant.ofEpochMilli(now).toString(), json.getString("at"))
+        val bare = JSONObject(String(java.util.zip.ZipFile(writeRecordZip(File(dir, "shared"), c.copy(record = null, report = null), null, null)).use { z ->
+            z.getInputStream(z.getEntry("record.json")).readBytes() }))
+        assertEquals("One.", bare.getString("input")); assertTrue(bare.isNull("attempt")); assertTrue(bare.isNull("segments"))
     }
     /** #806: Run now or a settings change while a run is working never replaces or reschedules it. */
     @Test fun aRunningContributionIsNeverReplaced() {
@@ -569,10 +675,6 @@ class ContributeTest {
     }
     /** #806: the network is checked before each claim, not as a WorkManager constraint that stops a job part-way. */
     @Test fun networkIsCheckedBeforeEachClaimOnly() {
-        assertTrue(ContributePower.mayClaim(anyTime = false, connected = true, unmetered = true))
-        assertFalse("metered", ContributePower.mayClaim(anyTime = false, connected = true, unmetered = false))
-        assertTrue("metered, any time", ContributePower.mayClaim(anyTime = true, connected = true, unmetered = false))
-        assertFalse("offline", ContributePower.mayClaim(anyTime = true, connected = false, unmetered = false))
         api.jobs += job("j1"); api.jobs += job("j2")
         var online = true
         val dropsDuringTheJob = object : Synthesizer by synth {
@@ -590,11 +692,13 @@ class ContributeTest {
     }
     /** #827: a plain job that stops itself at PLAIN_RUN_MS records the system's time budget, not the user. */
     @Test fun aPlainJobOutOfTimeIsNotAUserStop() {
-        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = true, outOfTime = true))
-        assertEquals("user_stop", ContributeWorker.stopReason(cancelled = true, systemStop = true, power = true, outOfTime = true))
-        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = true, power = true, outOfTime = false))
-        assertEquals("unplugged", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = false, outOfTime = false))
-        assertEquals("the app was turned off", "user_stop", ContributeWorker.stopReason(cancelled = false, systemStop = false, power = true, outOfTime = false))
+        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = false, hold = null, outOfTime = true))
+        assertEquals("user_stop", ContributeWorker.stopReason(cancelled = true, systemStop = true, hold = null, outOfTime = true))
+        assertEquals("background_expired", ContributeWorker.stopReason(cancelled = false, systemStop = true, hold = null, outOfTime = false))
+        assertEquals("unplugged", ContributeWorker.stopReason(cancelled = false, systemStop = false, hold = Hold("unplugged", ""), outOfTime = false))
+        assertEquals("thermal", ContributeWorker.stopReason(cancelled = false, systemStop = false, hold = Hold("thermal", ""), outOfTime = false))
+        assertEquals("network", ContributeWorker.stopReason(cancelled = false, systemStop = false, hold = Hold("metered", ""), outOfTime = false))
+        assertEquals("the app was turned off", "user_stop", ContributeWorker.stopReason(cancelled = false, systemStop = false, hold = null, outOfTime = false))
     }
     /** #828: the daily limit's 429 (no Retry-After) at the claim ends the run without generating anything. */
     @Test fun theDailyLimitAtTheClaimEndsTheRun() {
@@ -612,7 +716,8 @@ class ContributeTest {
     }
     @Test fun recentResultsSayAStoppedJobIsNotRetried() {
         fun c(status: String, reason: String = "") = contributionDetail(Contribution("j", "books", "k", now, status, reason))
-        assertEquals("stopped · not retried on this phone", c("skipped", "stopped"))
+        assertEquals("stopped · may be tried again", c("skipped", "stopped"))
+        assertEquals("params · not retried on this phone", c("skipped", "params"))
         assertEquals("409 Lease expired. · not retried on this phone", c("failed", "409 Lease expired."))
         assertEquals("transcript_mismatch", c("rejected", "transcript_mismatch"))
         assertEquals("", c("accepted"))
@@ -677,10 +782,11 @@ class ContributeTest {
         assertEquals("Running" to "Generating Books", contributeStatus(ready.copy(contributing = "Generating Books")))
         assertEquals("No voice model. Download it in Settings.", why(ready.copy(model = ModelState.NONE)))
         assertEquals("No apps turned on. Choose them in Settings.", why(ready.copy(contributeApps = emptySet())))
-        assertEquals("Not plugged in. It runs while plugged in on Wi‑Fi.", why(ready.copy(plugged = false)))
-        assertEquals("Not on Wi‑Fi. It runs while plugged in on Wi‑Fi.", why(ready.copy(unmetered = false)))
-        assertEquals("No connection.", why(ready.copy(online = false, unmetered = false)))
-        assertEquals("Idle", contributeStatus(ready.copy(contributeAnyTime = true, plugged = false, unmetered = false)).first)
+        assertEquals("Running (Run now)", contributeStatus(ready.copy(contributing = "Generating Books", contributeMode = "Run now")).first)
+        assertEquals("Off" to ContributeConditions.OFF, contributeStatus(ready.copy(contributeSettings = ContributeSettings(off = true))))
+        assertEquals("Paused" to "Battery 28% (min 40%).", contributeStatus(ready.copy(contributeHold = Hold("battery", "Battery 28% (min 40%)."))))
+        assertEquals("Waiting" to "No jobs right now. It looks again about every hour.", contributeStatus(ready.copy(contributeLastEnd = "no_work · 0 submitted")))
+        assertEquals("Waiting", contributeStatus(ready).first)
     }
     /** #835: the job is on the record from the claim, its record so far updated each sentence, then it takes its final status. */
     @Test fun theJobInHandIsInProgressWithItsLiveRecord() {
@@ -725,7 +831,7 @@ class ContributeTest {
     }
     /** #836: plugged in, a run that ran out of time queues the next at once; anything else re-arms the trigger, later while plugged in. */
     @Test fun aRunOnPowerChainsOnlyWhenItRanOutOfTime() {
-        val after = ContributeWorker.Companion::after
+        val after = { end: String, plugged: Boolean, mayClaim: Boolean -> ContributeWorker.after(end, plugged, mayClaim) }
         assertEquals(ContributeWorker.Companion.After.NEXT, after("time_budget", true, true))
         assertEquals("not on Wi‑Fi now", ContributeWorker.Companion.After.TRIGGER_LATER, after("time_budget", true, false))
         assertEquals("unplugged at the limit (any time)", ContributeWorker.Companion.After.TRIGGER, after("time_budget", false, true))
@@ -733,6 +839,11 @@ class ContributeTest {
             assertEquals("no spin after $end", ContributeWorker.Companion.After.TRIGGER_LATER, after(end, true, true))
         }
         assertEquals("waits for the next plug-in", ContributeWorker.Companion.After.TRIGGER, after("unplugged", false, true))
+        // #830: in use or hot on power looks again soon; Off re-arms nothing.
+        assertEquals(ContributeWorker.Companion.After.SOON, after("in_use", true, true))
+        assertEquals(ContributeWorker.Companion.After.SOON, after("thermal", true, true))
+        assertEquals(ContributeWorker.Companion.After.TRIGGER_LATER, after("quiet_hours", true, true))
+        assertEquals(ContributeWorker.Companion.After.NONE, ContributeWorker.after("time_budget", true, true, off = true))
     }
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))

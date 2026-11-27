@@ -3,6 +3,8 @@ package online.freeappstore.companion
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -39,7 +41,16 @@ data class Contribution(
     val record: String? = null,
     val submissionId: String? = null, val report: Report? = null,
 ) {
-    companion object { const val PREVIEW = 200 }
+    companion object {
+        const val PREVIEW = 200
+        /**
+         * Whether a job that ended this way may be generated again on this phone (#841): it was interrupted (stopped
+         * part-way, its lease ran out, the run was killed, or its upload never got through), so the server gives it back
+         * to this account. Anything else this phone tried stays done.
+         */
+        fun retryable(status: String, reason: String) =
+            status == "skipped" && reason in setOf("stopped", "lease_expired", "interrupted") || status == "failed" && reason == NetworkRetry.REASON
+    }
 }
 
 /** What `GET …/generation/submissions` measured and links (#824), and the submission and its report (#831); a null field keeps what is recorded. */
@@ -62,7 +73,10 @@ data class Segment(val start: Int, val end: Int, val startMs: Long, val endMs: L
 
 /** Where the record lives: [LocalStore] on the phone, a list in tests. */
 interface ContributionLog {
-    /** Whether this job was ever started on this phone. Such a job is never generated or uploaded again. */
+    /**
+     * Whether this job was started on this phone and ended for good. Such a job is never generated or uploaded again; one
+     * that was only interrupted ([Contribution.retryable]) is, when the server offers it again (#841).
+     */
     fun handled(jobId: String): Boolean
     fun record(contribution: Contribution)
     fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict? = null)
@@ -296,6 +310,10 @@ class Contributor(
     private val attestation: Attestation = Attestation.NONE, private val now: () -> Long = System::currentTimeMillis,
     private val sleep: (Long) -> Unit = Thread::sleep,
     private val probes: DeviceProbes = DeviceProbes(), private val kept: KeptAudio? = null,
+    /** The rest after a sentence that took the given milliseconds (#830's CPU setting); none by default. */
+    private val rest: (Long) -> Long = { 0 },
+    /** Hears the size of each upload attempt before it is sent, for the mobile data count (#830). */
+    private val uploading: (Long) -> Unit = {},
 ) {
     /**
      * Takes one job from each of [apps] in turn (#819), until none has work left, [keepGoing] turns false or [mayClaim]
@@ -388,6 +406,7 @@ class Contributor(
             // The same file, again, while the lease (extended as it runs low) still leaves time to upload (#819).
             val submissionId = attempt.timed(Attempt.UPLOAD, { attempt.uploadMs = it }) {
                 retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
+                    uploading(audio.length())
                     client.submit(appId, job, audio, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
                 }
             }
@@ -436,9 +455,13 @@ class Contributor(
                 attempt.sample()
                 lease.renew()
                 log.attempt(job.id, attempt.progress(synth.model, i + 1, sentences.size, lease.expiresAt))
-                val audio = attempt.timed(Attempt.SYNTH, { attempt.loadMs += synth.loadedMs; attempt.synthMs += it - synth.loadedMs }) {
+                var tookMs = 0L
+                val audio = attempt.timed(Attempt.SYNTH, { tookMs = it - synth.loadedMs; attempt.loadMs += synth.loadedMs; attempt.synthMs += tookMs }) {
                     synth.synthesize(job.text.substring(s.start, s.end), job.params, language) { keepGoing() && lease.held }
                 } ?: return null
+                // A rest after each sentence (#830), in steps so a stop is heard within a second.
+                var resting = rest(tookMs)
+                while (resting > 0 && keepGoing()) { sleep(minOf(resting, 1_000)); resting -= 1_000 }
                 if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
                 attempt.timed(Attempt.ENCODE, { attempt.encodeMs += it }) {
                     val out = sink ?: encoder(file, audio.sampleRate).also { sink = it; rate = audio.sampleRate }
@@ -599,4 +622,33 @@ class KeptAudio(private val dir: File) {
         return j.optString("text") to GenerationClient.parseSegments(j.optJSONArray("segments") ?: JSONArray())
     }
     companion object { const val KEEP = 20 }
+}
+
+/**
+ * The full record of one job on this phone (#843), for a bug report: the row (input, status and reasons, verdict, artifact
+ * links, report), the attempt record (timings, CPU, memory, device) and, when the audio is kept, the whole input and its
+ * sentence timings.
+ */
+internal fun recordJson(c: Contribution, playback: Pair<String, List<Segment>>?): JSONObject {
+    fun nullable(v: Any?) = v ?: JSONObject.NULL
+    return JSONObject().put("jobId", c.jobId).put("appId", c.appId).put("key", c.key).put("at", Instant.ofEpochMilli(c.at).toString())
+        .put("status", c.status).put("reason", c.reason).put("input", playback?.first ?: c.inputPreview)
+        .put("durationMs", nullable(c.durationMs)).put("bytes", nullable(c.bytes))
+        .put("artifactUrl", nullable(c.artifactUrl)).put("metaUrl", nullable(c.metaUrl))
+        .put("submissionId", nullable(c.submissionId)).put("report", nullable(c.report?.json()))
+        .put("attempt", nullable(c.record?.let { runCatching { JSONObject(it) }.getOrNull() }))
+        .put("segments", nullable(playback?.second?.let { list ->
+            JSONArray(list.map { JSONArray().put(it.start).put(it.end).put(it.startMs / 1000.0).put(it.endMs / 1000.0) })
+        }))
+}
+
+/** `fas-record-<job>.zip` in [dir] (emptied first): `record.json` and, when kept, the audio as `audio.m4a` (#843). */
+internal fun writeRecordZip(dir: File, c: Contribution, playback: Pair<String, List<Segment>>?, audio: File?): File {
+    dir.deleteRecursively(); dir.mkdirs()
+    val zip = File(dir, "fas-record-${c.jobId}.zip")
+    ZipOutputStream(zip.outputStream()).use { out ->
+        out.putNextEntry(ZipEntry("record.json")); out.write(recordJson(c, playback).toString(2).toByteArray()); out.closeEntry()
+        if (audio != null) { out.putNextEntry(ZipEntry("audio.m4a")); audio.inputStream().use { it.copyTo(out) }; out.closeEntry() }
+    }
+    return zip
 }

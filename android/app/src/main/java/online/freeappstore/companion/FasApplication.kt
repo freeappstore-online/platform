@@ -21,13 +21,14 @@ class FasApplication : Application() {
     }
     /**
      * Upload and contribute work exist only while paired (#657): no wakeups, which Android vitals counts, without a
-     * credential. Contribute work also needs an opted-in app or a model download to do. [now] runs contributions soon.
+     * credential. Contribute work also needs an opted-in app or a model download to do, and Contribute not Off (#830).
+     * [now] runs contributions soon; [runNow] once, ignoring the conditions.
      */
-    fun scheduleWork(now: Boolean = false) {
+    fun scheduleWork(now: Boolean = false, runNow: Boolean = false) {
         val paired = repository.token() != null
         UploadWorker.schedule(this, paired)
         val todo = local.contributeApps().isNotEmpty() || (local.modelWanted && !kokoro.installed)
-        ContributeWorker.schedule(this, paired && todo, local.contributeAnyTime, now)
+        ContributeWorker.schedule(this, paired && todo && !local.contributeSettings.off, now, runNow)
     }
 }
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {

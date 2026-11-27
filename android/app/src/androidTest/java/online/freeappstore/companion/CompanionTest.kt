@@ -159,6 +159,7 @@ class CompanionTest {
         compose.onNodeWithText("Send").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("this phone's own upload gets a report (#831)", listOf(Triple("j1", false, "")), reports)
+        compose.onNodeWithText("Share record").performScrollTo().assertIsDisplayed() // #843
         compose.onNodeWithText("‹ Activity").performScrollTo().performClick() // scrolled down to Send
         compose.onNodeWithText("All").performClick()
         compose.onNodeWithText("Run · book/2").performClick()
@@ -170,7 +171,10 @@ class CompanionTest {
         compose.onNodeWithText("3 open jobs · 2 today").assertIsDisplayed()
         compose.onNodeWithText("1 open job").assertIsDisplayed() // an app with work, not opted in
         compose.onNodeWithText("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Only while plugged in on Wi‑Fi").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("When it runs").performScrollTo().assertIsDisplayed() // #830
+        compose.onNodeWithText("Wi‑Fi only").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Charging only").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Balanced").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Storage used").performScrollTo().assertIsDisplayed()
         assertEquals(0, refreshed)
     }
@@ -200,7 +204,7 @@ class CompanionTest {
         assertEquals("status", emptyList<String>(), brokenWords())
         compose.onNodeWithText("Activity").performScrollTo().performClick()
         compose.onNodeWithText("Being checked").performScrollTo()
-        compose.onNodeWithText("stopped · not retried on this phone", substring = true).assertExists()
+        compose.onNodeWithText("stopped · may be tried again", substring = true).assertExists() // #841
         assertEquals("activity", emptyList<String>(), brokenWords())
         compose.onNodeWithText("Run · pride-and-prejudice/chapter-11").performScrollTo().performClick()
         compose.onNodeWithText("1:03").performScrollTo()
@@ -601,7 +605,8 @@ class CompanionTest {
         assertEquals(1, local.closeInterrupted())
         assertEquals("skipped" to "interrupted", local.contributions().single { it.jobId == "j1" }.let { it.status to it.reason })
         assertEquals("the record so far stays", 3, JSONObject(local.contributions().single { it.jobId == "j1" }.record!!).getInt("sentence"))
-        assertTrue(local.handled("j1"))
+        assertFalse("interrupted: generated again if the server offers it (#841)", local.handled("j1"))
+        assertTrue(local.handled("j2"))
         assertEquals(0, local.closeInterrupted())
         local.clear(); local.close()
     }

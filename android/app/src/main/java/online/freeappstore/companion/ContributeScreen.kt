@@ -39,13 +39,15 @@ internal val contributionLabels = mapOf(
 )
 
 /**
- * The detail line of an Activity row (#806): the reason, and for a job that was skipped or failed that this phone will
- * not try it again ([ContributionLog.handled]; the server does not offer it to this account again either).
+ * The detail line of an Activity row (#806): the reason, and for a job that was skipped or failed whether this phone tries
+ * it again: only an interrupted one, when the server offers it again (#841); never one that ended for good.
  */
-internal fun contributionDetail(c: Contribution): String = listOfNotNull(
-    c.reason.ifBlank { null },
-    "not retried on this phone".takeIf { c.status == "skipped" || c.status == "failed" },
-).joinToString(" · ")
+internal fun contributionDetail(c: Contribution): String = listOfNotNull(c.reason.ifBlank { null }, retryText(c)).joinToString(" · ")
+internal fun retryText(c: Contribution): String? = when {
+    c.status != "skipped" && c.status != "failed" -> null
+    Contribution.retryable(c.status, c.reason) -> "may be tried again"
+    else -> "not retried on this phone"
+}
 
 /**
  * Activity's status filters (#820). Each status is under one: superseded ("Not needed") is Not done, and the job being
@@ -65,16 +67,16 @@ internal enum class ContributionFilter(val label: String) {
     }
 }
 
-/** The status card's headline and why (#820): running, or why it is paused or idle. */
+/** The status card's headline and why (#820, #830): running, off, or why it is paused or waiting. */
 internal fun contributeStatus(state: CompanionState): Pair<String, String> = when {
-    state.contributing != null -> "Running" to state.contributing
+    state.contributing != null -> (if (state.contributeMode == "Run now") "Running (Run now)" else "Running") to state.contributing
+    state.contributeSettings.off -> "Off" to ContributeConditions.OFF
     state.model == ModelState.NONE -> "Paused" to "No voice model. Download it in Settings."
     state.contributeApps.isEmpty() -> "Paused" to "No apps turned on. Choose them in Settings."
-    !state.contributeAnyTime && !state.plugged -> "Paused" to "Not plugged in. It runs while plugged in on Wi‑Fi."
-    !state.online -> "Paused" to "No connection."
-    !state.contributeAnyTime && !state.unmetered -> "Paused" to "Not on Wi‑Fi. It runs while plugged in on Wi‑Fi."
-    state.model == ModelState.WAITING -> "Idle" to "The voice model downloads on the next run."
-    else -> "Idle" to "Starts when plugged in and looks for jobs about every hour, or now with Run now."
+    state.contributeHold != null -> "Paused" to state.contributeHold.text
+    state.model == ModelState.WAITING -> "Waiting" to "The voice model downloads on the next run."
+    state.contributeLastEnd.startsWith("no_work") -> "Waiting" to "No jobs right now. It looks again about every hour."
+    else -> "Waiting" to "It starts by itself while the conditions in Settings hold, and looks for jobs about every hour."
 }
 
 /** "1:05" for an audio length, "412 KB" or "1.2 MB" for a size (#820). */
@@ -120,7 +122,7 @@ internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, 
         ContributePage.Settings -> ContributeSettings(state, name, actions) { show(ContributePage.Status) }
         is ContributePage.Activity -> ContributeActivity(state, page, name, actions.refreshContributions, show)
         is ContributePage.Detail -> state.contributions.find { it.jobId == page.jobId }?.let { c ->
-            ContributionDetail(c, name(c.appId), actions.loadPlayback, actions.keptAudio, actions.sendReport) { show(page.from) }
+            ContributionDetail(c, name(c.appId), actions.loadPlayback, actions.keptAudio, actions.sendReport, actions.shareRecord) { show(page.from) }
         } ?: LaunchedEffect(page) { show(page.from) }
     }
 }
@@ -144,14 +146,12 @@ private fun ContributeStatus(state: CompanionState, actions: CompanionActions, s
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ContributeModes(state, actions)
                 val (headline, why) = contributeStatus(state)
                 Text(headline, style = MaterialTheme.typography.titleLarge)
                 Text(why, style = MaterialTheme.typography.bodyMedium)
                 state.modelDownloaded?.let { LinearProgressIndicator({ it.toFloat() / KokoroModel.DOWNLOAD_BYTES }, Modifier.fillMaxWidth()) }
-                Row {
-                    TextButton(onClick = actions.contributeNow, enabled = state.contributing == null && state.contributeApps.isNotEmpty() && state.model == ModelState.INSTALLED) { Text("Run now") }
-                    if (state.contributing != null) TextButton(onClick = actions.stopContributing) { Text("Stop") }
-                }
+                if (state.contributing != null) TextButton(onClick = actions.stopContributing) { Text("Stop") }
             }
         }
         Text("Today", style = MaterialTheme.typography.titleLarge)
@@ -167,6 +167,25 @@ private fun ContributeStatus(state: CompanionState, actions: CompanionActions, s
             Text("›", style = MaterialTheme.typography.titleMedium)
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * Auto / Run now / Off (#830). Auto runs by itself while the conditions hold; Run now is one run ignoring them, then Auto;
+ * Off stops the job in hand and every schedule until Auto or Run now is chosen.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContributeModes(state: CompanionState, actions: CompanionActions) {
+    val off = state.contributeSettings.off
+    val canRun = state.contributing == null && state.contributeApps.isNotEmpty() && state.model == ModelState.INSTALLED
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        SegmentedButton(!off && state.contributeMode != "Run now", { if (off) actions.contributeSettings(state.contributeSettings.copy(off = false)) },
+            SegmentedButtonDefaults.itemShape(0, 3)) { Text("Auto") }
+        SegmentedButton(state.contributeMode == "Run now", { if (canRun) actions.contributeNow() }, SegmentedButtonDefaults.itemShape(1, 3),
+            enabled = canRun || state.contributeMode == "Run now") { Text("Run now") }
+        SegmentedButton(off, { if (!off) actions.contributeSettings(state.contributeSettings.copy(off = true)) },
+            SegmentedButtonDefaults.itemShape(2, 3)) { Text("Off") }
     }
 }
 
@@ -242,7 +261,8 @@ internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
  */
 @Composable
 private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>,
-                               keptAudio: (Contribution) -> String?, sendReport: suspend (Contribution, Boolean, String) -> Unit, back: () -> Unit) {
+                               keptAudio: (Contribution) -> String?, sendReport: suspend (Contribution, Boolean, String) -> Unit,
+                               shareRecord: (Contribution) -> Unit, back: () -> Unit) {
     Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         BackRow("Activity", back)
         Text(appName, style = MaterialTheme.typography.headlineMedium)
@@ -255,7 +275,7 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
                 c.bytes?.let { Labeled("Size", byteSize(it)) }
                 val onPhone = c.status == "skipped" || c.status == "failed"
                 if (c.reason.isNotBlank()) Labeled(if (onPhone) "Reason on this phone" else "Server's reason", c.reason)
-                if (onPhone) Text("Not retried on this phone.", style = MaterialTheme.typography.bodySmall)
+                retryText(c)?.let { Text(it.replaceFirstChar(Char::uppercase) + ".", style = MaterialTheme.typography.bodySmall) }
             }
         }
         c.record?.let { runCatching { attemptLines(JSONObject(it)) }.getOrNull() }?.takeIf { it.isNotEmpty() }?.let { lines ->
@@ -270,6 +290,8 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
         if (url != null) Playback(c, url, loadPlayback)
         else if (c.inputPreview.isNotBlank()) InputText(c.inputPreview, null)
         if (c.submissionId != null) ReportCard(c, sendReport)
+        // The full record as JSON with the audio (#843), for a bug report.
+        OutlinedButton(onClick = { shareRecord(c) }) { Text("Share record") }
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -398,23 +420,14 @@ private fun ContributeSettings(state: CompanionState, name: (String) -> String, 
                     ModelState.NONE -> Button(onClick = actions.downloadModel) { Text("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)") }
                     ModelState.WAITING -> {
                         state.modelDownloaded?.let { LinearProgressIndicator({ it.toFloat() / KokoroModel.DOWNLOAD_BYTES }, Modifier.fillMaxWidth()) }
-                        if (state.contributing == null) Text(if (state.contributeAnyTime) "Waits for a connection." else "Waits for Wi‑Fi and for the phone to be plugged in.", style = MaterialTheme.typography.bodySmall)
+                        if (state.contributing == null) Text(if (state.contributeSettings.mobileData) "Waits for a connection, within the mobile data allowance." else "Waits for Wi‑Fi.", style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = actions.deleteModel) { Text("Cancel download") }
                     }
                     ModelState.INSTALLED -> TextButton(onClick = actions.deleteModel) { Text("Delete model") }
                 }
             }
         }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Only while plugged in on Wi‑Fi", Modifier.weight(1f).padding(end = 12.dp))
-                    Switch(checked = !state.contributeAnyTime, onCheckedChange = { actions.contributeAnyTime(!it) })
-                }
-                Text(if (state.contributeAnyTime) "Runs on battery and mobile data too." else "Runs only while plugged in and on Wi‑Fi.",
-                    style = MaterialTheme.typography.bodySmall)
-            }
-        }
+        WhenItRuns(state.contributeSettings, state.mobileBytes, actions.contributeSettings)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Storage used", style = MaterialTheme.typography.titleLarge)
@@ -424,4 +437,65 @@ private fun ContributeSettings(state: CompanionState, name: (String) -> String, 
         }
         Spacer(Modifier.height(24.dp))
     }
+}
+
+/** When Contribute runs (#830), each condition with its default, and the overnight summary (#844). All on this phone. */
+@Composable
+private fun WhenItRuns(s: ContributeSettings, mobileBytes: Long, set: (ContributeSettings) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("When it runs", style = MaterialTheme.typography.titleLarge)
+            Text("On Auto it runs by itself while all of these hold, pauses when one fails and resumes by itself.", style = MaterialTheme.typography.bodySmall)
+            Choice("Connection", listOf("Wi‑Fi only" to false, "Wi‑Fi + mobile data" to true), s.mobileData) { set(s.copy(mobileData = it)) }
+            if (s.mobileData) Stepper("Mobile data a month", "${s.mobileCapMb} MB · ${mobileBytes / 1_000_000} MB used",
+                { set(s.copy(mobileCapMb = (s.mobileCapMb - 100).coerceAtLeast(100))) }, { set(s.copy(mobileCapMb = s.mobileCapMb + 100)) })
+            Choice("Power", listOf("Charging only" to false, "Also on battery" to true), s.onBattery) { set(s.copy(onBattery = it)) }
+            if (s.onBattery) Stepper("Minimum battery", "${s.minBattery}%",
+                { set(s.copy(minBattery = (s.minBattery - 10).coerceAtLeast(10))) }, { set(s.copy(minBattery = (s.minBattery + 10).coerceAtMost(90))) })
+            Toggle("Pause when the phone is hot", s.thermalPause) { set(s.copy(thermalPause = it)) }
+            Choice("While the phone is in use", listOf("Pause" to false, "Run slower" to true), s.slowerInUse) { set(s.copy(slowerInUse = it)) }
+            Choice("CPU", ContributeSettings.Cpu.entries.map { it.label to it }, s.cpu) { set(s.copy(cpu = it)) }
+            Text(when (s.cpu) {
+                ContributeSettings.Cpu.LIGHT -> "One core, resting as long as each sentence took."
+                ContributeSettings.Cpu.BALANCED -> "Two cores, with short rests between sentences."
+                ContributeSettings.Cpu.FULL -> "Up to four cores, no rests."
+            }, style = MaterialTheme.typography.bodySmall)
+            Stepper("Daily maximum, jobs", if (s.dailyJobs == 0) "No maximum" else "${s.dailyJobs}",
+                { set(s.copy(dailyJobs = (s.dailyJobs - 10).coerceAtLeast(0))) }, { set(s.copy(dailyJobs = s.dailyJobs + 10)) })
+            Stepper("Daily maximum, time", if (s.dailyMinutes == 0) "No maximum" else "${s.dailyMinutes} min",
+                { set(s.copy(dailyMinutes = (s.dailyMinutes - 30).coerceAtLeast(0))) }, { set(s.copy(dailyMinutes = s.dailyMinutes + 30)) })
+            Toggle("Quiet hours", s.quietHours) { set(s.copy(quietHours = it)) }
+            if (s.quietHours) {
+                val hour = { m: Int, d: Int -> Math.floorMod(m + d * 60, 24 * 60) }
+                Stepper("From", ContributeConditions.clock(s.quietFrom), { set(s.copy(quietFrom = hour(s.quietFrom, -1))) }, { set(s.copy(quietFrom = hour(s.quietFrom, 1))) })
+                Stepper("To", ContributeConditions.clock(s.quietTo), { set(s.copy(quietTo = hour(s.quietTo, -1))) }, { set(s.copy(quietTo = hour(s.quietTo, 1))) })
+            }
+            Toggle("Overnight summary", s.summary) { set(s.copy(summary = it)) }
+            Text("One quiet notification after background work, once a morning or after a long run.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+private fun <T> Choice(label: String, options: List<Pair<String, T>>, selected: T, pick: (T) -> Unit) {
+    Text(label, style = MaterialTheme.typography.titleSmall)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (text, value) -> FilterChip(selected == value, { pick(value) }, { Text(text) }) }
+    }
+}
+
+@Composable
+private fun Toggle(label: String, on: Boolean, set: (Boolean) -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Text(label, Modifier.weight(1f).padding(end = 12.dp))
+    Switch(checked = on, onCheckedChange = set)
+}
+
+@Composable
+private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> Unit) = Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.weight(1f)) {
+        Text(label)
+        Text(value, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    TextButton(onClick = less) { Text("−") }
+    TextButton(onClick = more) { Text("+") }
 }

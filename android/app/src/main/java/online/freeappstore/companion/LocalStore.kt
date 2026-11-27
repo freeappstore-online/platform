@@ -298,16 +298,66 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     @Synchronized fun setContributing(appId: String, on: Boolean) {
         check(prefs.edit().putStringSet("contributeApps", if (on) contributeApps() + appId else contributeApps() - appId).commit())
     }
-    /** Off by default: only while plugged in on an unmetered network. */
-    var contributeAnyTime: Boolean
-        get() = prefs.getBoolean("contributeAnyTime", false)
-        set(value) { check(prefs.edit().putBoolean("contributeAnyTime", value).commit()) }
+    /**
+     * When Contribute runs (#830). A phone that had "any time" on (#806, `contributeAnyTime`) starts with mobile data and
+     * battery allowed, within the new allowance and battery floor.
+     */
+    var contributeSettings: ContributeSettings
+        get() {
+            val d = ContributeSettings()
+            val anyTime = prefs.getBoolean("contributeAnyTime", false)
+            return ContributeSettings(
+                off = prefs.getBoolean("contributeOff", d.off),
+                mobileData = prefs.getBoolean("contributeMobileData", anyTime), mobileCapMb = prefs.getInt("contributeMobileCapMb", d.mobileCapMb),
+                onBattery = prefs.getBoolean("contributeOnBattery", anyTime), minBattery = prefs.getInt("contributeMinBattery", d.minBattery),
+                thermalPause = prefs.getBoolean("contributeThermalPause", d.thermalPause),
+                slowerInUse = prefs.getBoolean("contributeSlowerInUse", d.slowerInUse),
+                cpu = runCatching { ContributeSettings.Cpu.valueOf(prefs.getString("contributeCpu", null)!!) }.getOrDefault(d.cpu),
+                dailyJobs = prefs.getInt("contributeDailyJobs", d.dailyJobs), dailyMinutes = prefs.getInt("contributeDailyMinutes", d.dailyMinutes),
+                quietHours = prefs.getBoolean("contributeQuietHours", d.quietHours),
+                quietFrom = prefs.getInt("contributeQuietFrom", d.quietFrom), quietTo = prefs.getInt("contributeQuietTo", d.quietTo),
+                summary = prefs.getBoolean("contributeSummary", d.summary),
+            )
+        }
+        set(s) {
+            check(prefs.edit().putBoolean("contributeOff", s.off)
+                .putBoolean("contributeMobileData", s.mobileData).putInt("contributeMobileCapMb", s.mobileCapMb)
+                .putBoolean("contributeOnBattery", s.onBattery).putInt("contributeMinBattery", s.minBattery)
+                .putBoolean("contributeThermalPause", s.thermalPause).putBoolean("contributeSlowerInUse", s.slowerInUse)
+                .putString("contributeCpu", s.cpu.name).putInt("contributeDailyJobs", s.dailyJobs).putInt("contributeDailyMinutes", s.dailyMinutes)
+                .putBoolean("contributeQuietHours", s.quietHours).putInt("contributeQuietFrom", s.quietFrom).putInt("contributeQuietTo", s.quietTo)
+                .putBoolean("contributeSummary", s.summary).commit())
+        }
+    /** Mobile data Contribute used this calendar month (#830): the model download and uploads, counted on the phone. */
+    @Synchronized fun mobileBytes(month: String = java.time.YearMonth.now().toString()): Long =
+        if (prefs.getString("mobileMonth", "") == month) prefs.getLong("mobileBytes", 0) else 0
+    @Synchronized fun addMobileBytes(bytes: Long, month: String = java.time.YearMonth.now().toString()) {
+        check(prefs.edit().putString("mobileMonth", month).putLong("mobileBytes", mobileBytes(month) + bytes).commit())
+    }
+    /** Time Contribute's runs took today, for the daily maximum in minutes (#830). */
+    @Synchronized fun runMsToday(day: String = java.time.LocalDate.now().toString()): Long =
+        if (prefs.getString("runDay", "") == day) prefs.getLong("runMs", 0) else 0
+    @Synchronized fun addRunMs(ms: Long, day: String = java.time.LocalDate.now().toString()) {
+        check(prefs.edit().putString("runDay", day).putLong("runMs", runMsToday(day) + ms).commit())
+    }
+    /** How the last run ended (its log reason), for the status card's "no jobs" (#830). */
+    var contributeLastEnd: String
+        get() = prefs.getString("contributeLastEnd", "") ?: ""
+        set(value) { prefs.edit().putString("contributeLastEnd", value).apply() }
+    /** When the last overnight summary (#844) was shown, and on which day; 0 and "" before the first. */
+    var summaryAt: Long
+        get() = prefs.getLong("summaryAt", 0)
+        set(value) { prefs.edit().putLong("summaryAt", value).apply() }
+    var summaryDay: String
+        get() = prefs.getString("summaryDay", "") ?: ""
+        set(value) { prefs.edit().putString("summaryDay", value).apply() }
     /** The user asked for the voice model; the contribute work downloads it under the same constraints. */
     var modelWanted: Boolean
         get() = prefs.getBoolean("modelWanted", false)
         set(value) { check(prefs.edit().putBoolean("modelWanted", value).commit()) }
     @Synchronized override fun handled(jobId: String): Boolean =
-        readableDatabase.rawQuery("SELECT 1 FROM generation_jobs WHERE job_id = ?", arrayOf(jobId)).use { it.moveToFirst() }
+        readableDatabase.rawQuery("SELECT status, reason FROM generation_jobs WHERE job_id = ?", arrayOf(jobId))
+            .use { it.moveToFirst() && !Contribution.retryable(it.getString(0), it.getString(1)) }
     @Synchronized override fun record(contribution: Contribution) {
         writableDatabase.insertWithOnConflict("generation_jobs", null, ContentValues().apply {
             put("job_id", contribution.jobId); put("app_id", contribution.appId); put("job_key", contribution.key.take(200))
@@ -354,6 +404,10 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
         readableDatabase.rawQuery("SELECT DISTINCT app_id FROM generation_jobs", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
     /** The database file's size, for Contribute's storage line (#820). */
     fun databaseBytes(): Long = context.getDatabasePath(databaseName).length()
+    /** Jobs uploaded since [from], whatever the verdict, for the daily maximum (#830). */
+    @Synchronized fun uploadedSince(from: Long): Int = readableDatabase.rawQuery(
+        "SELECT COUNT(*) FROM generation_jobs WHERE at >= ? AND status NOT IN ('generating', 'skipped', 'failed')", arrayOf(from.toString()))
+        .use { it.moveToFirst(); it.getInt(0) }
     /** Jobs uploaded for [appId] since [from], whatever the verdict. */
     @Synchronized fun contributedSince(appId: String, from: Long): Int = readableDatabase.rawQuery(
         "SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('generating', 'skipped', 'failed')", arrayOf(appId, from.toString()))

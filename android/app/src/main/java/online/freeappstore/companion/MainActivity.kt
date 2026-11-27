@@ -2,13 +2,11 @@ package online.freeappstore.companion
 
 import android.Manifest
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
-import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -32,6 +30,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.*
 import java.io.IOException
@@ -53,14 +52,16 @@ data class CompanionState(
     /** The system's label for background location access (`backgroundPermissionOptionLabel`), localised (#650). */
     val backgroundOption: String = "Allow all the time",
     // Contribute (#731).
-    val contributeApps: Set<String> = emptySet(), val contributeAnyTime: Boolean = false, val model: ModelState = ModelState.NONE,
+    val contributeApps: Set<String> = emptySet(), val model: ModelState = ModelState.NONE,
+    /** When it runs (#830), the condition that holds it now (null when none), and how the last run ended. */
+    val contributeSettings: ContributeSettings = ContributeSettings(), val contributeHold: Hold? = null, val contributeLastEnd: String = "",
+    /** The running run's mode, "Auto" or "Run now", and this month's mobile data (#830). */
+    val contributeMode: String? = null, val mobileBytes: Long = 0,
     /** What the contribute work is doing, null while idle. */
     val contributing: String? = null,
     /** Voice model bytes downloaded, null while not downloading (#806). */
     val modelDownloaded: Long? = null,
     val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
-    /** Why Contribute is paused (#820): plugged in (`EXTRA_PLUGGED`) and on an unmetered network. */
-    val plugged: Boolean = true, val unmetered: Boolean = true,
     /** The signed-in account and this phone's connection (#829), null until `/native/me` answered. */
     val profile: Profile? = null,
 )
@@ -80,7 +81,7 @@ data class CompanionActions(
     val loadTracks: suspend (List<String>, LongRange) -> Map<String, List<TrackSample>> = { _, _ -> emptyMap() },
     /** Contribute (#731): opt an app in or out, the voice model, when it runs, and the current run. */
     val contribute: (String, Boolean) -> Unit = { _, _ -> }, val downloadModel: () -> Unit = {}, val deleteModel: () -> Unit = {},
-    val contributeAnyTime: (Boolean) -> Unit = {}, val contributeNow: () -> Unit = {}, val stopContributing: () -> Unit = {},
+    val contributeSettings: (ContributeSettings) -> Unit = {}, val contributeNow: () -> Unit = {}, val stopContributing: () -> Unit = {},
     /** Contribute's Activity and Settings (#820): the server's verdicts, open jobs by app (null when unknown), storage, artifact timings. */
     val refreshContributions: suspend () -> Unit = {}, val openJobs: suspend () -> Map<String, Int>? = { null },
     val contributeStorage: suspend () -> Pair<Long, Long> = { 0L to 0L },
@@ -90,6 +91,8 @@ data class CompanionActions(
     val keptAudio: (Contribution) -> String? = { null },
     /** Sends this phone's Good / Not good and note on its own upload (#831) and keeps it on the row; throws when it could not. */
     val sendReport: suspend (Contribution, Boolean, String) -> Unit = { _, _, _ -> },
+    /** Shares a job's full record and its audio through the share sheet (#843). */
+    val shareRecord: (Contribution) -> Unit = {},
 )
 
 enum class Tab(val label: String, val icon: Int) {
@@ -108,6 +111,8 @@ class MainActivity : ComponentActivity() {
     private var linkedApp: String? = null
     /** `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself. */
     private var linkedContribute by mutableStateOf<String?>(null)
+    /** Where the overnight summary's tap goes (#844): Contribute's Activity. */
+    private var contributeLink by mutableStateOf<ContributePage?>(null)
     private var refreshJob: Job? = null
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh(); maybeStart() }
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -141,6 +146,7 @@ class MainActivity : ComponentActivity() {
                 graph.local.setContributing(id, on)
                 // Asking for an app also asks for the model it needs; the work downloads it under the same constraints.
                 if (on && !graph.kokoro.installed) graph.local.modelWanted = true
+                if (on) askNotificationsOnce() // the overnight summary (#844)
                 graph.scheduleWork(now = on); refresh()
             },
             downloadModel = { graph.local.modelWanted = true; graph.scheduleWork(now = true); refresh() },
@@ -148,8 +154,18 @@ class MainActivity : ComponentActivity() {
                 graph.local.modelWanted = false; ContributeWorker.stop(this)
                 lifecycleScope.launch { withContext(Dispatchers.IO) { graph.kokoro.delete() }; graph.scheduleWork(); refresh() }
             },
-            contributeAnyTime = { graph.local.contributeAnyTime = it; graph.scheduleWork(now = true); refresh() },
-            contributeNow = { graph.scheduleWork(now = true); refresh() },
+            // Off (#830) stops the job in hand and cancels every schedule; turning it on again resumes Auto.
+            contributeSettings = { s ->
+                val wasOff = graph.local.contributeSettings.off
+                graph.local.contributeSettings = s
+                if (s.off) ContributeWorker.stop(this)
+                graph.scheduleWork(now = wasOff && !s.off); refresh()
+            },
+            // Run now (#830): one run ignoring the conditions, and Contribute is on Auto again.
+            contributeNow = {
+                graph.local.contributeSettings = graph.local.contributeSettings.copy(off = false)
+                graph.scheduleWork(runNow = true); refresh()
+            },
             stopContributing = { ContributeWorker.stop(this); refresh() },
             refreshContributions = { withContext(Dispatchers.IO) { refreshVerdicts() }; refresh() },
             openJobs = { withContext(Dispatchers.IO) { runCatching { graph.generation.openJobs(KokoroModel.ID) }.getOrNull() } },
@@ -166,6 +182,15 @@ class MainActivity : ComponentActivity() {
                 withContext(Dispatchers.IO) { graph.local.report(c.jobId, graph.generation.report(c.appId, c.submissionId!!, good, note)) }
                 refresh()
             },
+            shareRecord = { c ->
+                lifecycleScope.launch {
+                    val zip = withContext(Dispatchers.IO) { writeRecordZip(java.io.File(cacheDir, "shared"), c, graph.kept.playback(c.jobId), graph.kept.audio(c.jobId)) }
+                    val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", zip)
+                    val send = Intent(Intent.ACTION_SEND).setType("application/zip").putExtra(Intent.EXTRA_STREAM, uri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    try { startActivity(Intent.createChooser(send, "Share record")) } catch (_: RuntimeException) { error = "Nothing on this phone can share the record." }
+                }
+            },
         )
         // Sharing when any app has a grant or the connection expired, otherwise the Store.
         val initialTab = if (state.expired || state.apps.any { it.grantId != null }) Tab.SHARING else Tab.STORE
@@ -173,7 +198,7 @@ class MainActivity : ComponentActivity() {
             val colors = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF60A5FA)) else lightColorScheme(primary = Color(0xFF2563EB))
             MaterialTheme(colorScheme = colors) {
                 FasScreen(state.copy(busy = working, message = error.ifBlank { state.message }), catalogue, actions,
-                    consent, { consent = it }, initialTab)
+                    consent, { consent = it }, initialTab, contributeLink) { contributeLink = null }
                 if (permissionExplanation) AlertDialog(onDismissRequest = { permissionExplanation = false },
                     title = { Text("Allow background location") },
                     // Google's prominent-disclosure template (#650), and the system's own name for the option.
@@ -216,6 +241,7 @@ class MainActivity : ComponentActivity() {
         if (uri.scheme != "freeappstore" || uri.host != "native") return
         val parts = uri.pathSegments
         if (parts.size == 2 && parts[0] == "apps") linkedApp = parts[1]
+        if (uri.toString() == ContributeSummary.LINK) contributeLink = ContributePage.Activity()
         if (parts.size == 2 && parts[0] == "contribute" && Regex("^[a-z0-9][a-z0-9-]{0,62}$").matches(parts[1])) linkedContribute = parts[1]
     }
     private fun showLinkedDisclosure() {
@@ -234,6 +260,7 @@ class MainActivity : ComponentActivity() {
         val power = getSystemService(PowerManager::class.java)
         val signedIn = graph.repository.token() != null
         val network = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        val settings = local.contributeSettings
         state = CompanionState(signedIn, local.userName, apps, local.blocked(),
             local.paused, LocationService.running, LocationService.allowed(this), local.count(), local.message,
             pairingCode = graph.repository.pairingCode(), lastSync = local.lastSync, pausedApps = local.pausedApps(),
@@ -248,12 +275,12 @@ class MainActivity : ComponentActivity() {
             lastFix = LocationService.lastFix,
             expired = local.expired, backgroundOption = backgroundOption(),
             expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null,
-            contributeApps = local.contributeApps(), contributeAnyTime = local.contributeAnyTime,
+            contributeApps = local.contributeApps(), contributeSettings = settings, contributeLastEnd = local.contributeLastEnd,
+            contributeHold = ContributeConditions.hold(settings, contributeDevice(this, local), claiming = true),
+            contributeMode = ContributeWorker.running, mobileBytes = local.mobileBytes(),
             model = when { graph.kokoro.installed -> ModelState.INSTALLED; local.modelWanted -> ModelState.WAITING; else -> ModelState.NONE },
             contributing = ContributeWorker.status, modelDownloaded = ContributeWorker.downloaded, contributions = local.contributions(),
             contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) },
-            plugged = (registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0,
-            unmetered = network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
             profile = Profile.parse(local.profile))
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
@@ -282,12 +309,16 @@ class MainActivity : ComponentActivity() {
         if (e is IOException) "Can't reach FreeAppStore. Check your connection and try again." else e.message ?: fallback
     private fun maybeStart() {
         if (!LocationService.allowed(this) || !graph.repository.collecting()) return
+        askNotificationsOnce()
+        try { LocationService.start(this) } catch (_: RuntimeException) { error = "Android could not start location sharing. Open FreeAppStore and try again." }
+    }
+    /** Asks for notifications (Android 13+) once: location sharing's notification and Contribute's summary (#844) need it. */
+    private fun askNotificationsOnce() {
         val prompt = getSharedPreferences("native-permission-prompts", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED && !prompt.getBoolean("notifications", false)) {
             prompt.edit().putBoolean("notifications", true).apply()
             permissionRequest.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
         }
-        try { LocationService.start(this) } catch (_: RuntimeException) { error = "Android could not start location sharing. Open FreeAppStore and try again." }
     }
     private fun requestLocation() {
         when {
@@ -324,6 +355,7 @@ private sealed class SharingPage {
 internal fun FasScreen(
     state: CompanionState, catalogue: CatalogueState, actions: CompanionActions,
     consent: ConnectedApp?, askConsent: (ConnectedApp?) -> Unit, initialTab: Tab = Tab.STORE,
+    link: ContributePage? = null, linkOpened: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var sharingPage by remember { mutableStateOf<SharingPage>(SharingPage.Dashboard) }
@@ -334,6 +366,7 @@ internal fun FasScreen(
         sharingPage = (sharingPage as? SharingPage.Activity)?.from ?: SharingPage.Dashboard
     }
     BackHandler(enabled = tab == Tab.CONTRIBUTE && contributePage != ContributePage.Status) { contributePage = contributePage.back }
+    LaunchedEffect(link) { link?.let { tab = Tab.CONTRIBUTE; contributePage = it; linkOpened() } }
     Scaffold(bottomBar = {
         NavigationBar {
             Tab.entries.forEach { t ->
