@@ -575,9 +575,11 @@ test("app cards carry data-name attribute and sort bar includes A→Z button", (
     const indexHtml = readFileSync(join(tmpDist, "index.html"), "utf8");
     // Every app card should expose its name via data-name for the A→Z sort.
     for (const app of registry.apps) {
+      // The attribute is HTML-escaped, e.g. "Moon &amp; Tides" (#823).
+      const escaped = app.name.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;");
       assert.ok(
-        indexHtml.includes(`data-name="${app.name}"`),
-        `index.html missing data-name="${app.name}" for app "${app.id}"`,
+        indexHtml.includes(`data-name="${escaped}"`),
+        `index.html missing data-name="${escaped}" for app "${app.id}"`,
       );
     }
     // The sort bar must contain the A→Z button.

@@ -651,7 +651,7 @@
     },
     {
       "id": "spreadsheet",
-      "name": "spreadsheet",
+      "name": "Spreadsheet",
       "category": "Productivity",
       "icon": "📊",
       "iconBg": "#e0e7ff",
@@ -667,7 +667,7 @@
     },
     {
       "id": "periodic-table",
-      "name": "periodic-table",
+      "name": "Periodic Table",
       "category": "Learning",
       "icon": "⚛️",
       "iconBg": "#dbeafe",
@@ -683,7 +683,7 @@
     },
     {
       "id": "physics",
-      "name": "physics",
+      "name": "Physics Simulator",
       "category": "Learning",
       "icon": "🧲",
       "iconBg": "#dbeafe",
@@ -699,7 +699,7 @@
     },
     {
       "id": "graphing",
-      "name": "graphing",
+      "name": "Graphing Calculator",
       "category": "Learning",
       "icon": "📈",
       "iconBg": "#dbeafe",
@@ -715,7 +715,7 @@
     },
     {
       "id": "anatomy",
-      "name": "anatomy",
+      "name": "Anatomy Explorer",
       "category": "Learning",
       "icon": "🦴",
       "iconBg": "#dbeafe",
@@ -731,7 +731,7 @@
     },
     {
       "id": "chemistry",
-      "name": "chemistry",
+      "name": "Chemistry Lab",
       "category": "Learning",
       "icon": "🧪",
       "iconBg": "#dbeafe",
@@ -747,7 +747,7 @@
     },
     {
       "id": "solar-system",
-      "name": "solar-system",
+      "name": "Solar System",
       "category": "Learning",
       "icon": "🪐",
       "iconBg": "#dbeafe",
@@ -763,7 +763,7 @@
     },
     {
       "id": "cell-biology",
-      "name": "cell-biology",
+      "name": "Cell Biology",
       "category": "Learning",
       "icon": "🦠",
       "iconBg": "#dbeafe",
@@ -779,7 +779,7 @@
     },
     {
       "id": "circuits",
-      "name": "circuits",
+      "name": "Circuit Builder",
       "category": "Learning",
       "icon": "🔌",
       "iconBg": "#dbeafe",
@@ -795,7 +795,7 @@
     },
     {
       "id": "statistics",
-      "name": "statistics",
+      "name": "Statistics",
       "category": "Learning",
       "icon": "📉",
       "iconBg": "#dbeafe",
@@ -811,7 +811,7 @@
     },
     {
       "id": "star-map",
-      "name": "star-map",
+      "name": "Star Map",
       "category": "Learning",
       "icon": "🌌",
       "iconBg": "#dbeafe",
@@ -827,7 +827,7 @@
     },
     {
       "id": "geography",
-      "name": "geography",
+      "name": "World Geography",
       "category": "Learning",
       "icon": "🌍",
       "iconBg": "#dbeafe",
@@ -843,7 +843,7 @@
     },
     {
       "id": "math-reference",
-      "name": "math-reference",
+      "name": "Math Reference",
       "category": "Learning",
       "icon": "📐",
       "iconBg": "#dbeafe",
@@ -859,7 +859,7 @@
     },
     {
       "id": "workout",
-      "name": "workout",
+      "name": "Workout Tracker",
       "category": "Health & Fitness",
       "icon": "🏋️",
       "iconBg": "#dcfce7",
@@ -875,7 +875,7 @@
     },
     {
       "id": "meditation",
-      "name": "meditation",
+      "name": "Meditation",
       "category": "Health & Fitness",
       "icon": "🧘",
       "iconBg": "#dcfce7",
@@ -891,7 +891,7 @@
     },
     {
       "id": "calories",
-      "name": "calories",
+      "name": "Calorie Counter",
       "category": "Health & Fitness",
       "icon": "🥗",
       "iconBg": "#dcfce7",
@@ -912,7 +912,7 @@
     },
     {
       "id": "sleep",
-      "name": "sleep",
+      "name": "Sleep Tracker",
       "category": "Health & Fitness",
       "icon": "😴",
       "iconBg": "#dcfce7",
@@ -928,7 +928,7 @@
     },
     {
       "id": "budget",
-      "name": "budget",
+      "name": "Budget Tracker",
       "category": "Finance",
       "icon": "💰",
       "iconBg": "#fef9c3",
@@ -944,7 +944,7 @@
     },
     {
       "id": "split",
-      "name": "split",
+      "name": "Bill Splitter",
       "category": "Finance",
       "icon": "➗",
       "iconBg": "#fef9c3",
@@ -960,7 +960,7 @@
     },
     {
       "id": "pixel-art",
-      "name": "pixel-art",
+      "name": "Pixel Art",
       "category": "Utilities",
       "icon": "👾",
       "iconBg": "#e2e8f0",
@@ -976,7 +976,7 @@
     },
     {
       "id": "sketch",
-      "name": "sketch",
+      "name": "Sketch Pad",
       "category": "Utilities",
       "icon": "✏️",
       "iconBg": "#e2e8f0",
@@ -992,7 +992,7 @@
     },
     {
       "id": "palette",
-      "name": "palette",
+      "name": "Color Palette",
       "category": "Utilities",
       "icon": "🎨",
       "iconBg": "#e2e8f0",
@@ -1008,7 +1008,7 @@
     },
     {
       "id": "recipes",
-      "name": "recipes",
+      "name": "Recipe Book",
       "category": "Other (specify in description)",
       "icon": "🍳",
       "iconBg": "#ccfbf1",
@@ -1024,7 +1024,7 @@
     },
     {
       "id": "morse",
-      "name": "morse",
+      "name": "Morse Code",
       "category": "Learning",
       "icon": "📡",
       "iconBg": "#dbeafe",
@@ -1040,7 +1040,7 @@
     },
     {
       "id": "music-theory",
-      "name": "music-theory",
+      "name": "Music Theory",
       "category": "Learning",
       "icon": "🎼",
       "iconBg": "#dbeafe",
@@ -1056,7 +1056,7 @@
     },
     {
       "id": "typing",
-      "name": "typing",
+      "name": "Typing Test",
       "category": "Productivity",
       "icon": "⌨️",
       "iconBg": "#e0e7ff",
@@ -1072,7 +1072,7 @@
     },
     {
       "id": "markdown",
-      "name": "markdown",
+      "name": "Markdown Editor",
       "category": "Productivity",
       "icon": "✍️",
       "iconBg": "#e0e7ff",
@@ -1088,7 +1088,7 @@
     },
     {
       "id": "dictionary",
-      "name": "dictionary",
+      "name": "Dictionary",
       "category": "Learning",
       "icon": "📖",
       "iconBg": "#dbeafe",
@@ -1104,7 +1104,7 @@
     },
     {
       "id": "journal",
-      "name": "journal",
+      "name": "Journal",
       "category": "Other (specify in description)",
       "icon": "📔",
       "iconBg": "#ccfbf1",
@@ -1120,7 +1120,7 @@
     },
     {
       "id": "regex",
-      "name": "regex",
+      "name": "Regex Tester",
       "category": "Utilities",
       "icon": "🔍",
       "iconBg": "#e2e8f0",
@@ -1136,7 +1136,7 @@
     },
     {
       "id": "json",
-      "name": "json",
+      "name": "JSON Formatter",
       "category": "Utilities",
       "icon": "🗃️",
       "iconBg": "#e2e8f0",
@@ -1152,7 +1152,7 @@
     },
     {
       "id": "loan",
-      "name": "loan",
+      "name": "Loan Calculator",
       "category": "Finance",
       "icon": "🏦",
       "iconBg": "#fef9c3",
@@ -1168,7 +1168,7 @@
     },
     {
       "id": "metronome",
-      "name": "metronome",
+      "name": "Metronome",
       "category": "Utilities",
       "icon": "🥁",
       "iconBg": "#e2e8f0",
@@ -1184,7 +1184,7 @@
     },
     {
       "id": "quotes",
-      "name": "quotes",
+      "name": "Quotes",
       "category": "Other (specify in description)",
       "icon": "💭",
       "iconBg": "#ccfbf1",
@@ -1202,7 +1202,7 @@
     },
     {
       "id": "countdown",
-      "name": "countdown",
+      "name": "Countdown",
       "category": "Utilities",
       "icon": "⏳",
       "iconBg": "#e2e8f0",
@@ -1218,7 +1218,7 @@
     },
     {
       "id": "plants",
-      "name": "plants",
+      "name": "Plant Care",
       "category": "Other (specify in description)",
       "icon": "🌱",
       "iconBg": "#ccfbf1",
@@ -1234,7 +1234,7 @@
     },
     {
       "id": "hiit",
-      "name": "hiit",
+      "name": "HIIT Timer",
       "category": "Health & Fitness",
       "icon": "🔥",
       "iconBg": "#dcfce7",
@@ -1250,7 +1250,7 @@
     },
     {
       "id": "resume",
-      "name": "resume",
+      "name": "Resume Builder",
       "category": "Productivity",
       "icon": "💼",
       "iconBg": "#e0e7ff",
@@ -1266,7 +1266,7 @@
     },
     {
       "id": "wordcount",
-      "name": "wordcount",
+      "name": "Word Counter",
       "category": "Productivity",
       "icon": "🔤",
       "iconBg": "#e0e7ff",
@@ -1284,7 +1284,7 @@
     },
     {
       "id": "focus",
-      "name": "focus",
+      "name": "Focus Timer",
       "category": "Productivity",
       "icon": "🍅",
       "iconBg": "#e0e7ff",
@@ -1300,7 +1300,7 @@
     },
     {
       "id": "mood",
-      "name": "mood",
+      "name": "Mood Tracker",
       "category": "Health & Fitness",
       "icon": "🙂",
       "iconBg": "#dcfce7",
@@ -1316,7 +1316,7 @@
     },
     {
       "id": "expense",
-      "name": "expense",
+      "name": "Expense Tracker",
       "category": "Finance",
       "icon": "💸",
       "iconBg": "#fef9c3",
@@ -1332,7 +1332,7 @@
     },
     {
       "id": "type-spec",
-      "name": "type-spec",
+      "name": "Type Spec",
       "category": "Utilities",
       "icon": "🔠",
       "iconBg": "#e2e8f0",
@@ -1348,7 +1348,7 @@
     },
     {
       "id": "encode",
-      "name": "encode",
+      "name": "Encode",
       "category": "Utilities",
       "icon": "🔐",
       "iconBg": "#e2e8f0",
@@ -1364,7 +1364,7 @@
     },
     {
       "id": "mindmap",
-      "name": "mindmap",
+      "name": "Mind Map",
       "category": "Productivity",
       "icon": "🧠",
       "iconBg": "#e0e7ff",
@@ -1380,7 +1380,7 @@
     },
     {
       "id": "tides",
-      "name": "tides",
+      "name": "Moon & Tides",
       "category": "Learning",
       "icon": "🌊",
       "iconBg": "#dbeafe",
@@ -1398,7 +1398,7 @@
     },
     {
       "id": "photo",
-      "name": "photo",
+      "name": "Photo Editor",
       "category": "Utilities",
       "icon": "🖼️",
       "iconBg": "#e2e8f0",
@@ -1414,7 +1414,7 @@
     },
     {
       "id": "invoice",
-      "name": "invoice",
+      "name": "Invoice Maker",
       "category": "Productivity",
       "icon": "🧾",
       "iconBg": "#e0e7ff",
@@ -1430,8 +1430,8 @@
     },
     {
       "id": "lol-app",
-      "name": "lol-app",
-      "category": "lifestyle",
+      "name": "LOL App",
+      "category": "Lifestyle",
       "icon": "😂",
       "iconBg": "#ffedd5",
       "description": "Mems",
@@ -1446,8 +1446,8 @@
     },
     {
       "id": "hello-world-greetings",
-      "name": "hello-world-greetings",
-      "category": "lifestyle",
+      "name": "Hello World",
+      "category": "Lifestyle",
       "icon": "👋",
       "iconBg": "#ffedd5",
       "description": "Greets you in any language",
@@ -1462,7 +1462,7 @@
     },
     {
       "id": "shoplist",
-      "name": "shoplist",
+      "name": "Shoplist",
       "category": "Utilities",
       "icon": "🛒",
       "iconBg": "#e2e8f0",
@@ -1478,7 +1478,7 @@
     },
     {
       "id": "agentcoder",
-      "name": "agentcoder",
+      "name": "Agentcoder",
       "category": "Productivity",
       "icon": "🤖",
       "iconBg": "#e0e7ff",
@@ -1496,8 +1496,8 @@
     },
     {
       "id": "soccer-live",
-      "name": "soccer-live",
-      "category": "lifestyle",
+      "name": "Soccer Live",
+      "category": "Lifestyle",
       "icon": "⚽",
       "iconBg": "#ffedd5",
       "description": "Soccer scores",
@@ -1512,7 +1512,7 @@
     },
     {
       "id": "convert-color",
-      "name": "convert-color",
+      "name": "Color Converter",
       "category": "Utilities",
       "icon": "🌈",
       "iconBg": "#e2e8f0",
@@ -1527,7 +1527,7 @@
     },
     {
       "id": "crontab-explain",
-      "name": "crontab-explain",
+      "name": "Crontab Explanation",
       "category": "Productivity",
       "icon": "⏰",
       "iconBg": "#e0e7ff",
@@ -1542,7 +1542,7 @@
     },
     {
       "id": "planning-poker",
-      "name": "planning-poker",
+      "name": "Planning Poker",
       "category": "Productivity",
       "icon": "🃏",
       "iconBg": "#e0e7ff",
@@ -1557,8 +1557,8 @@
     },
     {
       "id": "mcp-live-demo",
-      "name": "mcp-live-demo",
-      "category": "utilities",
+      "name": "MCP Live Demo",
+      "category": "Utilities",
       "icon": "🔧",
       "iconBg": "#e2e8f0",
       "description": "Built end-to-end via the FreeAppStore MCP",
@@ -1572,7 +1572,7 @@
     },
     {
       "id": "extract-color",
-      "name": "extract-color",
+      "name": "Extract Color",
       "category": "Utilities",
       "icon": "💠",
       "iconBg": "#e2e8f0",
@@ -1587,7 +1587,7 @@
     },
     {
       "id": "lens-journal",
-      "name": "lens-journal",
+      "name": "Lens Journal",
       "category": "Social",
       "icon": "📷",
       "iconBg": "#fce7f3",
@@ -1602,7 +1602,7 @@
     },
     {
       "id": "whisper-room",
-      "name": "whisper-room",
+      "name": "Whisper Room",
       "category": "Social",
       "icon": "🤫",
       "iconBg": "#fce7f3",
@@ -1619,7 +1619,7 @@
     },
     {
       "id": "slowdown",
-      "name": "slowdown",
+      "name": "Slowdown",
       "category": "Health & Fitness",
       "icon": "🌿",
       "iconBg": "#dcfce7",
@@ -1634,7 +1634,7 @@
     },
     {
       "id": "webshare",
-      "name": "webshare",
+      "name": "Webshare",
       "category": "Utilities",
       "icon": "📤",
       "iconBg": "#e2e8f0",
@@ -1651,7 +1651,7 @@
     },
     {
       "id": "quickslotwebfas",
-      "name": "quickslotwebfas",
+      "name": "QuickSlot - Quick Appointment Booking",
       "category": "Other (specify in description)",
       "icon": "📆",
       "iconBg": "#ccfbf1",
@@ -1666,7 +1666,7 @@
     },
     {
       "id": "study-room",
-      "name": "study-room",
+      "name": "Study Room — Focus Together",
       "category": "Productivity",
       "icon": "🕯️",
       "iconBg": "#e0e7ff",
@@ -1681,7 +1681,7 @@
     },
     {
       "id": "piano",
-      "name": "piano",
+      "name": "Piano",
       "category": "Other (specify in description)",
       "icon": "🎹",
       "iconBg": "#ccfbf1",
@@ -1696,7 +1696,7 @@
     },
     {
       "id": "pillcount",
-      "name": "pillcount",
+      "name": "Pillcount",
       "category": "Health & Fitness",
       "icon": "💊",
       "iconBg": "#dcfce7",
@@ -1711,7 +1711,7 @@
     },
     {
       "id": "my-todo-app",
-      "name": "my-todo-app",
+      "name": "My Todo App",
       "category": "Productivity",
       "icon": "✅",
       "iconBg": "#e0e7ff",
@@ -1726,7 +1726,7 @@
     },
     {
       "id": "taskflow",
-      "name": "taskflow",
+      "name": "Taskflow",
       "category": "Learning",
       "icon": "🗒️",
       "iconBg": "#dbeafe",
@@ -1741,7 +1741,7 @@
     },
     {
       "id": "dodge-drop",
-      "name": "dodge-drop",
+      "name": "Dodge Drop",
       "category": "Strategy",
       "icon": "☄️",
       "iconBg": "#fee2e2",
@@ -1756,7 +1756,7 @@
     },
     {
       "id": "stock-tracker",
-      "name": "stock-tracker",
+      "name": "Stock Tracker",
       "category": "Productivity",
       "icon": "📦",
       "iconBg": "#e0e7ff",
@@ -1771,7 +1771,7 @@
     },
     {
       "id": "future-letters",
-      "name": "future-letters",
+      "name": "Future Letters",
       "category": "Health & Fitness",
       "icon": "✉️",
       "iconBg": "#dcfce7",
@@ -1801,7 +1801,7 @@
     },
     {
       "id": "face-morpher",
-      "name": "face-morpher",
+      "name": "Face Morpher",
       "category": "Creative",
       "icon": "🤪",
       "iconBg": "#f3e8ff",
@@ -1818,7 +1818,7 @@
     },
     {
       "id": "my-todo-app-2",
-      "name": "my-todo-app-2",
+      "name": "Todo",
       "category": "Productivity",
       "icon": "☑️",
       "iconBg": "#e0e7ff",
@@ -1833,7 +1833,7 @@
     },
     {
       "id": "petdo",
-      "name": "petdo",
+      "name": "Petdo",
       "category": "Lifestyle",
       "icon": "🐶",
       "iconBg": "#ffedd5",
@@ -1848,7 +1848,7 @@
     },
     {
       "id": "my-todos",
-      "name": "my-todos",
+      "name": "My Todos",
       "category": "Productivity",
       "icon": "📌",
       "iconBg": "#e0e7ff",
@@ -1863,7 +1863,7 @@
     },
     {
       "id": "pizza-maker-game",
-      "name": "pizza-maker-game",
+      "name": "Pizza Maker",
       "category": "Lifestyle",
       "icon": "🍕",
       "iconBg": "#ffedd5",
@@ -1878,7 +1878,7 @@
     },
     {
       "id": "my-todo-app-3",
-      "name": "my-todo-app-3",
+      "name": "Focus",
       "category": "Productivity",
       "icon": "🗓️",
       "iconBg": "#e0e7ff",
@@ -1893,7 +1893,7 @@
     },
     {
       "id": "focus-timer",
-      "name": "focus-timer",
+      "name": "Focus",
       "category": "Productivity",
       "icon": "⏲️",
       "iconBg": "#e0e7ff",
@@ -1910,7 +1910,7 @@
     },
     {
       "id": "colour-timer",
-      "name": "colour-timer",
+      "name": "Colour Timer",
       "category": "Utilities",
       "icon": "🚦",
       "iconBg": "#e2e8f0",
@@ -1925,7 +1925,7 @@
     },
     {
       "id": "smart-study-coach",
-      "name": "smart-study-coach",
+      "name": "Smart Study Coach",
       "category": "Learning",
       "icon": "🎓",
       "iconBg": "#dbeafe",
@@ -1940,7 +1940,7 @@
     },
     {
       "id": "dual-timezone",
-      "name": "dual-timezone",
+      "name": "my-cool-app",
       "category": "Productivity",
       "icon": "🌐",
       "iconBg": "#e0e7ff",
@@ -1955,7 +1955,7 @@
     },
     {
       "id": "a11y-fixlist",
-      "name": "a11y-fixlist",
+      "name": "A11y Fixlist",
       "category": "Utilities",
       "icon": "♿",
       "iconBg": "#e2e8f0",
@@ -1970,7 +1970,7 @@
     },
     {
       "id": "votepool",
-      "name": "votepool",
+      "name": "Votepool",
       "category": "Social",
       "icon": "🗳️",
       "iconBg": "#fce7f3",
@@ -1985,7 +1985,7 @@
     },
     {
       "id": "asmr-boards",
-      "name": "asmr-boards",
+      "name": "Asmr Boards",
       "category": "Lifestyle",
       "icon": "✨",
       "iconBg": "#ffedd5",
@@ -2000,7 +2000,7 @@
     },
     {
       "id": "room-bloom",
-      "name": "room-bloom",
+      "name": "Home Quest — Gamified Chore Reminders",
       "category": "Lifestyle",
       "icon": "🛏️",
       "iconBg": "#ffedd5",
@@ -2017,7 +2017,7 @@
     },
     {
       "id": "chore-list",
-      "name": "chore-list",
+      "name": "Chore List",
       "category": "Productivity",
       "icon": "🧹",
       "iconBg": "#e0e7ff",
@@ -2032,7 +2032,7 @@
     },
     {
       "id": "family-hub",
-      "name": "family-hub",
+      "name": "Family Hub",
       "category": "Lifestyle",
       "icon": "🏡",
       "iconBg": "#ffedd5",
@@ -2049,7 +2049,7 @@
     },
     {
       "id": "bill-reminders",
-      "name": "bill-reminders",
+      "name": "Bill Reminders",
       "category": "Finance",
       "icon": "🔔",
       "iconBg": "#fef9c3",
@@ -2064,7 +2064,7 @@
     },
     {
       "id": "bag-buddy",
-      "name": "bag-buddy",
+      "name": "Bag Buddy",
       "category": "Lifestyle",
       "icon": "🎒",
       "iconBg": "#ffedd5",
@@ -2079,7 +2079,7 @@
     },
     {
       "id": "habitquest-rpg",
-      "name": "habitquest-rpg",
+      "name": "HabitQuest",
       "category": "Lifestyle",
       "icon": "⚔️",
       "iconBg": "#ffedd5",
@@ -2094,7 +2094,7 @@
     },
     {
       "id": "asmr-keyboard",
-      "name": "asmr-keyboard",
+      "name": "Asmr Keyboard",
       "category": "Lifestyle",
       "icon": "🎧",
       "iconBg": "#ffedd5",
@@ -2109,7 +2109,7 @@
     },
     {
       "id": "chefai-recipes",
-      "name": "chefai-recipes",
+      "name": "ChefAI",
       "category": "Lifestyle",
       "icon": "🍲",
       "iconBg": "#ffedd5",
@@ -2124,7 +2124,7 @@
     },
     {
       "id": "forktuner",
-      "name": "forktuner",
+      "name": "Instrument Tuner",
       "category": "Utilities",
       "icon": "🎚️",
       "iconBg": "#e2e8f0",
@@ -2141,7 +2141,7 @@
     },
     {
       "id": "devestimate",
-      "name": "devestimate",
+      "name": "my-app",
       "category": "Productivity",
       "icon": "🏗️",
       "iconBg": "#e0e7ff",
@@ -2156,7 +2156,7 @@
     },
     {
       "id": "datalens",
-      "name": "datalens",
+      "name": "DataLens — Your instant data health check",
       "category": "Productivity",
       "icon": "🔎",
       "iconBg": "#e0e7ff",
@@ -2171,7 +2171,7 @@
     },
     {
       "id": "decision-compass",
-      "name": "decision-compass",
+      "name": "Decision Compass",
       "category": "Productivity",
       "icon": "🧭",
       "iconBg": "#e0e7ff",
@@ -2186,7 +2186,7 @@
     },
     {
       "id": "kpop-diary",
-      "name": "kpop-diary",
+      "name": "K-Pop Diary",
       "category": "Lifestyle",
       "icon": "🎤",
       "iconBg": "#ffedd5",
@@ -2203,7 +2203,7 @@
     },
     {
       "id": "soundboard-pro",
-      "name": "soundboard-pro",
+      "name": "SoundBoard",
       "category": "Utilities",
       "icon": "🔊",
       "iconBg": "#e2e8f0",
@@ -2220,7 +2220,7 @@
     },
     {
       "id": "taskflow-manager",
-      "name": "taskflow-manager",
+      "name": "TaskFlow — Project & Task Manager",
       "category": "Productivity",
       "icon": "🗂️",
       "iconBg": "#e0e7ff",
@@ -2235,7 +2235,7 @@
     },
     {
       "id": "learner-coder",
-      "name": "learner-coder",
+      "name": "Learner Coder",
       "category": "Learning",
       "icon": "💻",
       "iconBg": "#dbeafe",
@@ -2250,7 +2250,7 @@
     },
     {
       "id": "formulapad",
-      "name": "formulapad",
+      "name": "Formulapad",
       "category": "Learning",
       "icon": "🔬",
       "iconBg": "#dbeafe",
@@ -2265,7 +2265,7 @@
     },
     {
       "id": "smoke-sandbox",
-      "name": "smoke-sandbox",
+      "name": "Smoke Sandbox",
       "category": "Utilities",
       "icon": "🚧",
       "iconBg": "#e2e8f0",
@@ -2280,7 +2280,7 @@
     },
     {
       "id": "reactionlab",
-      "name": "reactionlab",
+      "name": "ReactionLab — measure your reflexes",
       "category": "Brain Training",
       "icon": "⚡",
       "iconBg": "#fef3c7",
@@ -2295,7 +2295,7 @@
     },
     {
       "id": "echoshift",
-      "name": "echoshift",
+      "name": "EchoShift - Real-Time Voice Changer & Audio Visualizer",
       "category": "Utilities",
       "icon": "🗣️",
       "iconBg": "#e2e8f0",
@@ -2312,7 +2312,7 @@
     },
     {
       "id": "pulsestack",
-      "name": "pulsestack",
+      "name": "Pulsestack",
       "category": "Productivity",
       "icon": "🔋",
       "iconBg": "#e0e7ff",
@@ -2329,7 +2329,7 @@
     },
     {
       "id": "quantlab",
-      "name": "quantlab",
+      "name": "Quantlab",
       "category": "Brain Training",
       "icon": "🎲",
       "iconBg": "#fef3c7",
@@ -2535,7 +2535,7 @@
     },
     {
       "id": "logic-gate-lab",
-      "name": "logic-gate-lab",
+      "name": "Logic Gate Lab",
       "category": "Learning",
       "icon": "🔀",
       "iconBg": "#dbeafe",
@@ -2565,7 +2565,7 @@
     },
     {
       "id": "karaoke",
-      "name": "karaoke",
+      "name": "Karaoke — Sing along · FreeAppStore",
       "category": "Utilities",
       "icon": "🎶",
       "iconBg": "#e2e8f0",
@@ -2589,7 +2589,7 @@
     },
     {
       "id": "song-to-midi",
-      "name": "song-to-midi",
+      "name": "Song To Midi",
       "category": "Utilities",
       "icon": "🎛️",
       "iconBg": "#e2e8f0",
@@ -2608,7 +2608,7 @@
     },
     {
       "id": "music-share",
-      "name": "music-share",
+      "name": "Music Share",
       "category": "Social",
       "icon": "📻",
       "iconBg": "#fce7f3",
@@ -2634,7 +2634,7 @@
     },
     {
       "id": "mytunes",
-      "name": "mytunes",
+      "name": "Mytunes",
       "category": "Social",
       "icon": "🎵",
       "iconBg": "#fce7f3",
@@ -2694,7 +2694,7 @@
     },
     {
       "id": "chinese-reader",
-      "name": "chinese-reader",
+      "name": "Chinese Reader — read, listen, understand",
       "category": "Learning",
       "icon": "🏮",
       "iconBg": "#dbeafe",
@@ -2711,7 +2711,7 @@
     },
     {
       "id": "pitstop-log",
-      "name": "pitstop-log",
+      "name": "Pitstop Log",
       "category": "Utilities",
       "icon": "⛽",
       "iconBg": "#e2e8f0",
@@ -2728,7 +2728,7 @@
     },
     {
       "id": "cue-scroll",
-      "name": "cue-scroll",
+      "name": "Cue",
       "category": "Utilities",
       "icon": "📜",
       "iconBg": "#e2e8f0",
@@ -2745,7 +2745,7 @@
     },
     {
       "id": "card",
-      "name": "card",
+      "name": "Card",
       "category": "Productivity",
       "icon": "📇",
       "iconBg": "#e0e7ff",
@@ -2762,7 +2762,7 @@
     },
     {
       "id": "scoreplay",
-      "name": "scoreplay",
+      "name": "Scoreplay — MIDI player",
       "category": "Learning",
       "icon": "🎻",
       "iconBg": "#dbeafe",
@@ -2779,7 +2779,7 @@
     },
     {
       "id": "symptom-map",
-      "name": "symptom-map",
+      "name": "Symptom Journal",
       "category": "Health & Fitness",
       "icon": "🩺",
       "iconBg": "#dcfce7",
@@ -2816,7 +2816,7 @@
     },
     {
       "id": "accompanist",
-      "name": "accompanist",
+      "name": "Accompanist",
       "category": "Learning",
       "icon": "🎙️",
       "iconBg": "#dbeafe",
@@ -3196,7 +3196,7 @@
     },
     {
       "id": "symptom-journal",
-      "name": "symptom-journal",
+      "name": "Symptom Journal",
       "category": "Health & Fitness",
       "icon": "🩹",
       "iconBg": "#dcfce7",
@@ -3218,7 +3218,7 @@
     },
     {
       "id": "libros",
-      "name": "libros",
+      "name": "Libros — Clásicos gratis para leer y escuchar",
       "category": "Learning",
       "icon": "📕",
       "iconBg": "#dbeafe",
@@ -3235,7 +3235,7 @@
     },
     {
       "id": "chordbook",
-      "name": "chordbook",
+      "name": "Chordbook — Your guitar songbook",
       "category": "Learning",
       "icon": "🎸",
       "iconBg": "#dbeafe",
@@ -3282,7 +3282,7 @@
     },
     {
       "id": "offline-translator",
-      "name": "offline-translator",
+      "name": "Offline Translator",
       "category": "Utilities",
       "icon": "📖",
       "iconBg": "#e2e8f0",
@@ -3312,7 +3312,7 @@
     },
     {
       "id": "teleprompter",
-      "name": "teleprompter",
+      "name": "Teleprompter",
       "category": "Productivity",
       "icon": "🎙️",
       "iconBg": "#e0e7ff",
@@ -3334,7 +3334,7 @@
     },
     {
       "id": "digital-business-card",
-      "name": "digital-business-card",
+      "name": "Digital Card",
       "category": "Productivity",
       "icon": "📋",
       "iconBg": "#e0e7ff",
@@ -3351,7 +3351,7 @@
     },
     {
       "id": "turfup",
-      "name": "turfup",
+      "name": "Turf Up",
       "category": "Health & Fitness",
       "icon": "💪",
       "iconBg": "#dcfce7",
@@ -3368,7 +3368,7 @@
     },
     {
       "id": "run",
-      "name": "run",
+      "name": "Run",
       "category": "Health & Fitness",
       "icon": "🎓",
       "iconBg": "#dcfce7",
@@ -3390,7 +3390,7 @@
     },
     {
       "id": "rewired",
-      "name": "rewired",
+      "name": "Rewired",
       "category": "Health & Fitness",
       "icon": "💪",
       "iconBg": "#dcfce7",
@@ -3407,7 +3407,7 @@
     },
     {
       "id": "soundscape-lofi",
-      "name": "soundscape-lofi",
+      "name": "SoundScape Lo-Fi",
       "category": "Productivity",
       "icon": "🎙️",
       "iconBg": "#e0e7ff",
@@ -3424,7 +3424,7 @@
     },
     {
       "id": "radio",
-      "name": "radio",
+      "name": "Radio",
       "category": "Discovery",
       "icon": "🌍",
       "iconBg": "#cffafe",
@@ -3441,7 +3441,7 @@
     },
     {
       "id": "grocery-price-tracker",
-      "name": "grocery-price-tracker",
+      "name": "Grocery Price Tracker",
       "category": "Utilities",
       "icon": "🛒",
       "iconBg": "#e2e8f0",
@@ -3463,7 +3463,7 @@
     },
     {
       "id": "mandarinflash",
-      "name": "mandarinflash",
+      "name": "Mandarinflash",
       "category": "Learning",
       "icon": "🎙️",
       "iconBg": "#dbeafe",
@@ -3480,7 +3480,7 @@
     },
     {
       "id": "slides",
-      "name": "slides",
+      "name": "Slides",
       "category": "Productivity",
       "icon": "💻",
       "iconBg": "#e0e7ff",
@@ -3514,7 +3514,7 @@
     },
     {
       "id": "dialogue",
-      "name": "dialogue",
+      "name": "Dialogue",
       "category": "Learning",
       "icon": "🎲",
       "iconBg": "#dbeafe",
@@ -3536,7 +3536,7 @@
     },
     {
       "id": "payback",
-      "name": "payback",
+      "name": "Payback",
       "category": "Finance",
       "icon": "💰",
       "iconBg": "#fef9c3",
@@ -3553,7 +3553,7 @@
     },
     {
       "id": "csvguard-lite",
-      "name": "csvguard-lite",
+      "name": "Csvguard Lite",
       "category": "Productivity",
       "icon": "📤",
       "iconBg": "#e0e7ff",
