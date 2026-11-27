@@ -280,6 +280,9 @@ export class Contribute {
         : 'Choose the apps to generate for.';
       return this.set({ status: 'idle', message });
     }
+    // Paused or disconnected while looking for work: there was no run to stop yet
+    if (this.host.token() !== token) return;
+    if (this.host.paused()) return this.set({ status: 'paused', message: null, current: null });
     await this.run(engine, chosen);
     await this.verdicts(apps);
   }

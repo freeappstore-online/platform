@@ -280,6 +280,40 @@ describe('Contribute', () => {
     for (const c of [paused, noModel, none, noAac]) c.stop();
   });
 
+  it('claims nothing when paused while it was still looking for work', async () => {
+    const fetch = vi.fn(async (url: string) =>
+      url.endsWith('/generation/open')
+        ? json({
+            apps: [
+              {
+                appId: 'books',
+                oneliner: null,
+                sets: [kokoroSet('s1', { voice: 'af_heart' }, null)],
+              },
+            ],
+          })
+        : new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    let paused = false;
+    let loaded: (() => void) | null = null;
+    const { contribute } = setup({
+      paused: () => paused,
+      engine: () =>
+        new Promise((resolve) => {
+          loaded = () => resolve({ encoder, device: 'wasm', downloaded: true });
+        }),
+    });
+    contribute.wake();
+    await until(() => loaded !== null);
+    paused = true;
+    contribute.wake();
+    loaded!();
+    await until(() => contribute.state.status === 'paused');
+    expect(fetch.mock.calls.some(([url]) => url.endsWith('/claim'))).toBe(false);
+    contribute.stop();
+  });
+
   it('hands a refused device credential back to the app', async () => {
     vi.stubGlobal(
       'fetch',
