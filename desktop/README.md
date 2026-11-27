@@ -143,7 +143,10 @@ Mandarin), and keeps going while the window is closed, as long as FreeAppStore r
   process has no WebCodecs, so AAC encoding runs in a hidden window (`src/renderer/contribute.*`,
   `backgroundThrottling: false`, sandboxed, a preload that only relays encoder messages): samples go over a sentence
   at a time, the MP4 comes back as bytes (`src/main/engine.ts`). The TTS process ends after each run, freeing the
-  model's memory. Electron 45 on macOS refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz there.
+  model's memory. The page encodes with WebCodecs' AAC encoder and muxes with Mediabunny. Electron 45 on macOS refuses
+  24 kHz AAC, so the audio is 32 kbps mono at 48 kHz there. Chromium has no AAC encoder on Linux (#854): there the
+  page registers `@mediabunny/aac-encoder` (FFmpeg's AAC-LC encoder built to WebAssembly, LGPL-2.1, in a worker; about
+  1 MB, bundled, offline), which encodes 32 kbps mono at 24 kHz.
 - **When it runs** (#830, `src/main/conditions.ts`), all decided on this computer, as on the phones. Modes: **Auto**
   (the default) runs whenever every condition holds and pauses the moment one fails; **Run now** is one run that
   ignores the conditions, then Auto; **Off** is the hard stop: it stops the job in hand, nothing starts again until it

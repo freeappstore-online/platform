@@ -1,20 +1,32 @@
 // The hidden Contribute window (#826, #837): the AAC encoder for the main process, which has no
 // WebCodecs. Samples arrive a sentence at a time as the TTS process speaks them and are encoded
-// as they come (32 kbps mono AAC-LC in MP4); the finished file goes back as bytes.
+// as they come (32 kbps mono AAC-LC in MP4); the finished file goes back as bytes. Where WebCodecs
+// has no AAC encoder (Linux, #854), FFmpeg's, built to WebAssembly, encodes in a worker instead.
 import { deleteKokoroModel, kokoroEncoder } from '@freeappstore/sdk/generation-kokoro';
-import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
+import { AudioSample, AudioSampleSource, BufferTarget, Mp4OutputFormat, Output } from 'mediabunny';
 import type { EncoderReply, EncoderRequest } from '../main/engine.js';
 
 const bridge = window.fasContribute;
-const config = await kokoroEncoder();
+/** The phones' settings: 32 kbps mono at Kokoro's 24 kHz (platform#798). */
+const WASM_AAC: AudioEncoderConfig = {
+  codec: 'mp4a.40.2',
+  sampleRate: 24_000,
+  numberOfChannels: 1,
+  bitrate: 32_000,
+};
+const native = await kokoroEncoder();
+// Only loaded where it is needed: it is about 1 MB
+if (!native) (await import('@mediabunny/aac-encoder')).registerAacEncoder();
+const config = native ?? WASM_AAC;
 
 interface Session {
-  muxer: Muxer<ArrayBufferTarget>;
-  encoder: AudioEncoder;
+  output: Output<Mp4OutputFormat, BufferTarget>;
+  source: AudioSampleSource;
+  /** The samples added so far, one after another (the encoder's backpressure). */
+  added: Promise<void>;
   /** Samples written, at the input's rate. */
   frames: number;
   rate: number;
-  failure: unknown;
 }
 const sessions = new Map<number, Session>();
 
@@ -34,61 +46,52 @@ function resample(samples: Float32Array, from: number, to: number): Float32Array
 
 async function handle(msg: EncoderRequest): Promise<EncoderReply | null> {
   if (msg.type === 'start') {
-    const muxer = new Muxer({
-      target: new ArrayBufferTarget(),
-      audio: { codec: 'aac', numberOfChannels: 1, sampleRate: config!.sampleRate },
-      fastStart: 'in-memory',
+    const output = new Output({
+      format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+      target: new BufferTarget(),
     });
+    const source = new AudioSampleSource({ codec: 'aac', bitrate: config.bitrate! });
+    output.addAudioTrack(source);
     const session: Session = {
-      muxer,
-      encoder: new AudioEncoder({
-        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-        error: (e) => {
-          session.failure = e;
-        },
-      }),
+      output,
+      source,
+      added: output.start(),
       frames: 0,
       rate: msg.sampleRate,
-      failure: null,
     };
-    session.encoder.configure(config!);
+    session.added.catch(() => {}); // surfaces at finish
     sessions.set(msg.id, session);
     return null;
   }
   const session = sessions.get(msg.id);
   if (!session)
     return msg.type === 'finish' ? { type: 'error', id: msg.id, message: 'encoding failed' } : null;
+  if (msg.type === 'write') {
+    const sample = new AudioSample({
+      format: 'f32',
+      sampleRate: config.sampleRate,
+      numberOfChannels: 1,
+      timestamp: session.frames / session.rate,
+      data: resample(msg.samples, session.rate, config.sampleRate),
+    });
+    session.frames += msg.samples.length;
+    session.added = session.added
+      .then(() => session.source.add(sample))
+      .finally(() => sample.close());
+    session.added.catch(() => {}); // surfaces at finish
+    return null;
+  }
+  sessions.delete(msg.id);
+  if (msg.type === 'cancel') {
+    void session.added.then(() => session.output.cancel()).catch(() => {});
+    return null;
+  }
   try {
-    if (session.failure) throw session.failure;
-    if (msg.type === 'write') {
-      const data = resample(msg.samples, session.rate, config!.sampleRate);
-      session.encoder.encode(
-        new AudioData({
-          format: 'f32',
-          sampleRate: config!.sampleRate,
-          numberOfChannels: 1,
-          numberOfFrames: data.length,
-          timestamp: Math.round((session.frames / session.rate) * 1e6),
-          data,
-        }),
-      );
-      session.frames += msg.samples.length;
-      return null;
-    }
-    if (msg.type === 'cancel') {
-      sessions.delete(msg.id);
-      if (session.encoder.state !== 'closed') session.encoder.close();
-      return null;
-    }
-    await session.encoder.flush();
-    if (session.failure) throw session.failure;
-    session.encoder.close();
-    session.muxer.finalize();
-    sessions.delete(msg.id);
-    return { type: 'done', id: msg.id, file: session.muxer.target.buffer };
+    await session.added;
+    await session.output.finalize();
+    return { type: 'done', id: msg.id, file: session.output.target.buffer! };
   } catch (err) {
-    sessions.delete(msg.id);
-    if (session.encoder.state !== 'closed') session.encoder.close();
+    void session.output.cancel().catch(() => {});
     return { type: 'error', id: msg.id, message: err instanceof Error ? err.message : String(err) };
   }
 }

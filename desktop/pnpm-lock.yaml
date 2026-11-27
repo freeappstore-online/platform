@@ -36,6 +36,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.6.9
         version: 2.6.9
+      '@mediabunny/aac-encoder':
+        specifier: 1.66.5
+        version: 1.66.5(mediabunny@1.66.5)
       '@playwright/test':
         specifier: ^1.65.1
         version: 1.65.1
@@ -66,9 +69,9 @@ importers:
       electron-builder:
         specifier: ^26.18.0
         version: 26.18.0(electron-builder-squirrel-windows@26.18.0)
-      mp4-muxer:
-        specifier: 5.2.2
-        version: 5.2.2
+      mediabunny:
+        specifier: 1.66.5
+        version: 1.66.5
       react:
         specifier: ^19.3.0
         version: 19.3.1
@@ -429,6 +432,11 @@ packages:
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
 
+  '@mediabunny/aac-encoder@1.66.5':
+    resolution: {integrity: sha512-yXzNzlaYFVvhssuh4c6jMq0fbTMPiWTg5+6/Q1FkJ2H9ds7yXqM2597vFKb0YJh2jsQhTRFdpJp5L28Gxd3bHg==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
   '@modelcontextprotocol/sdk@1.32.2':
     resolution: {integrity: sha512-SWsVtH/0vULSQStoZ6xxH2K09Li8fXYTMC64ZeogCdpZ3XSi1eCPOByV1OpuJxuI3OcmHhosDWYyii07tpPsLw==}
     engines: {node: '>=18'}
@@ -719,6 +727,12 @@ packages:
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
+
+  '@types/dom-mediacapture-transform@0.1.12':
+    resolution: {integrity: sha512-d7/QsLRwF864A5mgIM/YrfiglHoYn7zgCcAoJgW404r+2DwnNr7EBbLnCWpmOMgH8y0te73L1AV6H1bmauaWFw==}
+
+  '@types/dom-webcodecs@0.1.13':
+    resolution: {integrity: sha512-O5hkiFIcjjszPIYyUSyvScyvrBoV3NOEEZx/pMlsu44TKzWNkLVBBxnxJz42in5n3QIolYOcBYFCPZZ0h8SkwQ==}
 
   '@types/dom-webcodecs@0.1.19':
     resolution: {integrity: sha512-+yFUIDUaASFz0vQpWBErPxun/Lb+F0TdrlTsj50gm7K797YzEx2TmV6fEiwciHyFNghlZYPgQXH5qRcwMHcJFQ==}
@@ -1582,6 +1596,9 @@ packages:
   media-typer@1.1.1:
     resolution: {integrity: sha512-yz3xRaG20c6/BOzvYoDaGtPmGscs7YivItZEEqe6GbwNfHuxu9YNmvnEkMzKldAGY4/80pRcQRZSEnhquk9XuQ==}
     engines: {node: '>= 0.8'}
+
+  mediabunny@1.66.5:
+    resolution: {integrity: sha512-g2H+TdA0cKszM4ZKae9JszxWKLUpmte1Je/F9TY5Et0uO9a6k82V7HGrI3X9RT6ILFOK3Vi2nB9SjifWn5yyPw==}
 
   merge-descriptors@2.0.0:
     resolution: {integrity: sha512-Snk314V5ayFLhp3fkUREub6WtjBfPdCPY1Ln8/8munuLuiYhsABgBVWsozAG+MWMbVEvcdcpbi9R7ww22l9Q3g==}
@@ -2661,6 +2678,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@mediabunny/aac-encoder@1.66.5(mediabunny@1.66.5)':
+    dependencies:
+      mediabunny: 1.66.5
+
   '@modelcontextprotocol/sdk@1.32.2(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 2.1.11(hono@4.13.22)
@@ -2900,6 +2921,12 @@ snapshots:
 
   '@types/deep-eql@4.0.2': {}
 
+  '@types/dom-mediacapture-transform@0.1.12':
+    dependencies:
+      '@types/dom-webcodecs': 0.1.19
+
+  '@types/dom-webcodecs@0.1.13': {}
+
   '@types/dom-webcodecs@0.1.19': {}
 
   '@types/estree@1.0.11': {}
@@ -2944,7 +2971,8 @@ snapshots:
     dependencies:
       '@types/through': 0.0.33
 
-  '@types/wicg-file-system-access@2020.9.8': {}
+  '@types/wicg-file-system-access@2020.9.8':
+    optional: true
 
   '@types/ws@8.18.2':
     dependencies:
@@ -3839,6 +3867,11 @@ snapshots:
 
   media-typer@1.1.1: {}
 
+  mediabunny@1.66.5:
+    dependencies:
+      '@types/dom-mediacapture-transform': 0.1.12
+      '@types/dom-webcodecs': 0.1.13
+
   merge-descriptors@2.0.0: {}
 
   mime-db@1.52.0: {}
@@ -3891,6 +3924,7 @@ snapshots:
     dependencies:
       '@types/dom-webcodecs': 0.1.19
       '@types/wicg-file-system-access': 2020.9.8
+    optional: true
 
   ms@2.1.3: {}
 

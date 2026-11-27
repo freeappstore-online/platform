@@ -913,12 +913,6 @@ function ContributeConditions({ when }: { when: ContributeWhen }) {
 function ContributeModel({ state }: { state: DesktopContribute }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { model } = state;
-  if (state.encoder === false)
-    return (
-      <p role="alert" className="mb-6 rounded-control bg-danger-soft text-danger p-3 text-sm">
-        This computer can't encode AAC audio, so it can't generate.
-      </p>
-    );
   if (!model) return null;
   const size = megabytes(model.bytes);
   return (

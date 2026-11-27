@@ -65,8 +65,8 @@ declare global {
       /** Encoder requests from the main process (`EncoderRequest`). */
       onMessage(listener: (message: unknown) => void): void;
       reply(message: unknown): void;
-      /** Whether this computer can encode AAC: the encoder settings, or null. */
-      engine(engine: { encoder: AudioEncoderConfig | null }): void;
+      /** The AAC encoder's settings. */
+      engine(engine: { encoder: AudioEncoderConfig }): void;
       battery(level: number | null): void;
     };
     fasDesktop: {

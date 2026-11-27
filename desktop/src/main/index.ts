@@ -608,8 +608,8 @@ let speedLimit: number | null = null;
 
 /**
  * The hidden window's contents: no throttling, since it does the work while every other window
- * is closed. It loads the encoder page from disk and reports whether this computer can encode AAC
- * (#837: synthesis is the TTS process's).
+ * is closed. It loads the encoder page from disk and reports the AAC settings it encodes
+ * with (#837: synthesis is the TTS process's; #854: WebAssembly where WebCodecs has no AAC).
  */
 function engineWindowContents(): WebContents {
   if (engineWindow && !engineWindow.isDestroyed()) return engineWindow.webContents;

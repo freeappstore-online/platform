@@ -58,8 +58,8 @@ type EncoderConfig = KokoroRunnerOptions['encoder'];
 
 /** What the hidden window reports about this computer once it has loaded. */
 export interface Engine {
-  /** From `kokoroEncoder()`: null when this build of Chromium has no AAC encoder. */
-  encoder: EncoderConfig | null;
+  /** WebCodecs' AAC settings (`kokoroEncoder()`), else the WebAssembly encoder's (Linux, #854). */
+  encoder: EncoderConfig;
 }
 
 export interface ContributeHost {
@@ -151,8 +151,6 @@ export interface ContributeState {
     loading: number | null;
     stage: 'download' | 'unpack';
   } | null;
-  /** False when this computer can't encode AAC; null until the hidden window says. */
-  encoder: boolean | null;
   /** The job in hand (#838): its history item is `in_progress`, this is what changes as it runs. */
   current: {
     appId: string;
@@ -187,7 +185,6 @@ export class Contribute {
     runNow: false,
     apps: null,
     model: null,
-    encoder: null,
     current: null,
     submitted: 0,
     skipped: 0,
@@ -332,7 +329,6 @@ export class Contribute {
   private async engine(): Promise<Engine> {
     const engine = await this.host.engine();
     this.set({
-      encoder: engine.encoder !== null,
       model: {
         ...MODEL_INFO,
         bytes: MODEL_DOWNLOAD_BYTES,
@@ -371,8 +367,6 @@ export class Contribute {
     } catch (err) {
       return this.set({ status: 'idle', message: `Couldn't start generating: ${errorText(err)}` });
     }
-    if (!engine.encoder)
-      return this.set({ status: 'idle', message: "This computer can't encode AAC audio." });
     if (!this.state.model?.ready)
       return this.set({ status: 'idle', message: 'Download the voice model to start.' });
     const apps = discovered
@@ -566,7 +560,7 @@ export class Contribute {
   private async run(engine: Engine, apps: Parameters<typeof contributeKokoroApps>[0]['apps']) {
     const controller = new AbortController();
     this.controller = controller;
-    const runner = this.host.createRunner(engine.encoder!, (ms) => this.rest(ms));
+    const runner = this.host.createRunner(engine.encoder, (ms) => this.rest(ms));
     const epoch = this.epoch;
     this.set({ status: 'running', message: null, current: null });
     let attempt: Attempt | null = null;
@@ -695,8 +689,7 @@ export class Contribute {
     if (this.loading) return;
     this.loading = true;
     try {
-      const engine = await this.engine();
-      if (!engine.encoder) return;
+      await this.engine();
       const model = this.state.model!;
       this.set({ model: { ...model, loading: 0, stage: 'download' }, message: null });
       try {

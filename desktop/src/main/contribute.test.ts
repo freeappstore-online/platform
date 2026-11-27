@@ -282,13 +282,7 @@ describe('Contribute', () => {
     const none = setup({ optedIn: () => [] }).contribute;
     none.wake();
     await until(() => none.state.message === 'Choose the apps to generate for.');
-
-    const noAac = setup({
-      engine: async () => ({ encoder: null }),
-    }).contribute;
-    noAac.wake();
-    await until(() => noAac.state.encoder === false);
-    for (const c of [paused, noModel, none, noAac]) c.stop();
+    for (const c of [paused, noModel, none]) c.stop();
   });
 
   it('claims nothing when paused while it was still looking for work', async () => {
