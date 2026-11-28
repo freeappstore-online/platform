@@ -8,3 +8,8 @@ onlyBuiltDependencies:
 supportedArchitectures:
   os: [current]
   cpu: [x64, arm64]
+
+# Security audit #857: patched transitive image decoders and packaging glob parser.
+overrides:
+  "sharp@<0.35.5": 0.35.5
+  "minimatch@>=7.0.0 <11.0.1": 11.0.1

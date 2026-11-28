@@ -2,6 +2,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('fasDesktop', {
+  clearActivity: () => ipcRenderer.invoke('home:clear-activity'),
   state: () => ipcRenderer.invoke('home:state'),
   onState(listener: (state: unknown) => void) {
     ipcRenderer.on('home:state', (_event, state) => listener(state));

@@ -51,10 +51,13 @@ async function post(
   signal?: AbortSignal,
 ) {
   const response = await fetch(url, {
+    redirect: 'error',
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
-    signal,
+    signal: signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(20_000)])
+      : AbortSignal.timeout(20_000),
   });
   const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) throw new Error(String(json.error ?? `HTTP ${response.status}`));
@@ -106,6 +109,8 @@ export async function unpairDevice(
   api = API,
 ): Promise<void> {
   await fetch(`${api}/native/device`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
     method: 'DELETE',
     headers: { ...headers, Authorization: `Bearer ${token}` },
   }).catch(() => {});
@@ -124,6 +129,8 @@ export async function createPairCode(
   api = API,
 ): Promise<PairCode> {
   const response = await fetch(`${api}/native/pair-codes`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
     method: 'POST',
     headers: { ...headers, Authorization: `Bearer ${token}` },
   });
@@ -155,6 +162,8 @@ export async function fetchProfile(
   api = API,
 ): Promise<Profile | null> {
   const response = await fetch(`${api}/native/me`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
     headers: { ...headers, Authorization: `Bearer ${token}` },
   });
   if (response.status === 401) return null;

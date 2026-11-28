@@ -16,12 +16,14 @@ import {
   nativeTheme,
   net,
   powerMonitor,
+  session,
   shell,
   Tray,
   utilityProcess,
   type WebContents,
 } from 'electron';
 import electronUpdater from 'electron-updater';
+import { loadActivity, saveActivity } from './activity.js';
 import { contributeWhen, cpuThreads, IDLE_SECONDS } from './conditions.js';
 import { Contribute, contributeStatus, type Engine } from './contribute.js';
 import {
@@ -50,6 +52,7 @@ import { Hub, type Peer } from './hub.js';
 import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
 import { NativeRunner } from './kokoro.js';
 import { modelInstalled } from './model.js';
+import { installPermissions } from './permissions.js';
 import { Publisher } from './publish.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
 import { startServer } from './server.js';
@@ -106,6 +109,8 @@ const asset = (name: string) => fileURLToPath(new URL(`../../assets/${name}`, im
 const hub = new Hub();
 let token = '';
 let serverError: string | null = null;
+let activityError: string | null = null;
+let activityReadable = true;
 let home: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settings: Settings;
@@ -153,6 +158,7 @@ function state() {
     publish: publisher.state,
     openApps: hub.openApps(),
     log: hub.log,
+    activityError,
   };
 }
 
@@ -372,7 +378,16 @@ function updateTray(): void {
   );
 }
 
-const fromHome = (event: IpcMainInvokeEvent) => home !== null && event.sender === home.webContents;
+const fromHome = (event: IpcMainInvokeEvent) =>
+  home !== null &&
+  event.sender === home.webContents &&
+  event.senderFrame === home.webContents.mainFrame;
+
+ipcMain.handle('home:clear-activity', (event) => {
+  if (!fromHome(event)) return;
+  activityReadable = true;
+  hub.clearLog();
+});
 
 ipcMain.handle('home:state', (event) => (fromHome(event) ? state() : null));
 ipcMain.handle('home:open-app', (event, appId: unknown) => {
@@ -965,7 +980,9 @@ ipcMain.handle('home:contribute-delete-model', async (event) => {
   if (fromHome(event) && deviceToken) await contribute.deleteModel();
 });
 ipcMain.handle('home:contribute-refresh', (event) => {
-  if (fromHome(event)) contribute.wake();
+  if (!fromHome(event)) return;
+  if (accountVerified) void contribute.refreshApps();
+  else void refreshProfile();
 });
 
 // ── Startup ─────────────────────────────────────────────────────
@@ -984,7 +1001,49 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    // Electron otherwise automatically approves requests from remote pages (#857).
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) =>
+      callback(false),
+    );
+    session.defaultSession.setPermissionCheckHandler(() => false);
+    installPermissions(session.fromPartition('persist:fas-apps'), {
+      origin(contents) {
+        const entry = [...appWindows].find(
+          ([, win]) => !win.isDestroyed() && win.webContents === contents,
+        );
+        return entry ? appOrigin(entry[0], devOrigin) : null;
+      },
+      async ask(contents, origin, access) {
+        const win = BrowserWindow.fromWebContents(contents);
+        if (!win || win.isDestroyed()) return false;
+        const result = await dialog.showMessageBox(win, {
+          type: 'question',
+          title: 'App permission',
+          message: `Allow ${origin} to use ${access}?`,
+          detail:
+            'Applies until you close this app window. Your computer may also ask for permission.',
+          buttons: ['Deny', 'Allow'],
+          defaultId: 0,
+          cancelId: 0,
+          noLink: true,
+        });
+        return result.response === 1;
+      },
+    });
     const userData = app.getPath('userData');
+    const activity = loadActivity(userData);
+    hub.restoreLog(activity.entries);
+    activityError = activity.error;
+    activityReadable = !activity.error;
+    hub.on('activity', () => {
+      if (!activityReadable) return; // Preserve an unreadable file until the user chooses Clear history.
+      try {
+        saveActivity(userData, hub.log);
+        activityError = null;
+      } catch {
+        activityError = 'AI activity could not be saved. Check free space and folder permissions.';
+      }
+    });
     const loaded = loadSettings(userData);
     settings = loaded.settings;
     if (loaded.firstRun) {

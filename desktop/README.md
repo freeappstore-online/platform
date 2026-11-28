@@ -218,7 +218,14 @@ Mandarin), and keeps going while the window is closed, as long as FreeAppStore r
 - App windows: `contextIsolation`, `sandbox`, no `nodeIntegration`, a preload that exposes only
   `fasDesktopBridge`. Navigation stays on the app's origin; other links open in the system browser. The app id a
   window registers comes from the window, not the page.
-- Messages are capped at 1 MB; calls time out after 30 s.
+- App permissions: camera, microphone, location and notifications require approval for that window. Cross-origin
+  frames and unsupported permissions (including clipboard reads, device access and screen capture) are denied.
+- Messages are capped at 1 MB; calls time out after 30 s. Malformed request URLs return 400.
+- AI activity survives updates and restarts in `userData/ai-activity.json` (0600, atomic replacement, latest 1,000).
+  Only timestamps, tool/app names and success are saved; arguments, results and error bodies are excluded. The
+  Activity screen can clear this computer's record. A corrupt file is preserved and shown as an error.
+- Native pairing/profile requests reject redirects and time out after 20 seconds.
+- Public signing gates, verified findings and remaining distribution requirements: [native security audit](../docs/native-security-audit.md).
 
 ## Test
 

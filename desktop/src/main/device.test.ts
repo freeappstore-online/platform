@@ -29,6 +29,8 @@ describe('fetchProfile (#829)', () => {
     });
     // With this app's version and kind (#833)
     expect(fetch).toHaveBeenCalledWith('https://api.test/v1/native/me', {
+      redirect: 'error',
+      signal: expect.any(AbortSignal),
       headers: {
         'X-FAS-App-Version': '0.4.0 (57, abc1234)',
         'X-FAS-Client': 'desktop',

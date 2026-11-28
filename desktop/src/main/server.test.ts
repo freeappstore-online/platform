@@ -1,4 +1,4 @@
-import type { AddressInfo } from 'node:net';
+import { type AddressInfo, connect } from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -104,6 +104,27 @@ const closeCode = (ws: WebSocket) =>
 describe('loopback server', () => {
   it('binds to 127.0.0.1 only', () => {
     expect((server.address() as AddressInfo).address).toBe('127.0.0.1');
+  });
+
+  it('rejects malformed HTTP and upgrade URLs without crashing the local server (#857)', async () => {
+    for (const upgrade of [false, true]) {
+      const response = await new Promise<string>((resolve, reject) => {
+        const socket = connect((server.address() as AddressInfo).port, '127.0.0.1');
+        let result = '';
+        socket.on('connect', () =>
+          socket.write(
+            `GET http://[invalid/ HTTP/1.1\r\nHost: localhost\r\nConnection: ${upgrade ? 'Upgrade' : 'close'}\r\n${upgrade ? 'Upgrade: websocket\r\n' : ''}\r\n`,
+          ),
+        );
+        socket.on('data', (chunk) => {
+          result += chunk.toString();
+        });
+        socket.on('end', () => resolve(result));
+        socket.on('error', reject);
+      });
+      expect(response).toContain('400 Bad Request');
+    }
+    expect((await (await mcp()).listTools()).tools).toHaveLength(4);
   });
 
   it('serves the four tools with titles and every hint', async () => {

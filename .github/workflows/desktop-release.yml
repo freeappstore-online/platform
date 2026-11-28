@@ -1,7 +1,7 @@
 name: Desktop release
 
-# Unsigned installers for the desktop app (desktop/, #805): macOS dmg + zip (x64, arm64; ad-hoc signed),
-# Windows NSIS exe, Linux AppImage. Signing and notarization need credentials: #799.
+# Signed public installers (#857): Developer ID + notarization for macOS, Authenticode for Windows,
+# GitHub signed provenance for every installer including Linux. Missing credentials fail before tagging.
 #
 # Updates (#839): each build also writes its update file (latest.yml, latest-linux.yml, latest-mac.yml), and the
 # installed apps look for them on desktop-latest (desktop/electron-builder.yml `publish`). They are uploaded there
@@ -46,6 +46,21 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       tag: ${{ steps.v.outputs.tag }}
     steps:
+      - name: Require signing configuration before creating a release tag
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          WINDOWS_SIGNING_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_THUMBPRINT }}
+        run: |
+          for key in MAC_CSC_LINK MAC_CSC_KEY_PASSWORD APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID WIN_CSC_LINK WIN_CSC_KEY_PASSWORD WINDOWS_SIGNING_THUMBPRINT; do
+            [ -n "${!key}" ] || { echo "::error::Missing signing configuration: $key (see docs/native-security-audit.md)"; exit 1; }
+          done
       - id: v
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -96,8 +111,7 @@ jobs:
         working-directory: desktop
         shell: bash
     env:
-      # No certificates anywhere: never look for a signing identity, never notarize.
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'true'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -113,7 +127,32 @@ jobs:
       - run: pnpm build
         env:
           FAS_BUILD_NUMBER: ${{ github.run_number }}
-      - run: pnpm exec electron-builder ${{ matrix.target }} --publish never
+      - name: Build signed installers
+        env:
+          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          WIN_CSC_LINK: ${{ runner.os == 'Windows' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ runner.os == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY_BASE64: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY_BASE64 || '' }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          umask 077
+          if [ "$RUNNER_OS" = macOS ]; then
+            export APPLE_API_KEY="$RUNNER_TEMP/notary-key.p8"
+            trap 'rm -f "$APPLE_API_KEY"' EXIT
+            printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$APPLE_API_KEY"
+          fi
+          pnpm exec electron-builder ${{ matrix.target }} --config electron-builder.release.yml --publish never
+          if [ "$RUNNER_OS" = macOS ]; then bash scripts/verify-mac-release.sh; fi
+      - name: Verify Windows application and installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_THUMBPRINT: ${{ vars.WINDOWS_SIGNING_THUMBPRINT }}
+        run: ./scripts/verify-windows-release.ps1
       - name: Collect installers
         run: |
           mkdir -p ../out
@@ -130,6 +169,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
@@ -153,9 +194,18 @@ jobs:
                    FreeAppStore-win-x64.exe FreeAppStore-linux-x86_64.AppImage latest.yml latest-linux.yml latest-mac.yml; do
             [ -s "out/$f" ] || { echo "::error::Missing $f"; exit 1; }
           done
+      - name: Sign build provenance for the installers (including Linux)
+        id: provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: out/FreeAppStore-*
+      - name: Include the signature bundle with the downloads
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$BUNDLE" out/FreeAppStore-provenance.sigstore.json
       - name: Publish desktop-v${{ needs.tag.outputs.version }}
         run: |
-          { echo "FreeAppStore desktop $VERSION, a preview build. Unsigned: see https://freeappstore.online/download for first-launch steps."
+          { echo "FreeAppStore desktop $VERSION, Signed macOS (notarized) and Windows installers; signed build provenance for all platforms."
             echo; bash scripts/app-release.sh notes desktop "$TAG"; } > "$RUNNER_TEMP/notes.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" out/* --clobber
@@ -164,7 +214,7 @@ jobs:
           fi
       - name: Refresh desktop-latest
         run: |
-          notes="Always the newest FreeAppStore desktop build (currently $VERSION, from $TAG). Unsigned preview: see https://freeappstore.online/download for first-launch steps."
+          notes="Always the newest FreeAppStore desktop build (currently $VERSION, from $TAG). Signed macOS and Windows installers; signed provenance is included for all platforms."
           if gh release view desktop-latest >/dev/null 2>&1; then
             gh release upload desktop-latest out/FreeAppStore-* --clobber
             gh release edit desktop-latest --notes "$notes" --latest=false

@@ -57,6 +57,12 @@ Other AI apps: **Manual setup** on Home has the address and token.
 The AI app gets what your apps' tools return. If it uses a cloud model, that data goes to its provider. **Pause AI
 access** (Home or the menu-bar menu) stops every AI call until you resume.
 
+### AI activity
+
+**Activity** keeps the latest 1,000 AI calls on this computer across app restarts and updates. It records the time,
+app, tool name and success or failure, without saving tool inputs, returned data or app error text. **Clear history**
+deletes the local record. This history belongs to the computer, independently of your signed-in account.
+
 ### Account
 
 **Sign in** (or **Connect this computer** on Contribute) opens your browser to approve this computer. The page still

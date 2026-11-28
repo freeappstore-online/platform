@@ -91,7 +91,12 @@ export function startServer(options: ServerOptions): Promise<Server> {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES });
 
   const server = createServer((req, res) => {
-    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    let path: string;
+    try {
+      path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    } catch {
+      return json(res, 400, { error: 'Invalid request URL.' });
+    }
     if (path !== '/mcp') return json(res, 404, { error: 'Not found.' });
     handleMcp(req, res, options).catch(() => {
       if (!res.headersSent) json(res, 500, { error: 'Internal error.' });
@@ -99,7 +104,12 @@ export function startServer(options: ServerOptions): Promise<Server> {
   });
 
   server.on('upgrade', (req, socket, head) => {
-    const path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    let path: string;
+    try {
+      path = new URL(req.url ?? '/', 'http://localhost').pathname;
+    } catch {
+      return refuseUpgrade(socket, '400 Bad Request');
+    }
     if (path !== '/bridge') return refuseUpgrade(socket, '404 Not Found');
     const allowed = bridgeOriginAppId(req.headers.origin, dev);
     if (!allowed) return refuseUpgrade(socket, '403 Forbidden');

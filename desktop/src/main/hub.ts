@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { MAX_ACTIVITY } from './activity.js';
 import { APP_ID } from './security.js';
 
 /** Largest bridge message either side sends or accepts (matches the SDK). */
 export const MAX_MESSAGE_BYTES = 1024 * 1024;
 export const CALL_TIMEOUT_MS = 30_000;
 const MAX_TOOLS = 100;
-const MAX_LOG = 200;
 
 export interface ToolInfo {
   name: string;
@@ -227,9 +227,21 @@ export class Hub extends EventEmitter {
     });
   }
 
+  restoreLog(entries: LogEntry[]): void {
+    this.log.splice(0, this.log.length, ...entries.slice(0, MAX_ACTIVITY));
+    this.logId = this.log.reduce((max, entry) => Math.max(max, entry.id), 0);
+  }
+
+  clearLog(): void {
+    this.log.length = 0;
+    this.emit('activity');
+    this.emit('change');
+  }
+
   record(entry: Omit<LogEntry, 'id' | 'at'>): void {
     this.log.unshift({ id: ++this.logId, at: Date.now(), ...entry });
-    this.log.length = Math.min(this.log.length, MAX_LOG);
+    this.log.length = Math.min(this.log.length, MAX_ACTIVITY);
+    this.emit('activity');
     this.emit('change');
   }
 }

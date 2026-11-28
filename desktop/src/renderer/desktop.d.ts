@@ -56,6 +56,7 @@ export interface DesktopState {
   publish: PublishState;
   openApps: OpenApp[];
   log: LogEntry[];
+  activityError: string | null;
   /** The signed-in account (#829); `avatar` is a data: URL. Null until loaded or when not connected. */
   profile: (Profile & { avatar: string | null }) | null;
 }
@@ -85,6 +86,7 @@ declare global {
     };
     fasDesktop: {
       state(): Promise<DesktopState>;
+      clearActivity(): Promise<void>;
       onState(listener: (state: DesktopState) => void): void;
       openApp(appId: string): Promise<void>;
       copySetupCommand(): Promise<void>;

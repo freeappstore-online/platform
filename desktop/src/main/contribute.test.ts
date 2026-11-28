@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_WHEN, OFF } from './conditions.js';
-import { Contribute, type ContributeHost, contributeStatus, type Reading } from './contribute.js';
+import {
+  Contribute,
+  type ContributeHost,
+  contributeStatus,
+  DISCOVERY_TIMEOUT_MS,
+  type Reading,
+} from './contribute.js';
 import {
   clientHeaders,
   deleteDeviceToken,
@@ -674,19 +680,78 @@ describe('Contribute', () => {
     off.stop();
   });
 
-  it('waits without looking for work while held, and says why (#830)', async () => {
+  it('lists available apps while held without claiming work (#858)', async () => {
     const sent = serve([job]);
     let machine = { ...idle, inUse: true };
     const { contribute } = setup({ machine: () => machine });
     contribute.wake();
     await until(() => contribute.state.status === 'paused');
     expect(contribute.state.message).toBe('Computer in use.');
-    expect(sent.opens).toBe(0);
+    await until(() => contribute.state.apps !== null);
+    expect(sent.opens).toBe(1);
+    expect(sent.claims).toBe(0);
     // No longer in use: it runs
     machine = idle;
     contribute.wake();
     await until(() => contribute.state.submitted === 1);
     contribute.stop();
+  });
+
+  it('manual discovery works while Off, is single-flight, and never loads the model (#858)', async () => {
+    const sent = serve([job]);
+    const engine = vi.fn();
+    const { contribute } = setup({ mode: () => 'off', engine });
+    const request = contribute.refreshApps();
+    expect(contribute.refreshApps()).toBe(request);
+    await request;
+    expect(contribute.state.apps).toEqual([expect.objectContaining({ appId: 'books' })]);
+    expect(contribute.state.appsLoading).toBe(false);
+    expect([sent.opens, sent.claims, sent.uploads]).toEqual([1, 0, 0]);
+    expect(engine).not.toHaveBeenCalled();
+  });
+
+  it('finishes a stalled discovery with a retryable error and recovers (#858)', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url, init: RequestInit) =>
+            new Promise((_resolve, reject) => {
+              init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+            }),
+        ),
+      );
+      const { contribute } = setup({ mode: () => 'off' });
+      const request = contribute.refreshApps();
+      await vi.advanceTimersByTimeAsync(DISCOVERY_TIMEOUT_MS);
+      await request;
+      expect(contribute.state).toMatchObject({ appsLoading: false, apps: null });
+      expect(contribute.state.appsError).toContain('timed out');
+      serve([]);
+      await contribute.refreshApps();
+      expect(contribute.state.appsError).toBeNull();
+      expect(contribute.state.apps).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not restore the previous account list after sign-out (#858)', async () => {
+    let resolve!: (value: Response) => void;
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    );
+    const { contribute } = setup();
+    const request = contribute.refreshApps();
+    contribute.reset();
+    resolve(json({ apps: [{ appId: 'private', sets: [] }] }));
+    await request;
+    expect(contribute.state).toMatchObject({ apps: null, appsError: null, appsLoading: false });
   });
 
   it('Run now runs once regardless of the conditions, then is Auto again and says why it waits (#830)', async () => {

@@ -1,0 +1,12 @@
+# Public releases only (#857). Local/CI smoke builds keep the preview config.
+extends: electron-builder.yml
+forceCodeSigning: true
+mac:
+  # Empty selects the imported Developer ID certificate; null would DISABLE signing in builder 26.
+  identity: ""
+  type: distribution
+  hardenedRuntime: true
+  notarize: true
+win:
+  signtoolOptions:
+    signingHashAlgorithms: [sha256]

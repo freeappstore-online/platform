@@ -184,14 +184,18 @@ test('Off is a hard stop that survives a restart; Run now turns it back on; a co
   await expect(mode('Off')).toHaveAttribute('aria-pressed', 'true');
   expect(savedSettings().contributeMode).toBe('off');
 
-  // A restart (or an update) keeps it Off, and nothing looks for work
+  // A restart keeps generation Off, but read-only app discovery must still work (#858)
   seen.length = 0;
   home = await launch();
   await expect(home.getByTestId('contribute-status')).toHaveText('Off');
   await expect(home.getByTestId('contribute-why')).toHaveText(OFF);
   await expect(mode('Off')).toHaveAttribute('aria-pressed', 'true');
   await home.waitForTimeout(1500);
-  expect(seen.filter((r) => r.includes('/generation/'))).toEqual([]);
+  expect(seen.filter((r) => r.includes('/generation/'))).toEqual(['GET /v1/generation/open']);
+  await expect(home.getByRole('button', { name: 'Look again', exact: true })).toBeEnabled();
+  await home.getByRole('button', { name: 'Look again', exact: true }).click();
+  await expect.poll(() => seen.filter((r) => r === 'GET /v1/generation/open').length).toBe(2);
+  expect(seen.some((r) => r.endsWith('/claim'))).toBe(false);
 
   // Run now: one run regardless of the conditions, then Auto
   await mode('Run now').click();

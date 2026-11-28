@@ -43,6 +43,7 @@ import { freeBytes, type InstallProgress, MODEL_DOWNLOAD_BYTES } from './model.j
  */
 
 /** How long the loop waits after a run, or with nothing to do, before looking for work again. */
+export const DISCOVERY_TIMEOUT_MS = 20_000;
 export const IDLE_MS = 15 * 60_000;
 /** How long it waits, held by a condition (#830), before checking again: no network on the way. */
 export const HOLD_MS = 60_000;
@@ -147,6 +148,8 @@ export interface ContributeState {
   runNow: boolean;
   /** Apps with open work, from discovery; null until it has been asked. */
   apps: ContributeApp[] | null;
+  appsLoading: boolean;
+  appsError: string | null;
   model: {
     engine: string;
     languages: string;
@@ -189,6 +192,8 @@ export class Contribute {
     message: null,
     runNow: false,
     apps: null,
+    appsLoading: false,
+    appsError: null,
     model: null,
     current: null,
     submitted: 0,
@@ -200,6 +205,10 @@ export class Contribute {
   private wakeUp: () => void = () => {};
   private looping = false;
   private loading = false;
+  private discovery: {
+    promise: Promise<GenerationOpenApp[] | null>;
+    controller: AbortController;
+  } | null = null;
   /** Bumped by `reset` (sign-out, #848): work from before it writes nothing. */
   private epoch = 0;
   /** The hidden window's encoder once it has loaded, for the capability report. */
@@ -258,6 +267,9 @@ export class Contribute {
    * job in hand, however far it got.
    */
   wake(): void {
+    // Listing available apps is independent of whether generation is allowed right now.
+    if (this.host.token() && this.state.apps === null && !this.state.appsLoading)
+      void this.refreshApps();
     if (this.host.mode() === 'off') {
       this.set({ runNow: false });
       this.controller?.abort(new Held(this.hold()!));
@@ -275,6 +287,7 @@ export class Contribute {
   /** Stop the loop for good (quit, disconnect). */
   stop(): void {
     this.controller?.abort(new Error('Stopped'));
+    this.discovery?.controller.abort();
   }
 
   /**
@@ -284,10 +297,13 @@ export class Contribute {
   reset(): void {
     this.epoch++;
     this.stop();
+    this.discovery = null;
     this.set({
       status: 'idle',
       message: null,
       apps: null,
+      appsLoading: false,
+      appsError: null,
       current: null,
       submitted: 0,
       skipped: 0,
@@ -323,8 +339,10 @@ export class Contribute {
     }
   }
 
-  private async fetchApps(token: string): Promise<GenerationOpenApp[]> {
+  private async fetchApps(token: string, signal: AbortSignal): Promise<GenerationOpenApp[]> {
     const response = await fetch(`${this.origin}/v1/generation/open`, {
+      signal,
+      redirect: 'error',
       headers: {
         ...clientHeaders(this.host.context().appVersion ?? 'unknown'),
         Authorization: `Bearer ${token}`,
@@ -332,7 +350,74 @@ export class Contribute {
     });
     if (response.status === 401) throw new Error('Not signed in.');
     if (!response.ok) throw new Error(`Looking for work failed (HTTP ${response.status}).`);
-    return ((await response.json()) as { apps: GenerationOpenApp[] }).apps;
+    const body = (await response.json()) as { apps?: GenerationOpenApp[] };
+    if (
+      !Array.isArray(body.apps) ||
+      body.apps.some((app) => !app || typeof app.appId !== 'string' || !Array.isArray(app.sets))
+    ) {
+      throw new Error('The server returned an invalid app list.');
+    }
+    return body.apps;
+  }
+
+  /** Read-only discovery: never claims a job, loads an engine or bypasses generation conditions. */
+  refreshApps(): Promise<GenerationOpenApp[] | null> {
+    if (this.discovery) return this.discovery.promise;
+    const token = this.host.token();
+    if (!token) return Promise.resolve(null);
+    const epoch = this.epoch;
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(new Error('The request timed out. Try again.')),
+      DISCOVERY_TIMEOUT_MS,
+    );
+    const current = () => epoch === this.epoch && token === this.host.token();
+    this.set({
+      appsLoading: true,
+      appsError: null,
+      model: this.state.model ?? {
+        ...MODEL_INFO,
+        bytes: MODEL_DOWNLOAD_BYTES,
+        ready: this.host.modelReady(),
+        loading: null,
+        stage: 'download',
+      },
+    });
+    const promise = this.fetchApps(token, controller.signal)
+      .then((discovered) => {
+        if (!current()) return null;
+        const apps = discovered.map((app) => {
+          const runnable = app.sets.filter((set) => !kokoroProblem(set));
+          return {
+            appId: app.appId,
+            oneliner: app.oneliner,
+            open: runnable.reduce((count, set) => count + set.open, 0),
+            problem: runnable.length
+              ? null
+              : (app.sets.map((set) => kokoroProblem(set))[0] ?? null),
+          };
+        });
+        this.set({ apps, appsError: null });
+        return discovered;
+      })
+      .catch((error) => {
+        if (!current()) return null;
+        if (errorText(error) === 'Not signed in.') this.host.signedOut();
+        else
+          this.set({
+            appsError: `Couldn't load apps. ${controller.signal.aborted ? 'The request timed out. Try again.' : errorText(error)}`,
+          });
+        return null;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        if (this.discovery?.controller === controller) {
+          this.discovery = null;
+          if (current()) this.set({ appsLoading: false });
+        }
+      });
+    this.discovery = { promise, controller };
+    return promise;
   }
 
   private async engine(): Promise<Engine> {
@@ -421,22 +506,10 @@ export class Contribute {
     const token = this.host.token();
     if (!token) return;
     if (this.held(this.hold())) return;
-    let discovered: GenerationOpenApp[];
-    try {
-      discovered = await this.fetchApps(token);
-    } catch (err) {
-      if (errorText(err) === 'Not signed in.') return this.host.signedOut();
-      return this.set({ status: 'idle', message: `Couldn't look for work: ${errorText(err)}` });
-    }
+    const requestEpoch = this.epoch;
+    const discovered = await this.refreshApps();
+    if (!discovered || requestEpoch !== this.epoch || token !== this.host.token()) return;
     const runnable = (app: GenerationOpenApp) => app.sets.filter((s) => !kokoroProblem(s));
-    this.set({
-      apps: discovered.map((app) => ({
-        appId: app.appId,
-        oneliner: app.oneliner,
-        open: runnable(app).reduce((n, s) => n + s.open, 0),
-        problem: runnable(app).length ? null : (app.sets.map((s) => kokoroProblem(s))[0] ?? null),
-      })),
-    });
     let engine: Engine;
     try {
       engine = await this.engine();
@@ -794,6 +867,7 @@ export class Contribute {
   /** Stop and delete the model's files. */
   async deleteModel(): Promise<void> {
     this.controller?.abort(new Error('Stopped'));
+    this.discovery?.controller.abort();
     await this.host.deleteModel();
     if (this.state.model) this.set({ model: { ...this.state.model, ready: false } });
   }

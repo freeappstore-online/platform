@@ -38,7 +38,7 @@ const PAGES: { id: Page; label: string }[] = [
 const desktop = window.fasDesktop;
 
 const button =
-  'inline-flex items-center justify-center gap-2 rounded-card px-4 py-2 text-sm font-semibold cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex min-w-0 max-w-full items-center justify-center gap-2 rounded-card px-4 py-2 text-sm font-semibold cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed';
 const primary = `${button} bg-accent text-paper border-accent hover:bg-accent-hover`;
 const secondary = `${button} bg-panel text-ink border-line hover:border-line-strong`;
 
@@ -53,8 +53,8 @@ export function App() {
 
   return (
     <div className="min-h-dvh flex flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-panel">
-        <div className="mx-auto max-w-5xl flex items-center gap-6 px-5 py-3">
+      <header className="border-b border-line bg-panel">
+        <div className="mx-auto max-w-5xl flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3">
           <div className="flex items-center gap-2">
             <img src="./favicon.svg?v=2026-11-18" alt="" width={32} height={32} />
             <div className="leading-tight">
@@ -64,7 +64,7 @@ export function App() {
               <div className="text-xs text-muted">Desktop</div>
             </div>
           </div>
-          <nav aria-label="Main" className="flex gap-1">
+          <nav aria-label="Main" className="flex min-w-0 flex-wrap gap-1">
             {PAGES.map((p) => (
               <button
                 key={p.id}
@@ -79,7 +79,7 @@ export function App() {
               </button>
             ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center gap-2">
             <ThemeToggle />
             <TextSizeToggle />
             {state && (
@@ -141,7 +141,7 @@ function Section({
 }) {
   return (
     <section className="mb-8">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-4">
         <h2 className="m-0 text-xl font-bold">{title}</h2>
         {aside}
       </div>
@@ -150,7 +150,7 @@ function Section({
   );
 }
 
-const card = 'rounded-card border border-line bg-panel shadow-surface';
+const card = 'min-w-0 max-w-full rounded-card border border-line bg-panel shadow-surface';
 
 function Home({ state, openStore }: { state: DesktopState; openStore: () => void }) {
   return (
@@ -559,7 +559,7 @@ function Store({ store }: { store: DesktopState['store'] }) {
           {categories.map((name) => chip(name, name))}
         </fieldset>
       )}
-      <ul className="m-0 p-0 list-none grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="m-0 p-0 list-none grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]">
         {shown.map((app) => {
           const favorite = favorites.has(app.id);
           const count = votes[app.id] ?? 0;
@@ -585,7 +585,7 @@ function Store({ store }: { store: DesktopState['store'] }) {
                 </button>
               </div>
               <p className="m-0 text-sm text-muted flex-1">{app.description}</p>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   className={`${secondary} flex-1`}
@@ -701,7 +701,7 @@ function ContributeStatus({ state }: { state: DesktopContribute }) {
             {current ? `${current.appId} · ${current.key}` : (state.message ?? 'Looking for work…')}
           </div>
         </div>
-        <fieldset className="m-0 flex gap-2 border-0 p-0">
+        <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
           <legend className="sr-only">Mode</legend>
           {MODES.map(({ mode, label }) => (
             <button
@@ -737,7 +737,8 @@ function ContributeStatus({ state }: { state: DesktopContribute }) {
   );
 }
 
-const field = 'rounded-control border border-line bg-panel px-2 py-1 text-sm text-ink';
+const field =
+  'min-w-0 max-w-full rounded-control border border-line bg-panel px-2 py-1 text-sm text-ink';
 const hhmm = (minute: number) =>
   `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
 const minuteOf = (value: string) => {
@@ -1004,14 +1005,30 @@ function ContributeModel({ state }: { state: DesktopContribute }) {
 function ContributeApps({ state }: { state: DesktopContribute }) {
   return (
     <section className={`${card} p-5`} aria-label="Apps with open work">
-      <div className="mb-3 flex items-baseline justify-between gap-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-4">
         <h3 className="m-0 text-base font-bold">Apps with open work</h3>
-        <button type="button" className={secondary} onClick={() => desktop.contribute.refresh()}>
-          Look again
+        <button
+          type="button"
+          className={secondary}
+          disabled={state.appsLoading}
+          onClick={() => desktop.contribute.refresh()}
+        >
+          {state.appsLoading ? 'Looking…' : 'Look again'}
         </button>
       </div>
+      {state.appsError && (
+        <p role="alert" className="text-sm text-danger">
+          {state.appsError} Choose Look again to retry.
+        </p>
+      )}
       {!state.apps ? (
-        <p className="m-0 text-sm text-muted">Loading…</p>
+        <p className="m-0 text-sm text-muted">
+          {state.appsLoading
+            ? 'Loading…'
+            : state.appsError
+              ? 'The app list could not be refreshed.'
+              : 'Choose Look again to load available apps.'}
+        </p>
       ) : state.apps.length === 0 ? (
         <p className="m-0 text-sm text-muted">No app has open work for you right now.</p>
       ) : (
@@ -1445,7 +1462,7 @@ function PublishAccount({ state, busy }: { state: PublishState; busy: boolean })
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-4">
-          <p className="m-0 flex-1 min-w-60 text-sm">
+          <p className="m-0 flex-1 min-w-0 basis-60 max-w-full text-sm">
             Publishing needs a GitHub account: each app gets its own repository. This is the sign-in
             of the fas command-line tool, so signing in here signs it in too.
           </p>
@@ -1490,7 +1507,7 @@ function TaskOutput({ task }: { task: NonNullable<PublishState['task']> }) {
       <pre
         ref={end}
         data-testid="task-output"
-        className="m-0 max-h-64 overflow-auto rounded-control bg-paper p-3 text-xs font-code whitespace-pre-wrap"
+        className="m-0 max-h-64 overflow-y-auto wrap-anywhere rounded-control bg-paper p-3 text-xs font-code whitespace-pre-wrap"
       >
         {task.output.join('\n')}
       </pre>
@@ -1506,7 +1523,7 @@ function Projects({ state, busy }: { state: PublishState; busy: boolean }) {
     <Section
       title="On this computer"
       aside={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className={primary}
@@ -1545,7 +1562,7 @@ function Projects({ state, busy }: { state: PublishState; busy: boolean }) {
               required
             />
           </label>
-          <span className="text-xs text-muted flex-1 min-w-48">
+          <span className="text-xs text-muted flex-1 min-w-0 basis-48 max-w-full">
             Its address will be {appId || '<id>'}.freeappstore.online. Next, choose the folder to
             create it in.
           </span>
@@ -1671,7 +1688,7 @@ function ProjectCard({
       )}
       {publishing && !published && (
         <form
-          className="mt-4 pt-4 border-t border-line grid gap-3 md:grid-cols-[auto_1fr_auto]"
+          className="mt-4 pt-4 border-t border-line grid gap-3 grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))]"
           onSubmit={(event) => {
             event.preventDefault();
             void api.publish(path, { category, oneliner }).then((ok) => {
@@ -1716,7 +1733,7 @@ function ProjectCard({
               Cancel
             </button>
           </div>
-          <p className="m-0 text-xs text-muted md:col-span-3">
+          <p className="m-0 text-xs text-muted col-span-full">
             Publishing checks the app, creates its repository in the freeappstore-online
             organisation and its address. It goes live after you push.
           </p>
@@ -1733,7 +1750,7 @@ function ProjectCard({
           }}
         >
           {changes ? (
-            <label className="flex flex-col gap-1 text-sm flex-1 min-w-60">
+            <label className="flex flex-col gap-1 text-sm flex-1 min-w-0 basis-60 max-w-full">
               <span className="font-semibold">What changed</span>
               <input
                 name="message"
@@ -1745,7 +1762,7 @@ function ProjectCard({
               />
             </label>
           ) : (
-            <span className="text-sm text-muted flex-1 min-w-60">
+            <span className="text-sm text-muted flex-1 min-w-0 basis-60 max-w-full">
               Pushes main to {published.repoUrl.replace(/^https:\/\//, '')}, which deploys it.
             </span>
           )}
@@ -1818,8 +1835,43 @@ function MyApps({ apps, busy }: { apps: MyApp[] | null; busy: boolean }) {
 }
 
 function Activity({ state }: { state: DesktopState }) {
+  const [clear, setClear] = useState(false);
   return (
-    <Section title="AI activity">
+    <Section
+      title="AI activity"
+      aside={
+        <button
+          type="button"
+          className={secondary}
+          disabled={!state.log.length && !state.activityError}
+          onClick={() => setClear(true)}
+        >
+          Clear history
+        </button>
+      }
+    >
+      <p className="text-sm text-muted">
+        The latest 1,000 calls stay on this computer across restarts and updates. Saved activity
+        contains the time, app, tool and outcome. Arguments, results and error details are not
+        saved.
+      </p>
+      {state.activityError && (
+        <p role="alert" className="text-sm text-danger">
+          {state.activityError}
+        </p>
+      )}
+      <ConfirmDialog
+        open={clear}
+        title="Clear AI activity?"
+        message="Deletes the saved activity on this computer. Your app data is unchanged."
+        confirmLabel="Clear history"
+        variant="danger"
+        onCancel={() => setClear(false)}
+        onConfirm={() => {
+          setClear(false);
+          void desktop.clearActivity();
+        }}
+      />
       {state.log.length === 0 ? (
         <div className={card}>
           <EmptyState
@@ -1828,42 +1880,31 @@ function Activity({ state }: { state: DesktopState }) {
           />
         </div>
       ) : (
-        <div className={`${card} overflow-x-auto`}>
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="text-left text-muted">
-                <th className="px-4 py-2 font-semibold">Time</th>
-                <th className="px-4 py-2 font-semibold">Tool</th>
-                <th className="px-4 py-2 font-semibold">App</th>
-                <th className="px-4 py-2 font-semibold">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {state.log.map((entry) => (
-                <tr key={entry.id} className="border-t border-line align-top">
-                  <td className="px-4 py-2 whitespace-nowrap text-muted">
-                    {new Date(entry.at).toLocaleTimeString()}
-                  </td>
-                  <td className="px-4 py-2 font-code">
-                    {entry.tool}
-                    {entry.appTool && <span className="text-muted"> → {entry.appTool}</span>}
-                  </td>
-                  <td className="px-4 py-2 font-code">{entry.appId ?? '—'}</td>
-                  <td className="px-4 py-2">
-                    {entry.ok ? (
-                      <Badge variant="success">ok</Badge>
-                    ) : (
-                      <>
-                        <Badge variant="danger">error</Badge>
-                        <div className="mt-1 text-muted">{entry.error}</div>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ol className="m-0 p-0 list-none grid gap-3" aria-label="AI calls">
+          {state.log.map((entry) => (
+            <li key={entry.id} className={`${card} p-4`}>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2 text-sm">
+                <time className="text-muted" dateTime={new Date(entry.at).toISOString()}>
+                  {new Date(entry.at).toLocaleTimeString()}
+                </time>
+                <Badge variant={entry.ok ? 'success' : 'danger'}>{entry.ok ? 'ok' : 'error'}</Badge>
+              </div>
+              <dl className="m-0 text-sm">
+                <Row
+                  label="Tool"
+                  value={
+                    <span className="font-code">
+                      {entry.tool}
+                      {entry.appTool && ` → ${entry.appTool}`}
+                    </span>
+                  }
+                />
+                <Row label="App" value={<span className="font-code">{entry.appId ?? '—'}</span>} />
+              </dl>
+              {!entry.ok && entry.error && <p className="mb-0 text-sm text-muted">{entry.error}</p>}
+            </li>
+          ))}
+        </ol>
       )}
     </Section>
   );
@@ -1974,7 +2015,7 @@ function Account({ state }: { state: DesktopState }) {
           <div className="text-muted">{user.login ? `@${user.login}` : provider}</div>
         </div>
       </div>
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))]">
         <section className={`${card} p-5`} aria-label="Profile">
           <dl className="m-0 divide-y divide-line">
             <Row label="Signed in with" value={provider} />
@@ -2046,7 +2087,7 @@ function QrCode({ text }: { text: string }) {
       shapeRendering="crispEdges"
       role="img"
       aria-label="Pairing QR code"
-      className="h-48 w-48 shrink-0 rounded-control"
+      className="h-auto w-48 max-w-full shrink-0 rounded-control"
     >
       <rect width={size} height={size} className="fill-white" />
       <path d={path} className="fill-black" />
@@ -2203,7 +2244,7 @@ function UpdateBanner({ state, openWhatsNew }: { state: DesktopState; openWhatsN
       aria-label="Update"
       className={`${card} mb-6 p-4 flex flex-wrap items-center gap-3 border-accent`}
     >
-      <div className="min-w-0 flex-1 text-sm">
+      <div className="min-w-0 flex-1 basis-64 text-sm">
         <span className="font-bold text-ink-strong">
           {status === 'ready'
             ? `FreeAppStore ${version} is ready to install.`
