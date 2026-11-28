@@ -1,6 +1,6 @@
 # Android submission readiness
 
-Checked 2026-11-28 for `online.freeappstore.companion`. The owner-saved English Play listings and exact readback are recorded in [listing assets](play/README.md). Internal track version **67**, name **0.2.0**, is `completed`, verified through a fresh Publisher edit after successful main CI [46136342761](https://github.com/freeappstore-online/platform/actions/runs/46136342761). Both locales' exact text and all six default asset digests still match after the release edit. Do not describe this as a production release or completed Google review.
+Checked 2026-11-28 for `online.freeappstore.companion`. The owner-saved English Play listings and exact readback are recorded in [listing assets](play/README.md). Internal track version **68**, name **0.2.0**, is `completed`, verified through a fresh Publisher edit after successful main CI [46137602784](https://github.com/freeappstore-online/platform/actions/runs/46137602784). Both locales' exact text and all six default asset digests still match after the release edit. Do not describe this as a production release or completed Google review.
 
 ## Current Console requirements
 
