@@ -52,14 +52,14 @@ First Microsoft Store submission of the FreeAppStore desktop companion, includin
 
 ## Public links
 
-| Field | Value |
-|---|---|
-| Website | https://freeappstore.online/ |
-| Privacy policy | https://freeappstore.online/privacy |
-| Support website | https://docs.freeappstore.online/devices/ |
-| Support email | support@freeappstore.online |
+| Field                 | Value                                      |
+| --------------------- | ------------------------------------------ |
+| Website               | https://freeappstore.online/               |
+| Privacy policy        | https://freeappstore.online/privacy        |
+| Support website       | https://docs.freeappstore.online/devices/  |
+| Support email         | support@freeappstore.online                |
 | Account deletion help | https://freeappstore.online/delete-account |
-| Terms | https://freeappstore.online/terms |
+| Terms                 | https://freeappstore.online/terms          |
 
 The support, privacy, deletion and terms URLs returned HTTP 200 when checked on 2026-11-28. The public privacy policy documents Store-managed updates: this package does not use the direct EXE/GitHub updater. Do not copy a test account password or secret into this file or a public issue.
 

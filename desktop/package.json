@@ -1,7 +1,7 @@
 {
   "name": "freeappstore-desktop",
   "productName": "FreeAppStore",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Your favourite free web apps in their own windows, with optional local AI connections and community narration.",
   "license": "MIT",

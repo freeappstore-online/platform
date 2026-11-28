@@ -158,8 +158,9 @@ function Home({ state, openStore }: { state: DesktopState; openStore: () => void
       <QuickAccess store={state.store} openStore={openStore} />
       <h1 className="mt-0 mb-2 text-3xl font-extrabold">Let your AI work in your apps</h1>
       <p className="mt-0 mb-8 text-muted max-w-2xl">
-        Apps that allow AI access offer tools to AI apps on this computer, such as Claude. The tools
-        run inside the app, on its local data. Nothing is sent to a server.
+        Apps that allow AI access offer tools to AI apps on this computer, such as Claude. The
+        connection stays on this computer. Your AI app receives the tool results and may send them
+        to its model provider.
       </p>
 
       <Status state={state} />

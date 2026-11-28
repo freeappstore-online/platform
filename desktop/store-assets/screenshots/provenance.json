@@ -1,0 +1,35 @@
+{
+  "capturedAt": "2026-11-28T10:12:38.832Z",
+  "method": "Unaltered native window screenshot captured through CUA",
+  "app": {
+    "version": "1.0.0",
+    "build": "2026112801",
+    "commit": "3fe64a94bd0d74cdd838441adc72ce8352b63b4a",
+    "architecture": "x64",
+    "release": "https://github.com/freeappstore-online/platform/releases/tag/desktop-v1.0.0",
+    "signing": "Developer ID signed, notarized, stapled"
+  },
+  "profile": {
+    "isolated": true,
+    "signedIn": false,
+    "aiConnected": false,
+    "loginItemManagement": false,
+    "contribution": "off",
+    "favourites": ["notes", "calculator", "books"],
+    "favouritesSource": "Selected using the actual Store UI from the live public catalogue"
+  },
+  "files": [
+    {
+      "file": "01-home-favourites.png",
+      "width": 1080,
+      "height": 902,
+      "sha256": "85368b03c9203078603376702fbaaf267e198307cd06ec59e77625ac8bec289d"
+    },
+    {
+      "file": "02-store-favourites.png",
+      "width": 1080,
+      "height": 874,
+      "sha256": "bada48edc751d19ea026c34cf5f18e127386a69b2a498d13d74df0bedf681d44"
+    }
+  ]
+}
