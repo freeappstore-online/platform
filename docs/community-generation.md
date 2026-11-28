@@ -179,6 +179,14 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   device skips sets it cannot run. A console session or a native device sees every store app;
   `?appId=` narrows to one app and then authenticates exactly like claim (that app's session too,
   `403` if blocked).
+- Backlog: `GET /generation/backlog` → `{ jobs: [{ id, appId, key, createdAt, inputPreview,
+  inputChars, model, modelVersion }], hasMore }`. Uses discovery's authentication, optional
+  `?appId=`, and claim eligibility. Returns at most 100 jobs, oldest first (creation time then
+  insertion order), with a 160-character text preview; `hasMore` indicates additional eligible
+  jobs. Reading never claims work. Responses are private and not cached. **Up next** on desktop,
+  iOS, Android and the console's Generate status page shows this list with manual refresh.
+  It includes apps the user has not enabled and models this device may not support; runners still
+  apply their choices and capabilities, and other devices can change availability and order.
 - `…/events` records how each attempt at a job the caller leased went
   ([#813](https://github.com/freeappstore-online/platform/issues/813),
   [#827](https://github.com/freeappstore-online/platform/issues/827)): one record per lease (a resend

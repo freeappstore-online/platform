@@ -145,6 +145,7 @@ struct ContributeView: View {
                     if model.signedIn {
                         status
                         today
+                        GenerationBacklogView(runner: runner, catalogue: catalogue)
                     } else {
                         Button("Sign in to FreeAppStore") { model.connect() }.buttonStyle(.borderedProminent).disabled(model.busy)
                         PairByCode(model: model)
@@ -238,5 +239,50 @@ struct ContributeView: View {
             }
         }
         NavigationLink("All activity") { ContributeActivityView(model: model, catalogue: catalogue) }
+    }
+}
+
+/// A preview only: refreshing never claims or starts a job.
+private struct GenerationBacklogView: View {
+    let runner: ContributeRunner
+    @ObservedObject var catalogue: CatalogueStore
+    @State private var backlog: GenerationBacklog?
+    @State private var loading = true
+    @State private var error: String?
+    @State private var refresh = 0
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Up next · awaiting generation").font(.headline)
+                Text("Up to 100 jobs available to your account, oldest first. Only enabled apps run; other devices may take these jobs, so the order can change.").font(.footnote).foregroundStyle(.secondary)
+                Button("Refresh backlog") { refresh += 1 }.disabled(loading)
+                if loading { ProgressView("Loading awaiting jobs…") }
+                if let error { Text(error).foregroundStyle(.red) }
+                if !loading, error == nil, let backlog {
+                    Text(backlog.jobs.isEmpty ? "No jobs are awaiting generation for your account." : "Showing \(backlog.jobs.count)\(backlog.hasMore ? " of more than 100" : "") awaiting jobs.").font(.footnote)
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(backlog.jobs.enumerated()), id: \.element.id) { index, job in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(index + 1). \(catalogue.name(job.appId)) · \(job.key)").font(.subheadline.bold())
+                                Text("\(job.model) \(job.modelVersion) · \(job.inputChars) characters").font(.caption).foregroundStyle(.secondary)
+                                Text(job.inputPreview).font(.subheadline)
+                                Divider()
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.task(id: refresh) {
+            loading = true; error = nil
+            do {
+                let result = try await runner.backlog()
+                guard !Task.isCancelled else { return }
+                backlog = result
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.error = "Couldn't load awaiting jobs. Try Refresh."
+            }
+            loading = false
+        }
     }
 }

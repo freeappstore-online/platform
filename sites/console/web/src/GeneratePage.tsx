@@ -27,6 +27,8 @@ import {
 } from './generate'
 import { activityItems, BUCKETS, BUCKET_TONE, GenerateActivity, isToday, type Bucket, type Mine } from './GenerateActivity'
 
+import { GenerationBacklog } from './GenerationBacklog'
+
 const DOCS_URL = 'https://github.com/freeappstore-online/platform/blob/main/docs/community-generation.md'
 const DEVICE_LABEL: Record<KokoroDevice, string> = { webgpu: 'WebGPU', wasm: 'WebAssembly' }
 const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000).toLocaleString()} MB`
@@ -127,6 +129,7 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
       <TabBar tab={tab} onTab={setTab} />
       <div role="tabpanel" id={`generate-panel-${tab}`} aria-labelledby={`generate-tab-${tab}`} className="space-y-4">
         {tab === 'status' && (
+          <>
           <StatusCard
             encoder={encoder}
             downloaded={downloaded}
@@ -137,6 +140,8 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
             onOpenActivity={openActivity}
             onOpenCurrent={() => run.current && openActivity('in-progress', `run:${run.current.appId}/${run.current.jobId}/${run.current.at}`)}
           />
+          <GenerationBacklog token={fas.auth.token} />
+          </>
         )}
         {tab === 'activity' && (
           <GenerateActivity

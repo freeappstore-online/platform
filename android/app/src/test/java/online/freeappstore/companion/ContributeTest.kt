@@ -19,6 +19,19 @@ import org.junit.Test
 
 /** #731: the contribute loop against a fake API, the job policy, Kokoro params and the model install. */
 class ContributeTest {
+    @Test fun awaitingBacklogIsBoundedAndPreservesPreview() {
+        val rows = JSONArray()
+        (0..100).forEach { i -> rows.put(JSONObject().put("id", "j$i").put("appId", "books").put("key", "alice/$i")
+            .put("inputPreview", "Waiting chapter").put("inputChars", 500).put("model", "kokoro").put("modelVersion", "v1.0")) }
+        val result = GenerationBacklog.parse(JSONObject().put("jobs", rows).put("hasMore", true))
+        assertEquals(100, result.jobs.size)
+        assertEquals("alice/0", result.jobs.first().key)
+        assertEquals("Waiting chapter", result.jobs.first().inputPreview)
+        assertTrue(result.hasMore)
+        assertNotNull(FasApi.endpoint("/generation/backlog"))
+        assertNull(FasApi.endpoint("/generation/backlog/other"))
+    }
+
     private val now = 1_000_000_000_000L
     private lateinit var dir: File
     private val log = FakeLog()

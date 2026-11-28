@@ -161,7 +161,22 @@ async function prepare(page: Page) {
         expiresAt: Date.now() + 300000,
       }),
       publish: { refresh: noop },
-      contribute: { history: async () => [], refresh: noop },
+      contribute: {
+        history: async () => [],
+        refresh: noop,
+        backlog: async () => ({
+          jobs: Array.from({ length: 100 }, (_, i) => ({
+            id: String(i),
+            appId: 'books',
+            key: `a-long-chapter-name-${i}`,
+            inputPreview: 'x'.repeat(160),
+            inputChars: 2000,
+            model: 'kokoro',
+            modelVersion: 'v1.0',
+          })),
+          hasMore: true,
+        }),
+      },
     };
     Object.assign(window, { fasDesktop: api });
   });
@@ -205,6 +220,8 @@ for (const width of [420, 800, 1100]) {
         .getByRole('navigation', { name: 'Main' })
         .getByRole('button', { name, exact: true })
         .click();
+      if (name === 'Contribute')
+        await expect(page.getByText('Showing 100 of more than 100 awaiting jobs.')).toBeVisible();
       await noHorizontalScroll(page);
       if (name === 'Publish') {
         await page.getByRole('button', { name: 'New app', exact: true }).click();

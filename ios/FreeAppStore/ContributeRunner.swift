@@ -184,6 +184,8 @@ final class ContributeRunner: ObservableObject {
     func stop() { stopFlag?.stop("user_stop") }
 
     /// Discovery (#820): open jobs this phone could run now, by app.
+    func backlog() async throws -> GenerationBacklog { try await client.backlog() }
+
     func openJobs() async throws -> [String: Int] { try await client.open(model: KokoroModel.id) }
 
     /// The server's verdicts on this phone's contributions, for every app with a job on this phone's record, opted in or

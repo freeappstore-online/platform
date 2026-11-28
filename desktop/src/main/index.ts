@@ -31,6 +31,7 @@ import {
   clientHeaders,
   createPairCode,
   deleteDeviceToken,
+  fetchBacklog,
   fetchProfile,
   loadDeviceToken,
   type Profile,
@@ -978,6 +979,11 @@ ipcMain.handle('home:contribute-download', (event) => {
 });
 ipcMain.handle('home:contribute-delete-model', async (event) => {
   if (fromHome(event) && deviceToken) await contribute.deleteModel();
+});
+ipcMain.handle('home:contribute-backlog', async (event) => {
+  if (!fromHome(event) || !accountVerified || !deviceToken)
+    throw new Error('Sign in to see awaiting jobs.');
+  return fetchBacklog(deviceToken, headers, `${apiOrigin}/v1`);
 });
 ipcMain.handle('home:contribute-refresh', (event) => {
   if (!fromHome(event)) return;

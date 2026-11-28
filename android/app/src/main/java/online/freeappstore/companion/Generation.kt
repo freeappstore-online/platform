@@ -13,6 +13,21 @@ import org.json.JSONObject
  * the result against the job's lease. The server decides what is generated and verifies every upload; the phone only
  * ever generates the exact input it claimed, never text the user chooses, and never uploads twice for one job.
  */
+data class BacklogJob(val id: String, val appId: String, val key: String, val inputPreview: String,
+                      val inputChars: Int, val model: String, val modelVersion: String)
+data class GenerationBacklog(val jobs: List<BacklogJob>, val hasMore: Boolean) {
+    companion object {
+        fun parse(body: JSONObject): GenerationBacklog {
+            val rows = body.getJSONArray("jobs")
+            return GenerationBacklog((0 until minOf(rows.length(), 100)).map { i ->
+                val job = rows.getJSONObject(i)
+                BacklogJob(job.getString("id"), job.getString("appId"), job.getString("key"), job.getString("inputPreview"),
+                    job.getInt("inputChars"), job.getString("model"), job.getString("modelVersion"))
+            }, body.getBoolean("hasMore"))
+        }
+    }
+}
+
 data class ModelId(val model: String, val version: String)
 
 /**
@@ -161,6 +176,9 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
         val list = api.request("GET", "/apps/$appId/generation/submissions", token()).optJSONArray("submissions") ?: return emptyList()
         return (0 until list.length()).map { list.getJSONObject(it) }
     }
+    /** Read-only preview; never claims a job. */
+    fun backlog(): GenerationBacklog = GenerationBacklog.parse(api.request("GET", "/generation/backlog", token()))
+
     /** Open jobs this phone could take now, by app (#820): discovery's counts for sets in [model] and `audio/mp4`. */
     fun openJobs(model: ModelId): Map<String, Int> = parseOpen(api.request("GET", "/generation/open", token()), model)
     /** An accepted artifact's sentence timings from its public [metaUrl] (an API URL); empty for any other URL. */

@@ -26,7 +26,7 @@ final class FasApi: Sendable {
 
     /// The device credential goes to the native routes and to the contributor routes of community generation (#733),
     /// discovery included (#820).
-    private static let allowed = try! NSRegularExpression(pattern: "^/(native/|generation/open$|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
+    private static let allowed = try! NSRegularExpression(pattern: "^/(native/|generation/(open|backlog)$|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
 
     /// The only URLs a request may target: `/v1/native/*`, `/v1/generation/open` and `/v1/apps/<id>/generation/*` on the
     /// fixed origin, with no `..` segment. Nil for any other path.

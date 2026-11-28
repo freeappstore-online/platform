@@ -91,6 +91,7 @@ data class CompanionActions(
     val contributeSettings: (ContributeSettings) -> Unit = {}, val contributeNow: () -> Unit = {}, val stopContributing: () -> Unit = {},
     /** Contribute's Activity and Settings (#820): the server's verdicts, open jobs by app (null when unknown), storage, artifact timings. */
     val refreshContributions: suspend () -> Unit = {}, val openJobs: suspend () -> Map<String, Int>? = { null },
+    val backlog: suspend () -> GenerationBacklog = { GenerationBacklog(emptyList(), false) },
     val contributeStorage: suspend () -> Pair<Long, Long> = { 0L to 0L },
     /** An accepted job's whole input (the preview when unavailable) and its sentence timings, for Play (#820, #824). */
     val loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>> = { it.inputPreview to emptyList() },
@@ -184,6 +185,7 @@ class MainActivity : ComponentActivity() {
             stopContributing = { ContributeWorker.stop(this); refresh() },
             refreshContributions = { withContext(Dispatchers.IO) { refreshVerdicts() }; refresh() },
             openJobs = { withContext(Dispatchers.IO) { runCatching { graph.generation.openJobs(KokoroModel.ID) }.getOrNull() } },
+            backlog = { withContext(Dispatchers.IO) { graph.generation.backlog() } },
             contributeStorage = { withContext(Dispatchers.IO) { graph.kokoro.bytes() to graph.local.databaseBytes() } },
             loadPlayback = { c ->
                 withContext(Dispatchers.IO) {

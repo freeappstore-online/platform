@@ -171,3 +171,32 @@ export async function fetchProfile(
   const { user, device } = (await response.json()) as Profile;
   return { user, device };
 }
+
+/** Read-only queue preview; never claims work (#861). */
+export interface BacklogJob {
+  id: string;
+  appId: string;
+  key: string;
+  inputPreview: string;
+  inputChars: number;
+  createdAt: number;
+  model: string;
+  modelVersion: string;
+}
+export interface GenerationBacklog {
+  jobs: BacklogJob[];
+  hasMore: boolean;
+}
+export async function fetchBacklog(
+  token: string,
+  headers: Record<string, string>,
+  api = API,
+): Promise<GenerationBacklog> {
+  const response = await fetch(`${api}/generation/backlog`, {
+    redirect: 'error',
+    signal: AbortSignal.timeout(20_000),
+    headers: { ...headers, Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error(`Couldn't load the backlog (HTTP ${response.status}).`);
+  return (await response.json()) as GenerationBacklog;
+}

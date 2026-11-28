@@ -10,6 +10,33 @@ struct ModelId: Equatable {
     let version: String
 }
 
+/// Read-only awaiting work, with bounded text previews (#861).
+struct BacklogJob: Identifiable, Equatable {
+    let id: String
+    let appId: String
+    let key: String
+    let inputPreview: String
+    let inputChars: Int
+    let model: String
+    let modelVersion: String
+}
+struct GenerationBacklog {
+    let jobs: [BacklogJob]
+    let hasMore: Bool
+    static func parse(_ body: [String: Any]) throws -> GenerationBacklog {
+        guard let rows = body["jobs"] as? [[String: Any]], let more = body["hasMore"] as? Bool else {
+            throw CompanionError("The backlog response was invalid.")
+        }
+        return try GenerationBacklog(jobs: rows.prefix(100).map { row in
+            guard let id = row["id"] as? String, let app = row["appId"] as? String,
+                  let key = row["key"] as? String, let text = row["inputPreview"] as? String,
+                  let count = row["inputChars"] as? Int, let model = row["model"] as? String,
+                  let version = row["modelVersion"] as? String else { throw CompanionError("The backlog response was invalid.") }
+            return BacklogJob(id: id, appId: app, key: key, inputPreview: text, inputChars: count, model: model, modelVersion: version)
+        }, hasMore: more)
+    }
+}
+
 /// A claimed job. `text` is the job's whole input; a job whose input is anything else has a blank `text` and is refused.
 /// `language` is its set's BCP 47 tag (#810), or nil when the set names none.
 struct GenerationJob {
@@ -136,6 +163,10 @@ final class GenerationClient: @unchecked Sendable {
     private func token() throws -> String {
         guard let token = credential() else { throw ApiFailure(status: 401, message: "Sign in first.") }
         return token
+    }
+
+    func backlog() async throws -> GenerationBacklog {
+        try GenerationBacklog.parse(await api.request("GET", "/generation/backlog", token: try token()))
     }
 
     /// nil when the app has no open job for these models (`204`).

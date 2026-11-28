@@ -923,6 +923,52 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
     );
   };
 
+  it('backlog is bounded, oldest first, private and read-only; it shares claim access rules (#861)', async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    const queued = Array.from({ length: 102 }, (_, i) => ({
+      key: `chapter/${i}`,
+      input: { text: 'x'.repeat(300) },
+    }));
+    expect((await s.addJobs(setId, queued)).status).toBe(200);
+    const token = await signSession('u2', KEY, { aud: 'console' });
+    const get = (credential = token, query = '') =>
+      app.request(
+        `/v1/generation/backlog${query}`,
+        { headers: { Authorization: `Bearer ${credential}` } },
+        s.env,
+      );
+    const response = await get();
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    const body = (await response.json()) as {
+      jobs: { id: string; key: string; inputPreview: string; inputChars: number }[];
+      hasMore: boolean;
+    };
+    expect(body.jobs).toHaveLength(100);
+    expect(body.hasMore).toBe(true);
+    expect(body.jobs.map((job) => job.key)).toEqual(queued.slice(0, 100).map((job) => job.key));
+    expect(body.jobs[0]).toMatchObject({ inputPreview: 'x'.repeat(160), inputChars: 300 });
+    expect(body.jobs[0]).not.toHaveProperty('input');
+    expect(s.db.prepare('SELECT COUNT(*) AS n FROM generation_leases').get()).toMatchObject({
+      n: 0,
+    });
+    const claimed = await s.claim('u2', { setId });
+    expect(claimed!.id).toBe(body.jobs[0]!.id);
+    const next = (await (await get()).json()) as typeof body;
+    expect(next.jobs[0]!.key).toBe('chapter/1');
+    expect((await get(DEVICE)).status).toBe(200);
+    expect((await get('invalid')).status).toBe(401);
+    const appToken = await signSession('u2', KEY, { aud: 'books' });
+    expect((await get(appToken)).status).toBe(403);
+    expect((await get(appToken, '?appId=books')).status).toBe(200);
+    expect((await get(appToken, '?appId=other')).status).toBe(403);
+    expect((await get(token, '?appId=BAD')).status).toBe(400);
+    await s.request('/contributors/u2/block', { method: 'POST' });
+    expect(await (await get()).json()).toEqual({ jobs: [], hasMore: false });
+    s.db.exec("UPDATE apps SET store = 'apps_pro' WHERE id = 'books'");
+    expect(await (await get(DEVICE)).json()).toEqual({ jobs: [], hasMore: false });
+  });
+
   it('owner lists sets with progress counts', async () => {
     const s = await setup({ verify: false });
     const setId = await s.createSet({ replicas: 2 });

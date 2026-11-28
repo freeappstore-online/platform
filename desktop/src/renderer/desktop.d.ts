@@ -126,6 +126,7 @@ declare global {
         push(path: string, message: string): Promise<boolean>;
       };
       contribute: {
+        backlog(): Promise<import('../main/device.js').GenerationBacklog>;
         connect(): Promise<void>;
         cancel(): Promise<void>;
         disconnect(): Promise<void>;

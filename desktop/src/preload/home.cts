@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('fasDesktop', {
     downloadModel: () => ipcRenderer.invoke('home:contribute-download'),
     deleteModel: () => ipcRenderer.invoke('home:contribute-delete-model'),
     refresh: () => ipcRenderer.invoke('home:contribute-refresh'),
+    backlog: () => ipcRenderer.invoke('home:contribute-backlog'),
     history: () => ipcRenderer.invoke('home:contribute-history'),
     audio: (appId: string, jobId: string) =>
       ipcRenderer.invoke('home:contribute-audio', appId, jobId),

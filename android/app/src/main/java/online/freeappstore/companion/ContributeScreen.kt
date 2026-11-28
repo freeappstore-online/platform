@@ -172,6 +172,7 @@ private fun ContributeStatus(state: CompanionState, actions: CompanionActions, s
             Text("Activity", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             Text("›", style = MaterialTheme.typography.titleMedium)
         }
+        GenerationBacklogCard(actions.backlog)
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -517,5 +518,39 @@ private fun Stepper(label: String, value: String, less: () -> Unit, more: () -> 
         Text(value, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         TextButton(onClick = less) { Text("−") }
         TextButton(onClick = more) { Text("+") }
+    }
+}
+
+/** Read-only preview of work available to this account; refresh never starts a run. */
+@Composable
+private fun GenerationBacklogCard(load: suspend () -> GenerationBacklog) {
+    var value by remember { mutableStateOf<GenerationBacklog?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var refresh by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refresh) {
+        loading = true; error = null
+        try { value = load() }
+        catch (cancel: kotlinx.coroutines.CancellationException) { throw cancel }
+        catch (_: Exception) { error = "Couldn't load awaiting jobs. Try Refresh." }
+        finally { loading = false }
+    }
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Up next · awaiting generation", style = MaterialTheme.typography.titleMedium)
+            Text("Up to 100 jobs available to your account, oldest first. Only enabled apps run; other devices may take these jobs, so the order can change.", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { refresh++ }, enabled = !loading) { Text("Refresh backlog") }
+            if (loading) Text("Loading awaiting jobs…")
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            if (!loading && error == null) value?.let { backlog ->
+                Text(if (backlog.jobs.isEmpty()) "No jobs are awaiting generation for your account." else "Showing ${backlog.jobs.size}${if (backlog.hasMore) " of more than 100" else ""} awaiting jobs.", style = MaterialTheme.typography.bodySmall)
+                backlog.jobs.forEachIndexed { index, job ->
+                    HorizontalDivider()
+                    Text("${index + 1}. ${job.appId} · ${job.key}", style = MaterialTheme.typography.titleSmall)
+                    Text("${job.model} ${job.modelVersion} · ${job.inputChars} characters", style = MaterialTheme.typography.bodySmall)
+                    Text(job.inputPreview, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
     }
 }

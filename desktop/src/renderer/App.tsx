@@ -648,6 +648,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
       <ContributeConditions when={state.when} />
       <ContributeModel state={state} />
       <ContributeApps state={state} />
+      <GenerationBacklog />
       <ContributeHistory state={state} />
       <ContributeTroubleshooting />
     </Section>
@@ -998,6 +999,80 @@ function ContributeModel({ state }: { state: DesktopContribute }) {
           void desktop.contribute.deleteModel();
         }}
       />
+    </section>
+  );
+}
+
+function GenerationBacklog() {
+  const [backlog, setBacklog] = useState<Awaited<
+    ReturnType<typeof desktop.contribute.backlog>
+  > | null>(null);
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  const [loading, setLoading] = useState(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: The explicit Refresh key triggers a new read.
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    desktop.contribute
+      .backlog()
+      .then(
+        (value) => {
+          if (active) setBacklog(value);
+        },
+        () => {
+          if (active) setError("Couldn't load awaiting jobs. Try Refresh.");
+        },
+      )
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refresh]);
+  return (
+    <section className={`${card} p-5`} aria-label="Up next">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h3 className="m-0 text-base font-bold">Up next · awaiting generation</h3>
+        <button
+          type="button"
+          className={secondary}
+          disabled={loading}
+          onClick={() => setRefresh((value) => value + 1)}
+        >
+          Refresh backlog
+        </button>
+      </div>
+      <p className="text-sm text-muted">
+        Up to 100 jobs available to your account, oldest first. Only enabled apps run; other devices
+        may take these jobs, so the order can change.
+      </p>
+      {loading && <p role="status">Loading awaiting jobs…</p>}
+      {error && <p role="alert">{error}</p>}
+      {!loading && !error && backlog && (
+        <>
+          <p className="text-sm text-muted">
+            {backlog.jobs.length
+              ? `Showing ${backlog.jobs.length}${backlog.hasMore ? ' of more than 100' : ''} awaiting jobs.`
+              : 'No jobs are awaiting generation for your account.'}
+          </p>
+          <ol className="m-0 list-none p-0 divide-y divide-line">
+            {backlog.jobs.map((job, index) => (
+              <li key={job.id} className="py-3 min-w-0">
+                <div className="font-semibold">
+                  {index + 1}. {job.appId} · {job.key}
+                </div>
+                <div className="text-sm text-muted">
+                  {job.model} {job.modelVersion} · {job.inputChars.toLocaleString()} characters
+                </div>
+                <p className="my-1 text-sm">{job.inputPreview}</p>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
     </section>
   );
 }

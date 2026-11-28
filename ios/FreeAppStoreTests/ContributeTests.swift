@@ -7,6 +7,22 @@ import XCTest
 /// #733: the contribute loop against a stubbed API, the job policy, Kokoro params, the model install and the encoder.
 /// A port of the Android companion's ContributeTest.kt.
 final class ContributeTests: XCTestCase {
+    func testAwaitingBacklogIsBoundedAndPreservesPreview() throws {
+        let rows = (0..<101).map { i -> [String: Any] in
+            ["id": "j\(i)", "appId": "books", "key": "alice/\(i)",
+             "inputPreview": "Waiting chapter", "inputChars": 500,
+             "model": "kokoro", "modelVersion": "v1.0"]
+        }
+        let result = try GenerationBacklog.parse(["jobs": rows, "hasMore": true])
+        XCTAssertEqual(result.jobs.count, 100)
+        XCTAssertEqual(result.jobs.first?.key, "alice/0")
+        XCTAssertEqual(result.jobs.first?.inputPreview, "Waiting chapter")
+        XCTAssertTrue(result.hasMore)
+        XCTAssertThrowsError(try GenerationBacklog.parse(["jobs": [["id": "broken"]], "hasMore": false]))
+        XCTAssertNotNil(FasApi.endpoint("/generation/backlog"))
+        XCTAssertNil(FasApi.endpoint("/generation/backlog/other"))
+    }
+
     private let now: Int64 = 1_000_000_000_000
     private var dir: URL!
     private var log: FakeLog!

@@ -1441,6 +1441,47 @@ generationRoutes.get('/generation/open', async (c) => {
   return c.json({ apps: [...apps.values()] });
 });
 
+/** Read-only next-work preview. It shares claim authorization/eligibility and never takes a lease (#861). */
+generationRoutes.get('/generation/backlog', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const appId = c.req.query('appId');
+  if (appId !== undefined && !APP_ID_RE.test(appId)) throw new HttpError(400, 'invalid appId');
+  const who = await contributor(c, appId);
+  const { results } = await c.env.DB.prepare(
+    `SELECT j.id, j.app_id, j.key, j.created_at,
+       substr(json_extract(j.input, '$.text'), 1, 160) AS preview,
+       length(json_extract(j.input, '$.text')) AS chars, s.model, s.model_version
+     FROM generation_jobs j JOIN generation_sets s ON s.id = j.set_id
+     JOIN apps a ON a.id = j.app_id AND ${FAS_APP_ROWS}
+     WHERE (?3 IS NULL OR j.app_id = ?3) AND ${claimable('?1', '?2')}
+     ORDER BY j.created_at, j.rowid LIMIT 101`,
+  )
+    .bind(who.id, Date.now(), appId ?? null)
+    .all<{
+      id: string;
+      app_id: string;
+      key: string;
+      created_at: number;
+      preview: string | null;
+      chars: number | null;
+      model: string;
+      model_version: string;
+    }>();
+  return c.json({
+    jobs: results.slice(0, 100).map((row) => ({
+      id: row.id,
+      appId: row.app_id,
+      key: row.key,
+      createdAt: row.created_at,
+      inputPreview: row.preview ?? '',
+      inputChars: row.chars ?? 0,
+      model: row.model,
+      modelVersion: row.model_version,
+    })),
+    hasMore: results.length > 100,
+  });
+});
+
 generationRoutes.get('/apps/:appId/generation/sets/:setId/manifest', async (c) => {
   const appId = c.req.param('appId');
   const set = await setRow(c.env.DB, appId, c.req.param('setId'));

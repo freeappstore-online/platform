@@ -82,6 +82,10 @@ hand at once, and nothing starts again until you turn it back on, even after a r
 with **In progress** for the current one. Each item has the server's verdict, **Play** for its audio (20 newest),
 **Good** / **Not good** with a note, and **Save record…** for bug reports.
 
+**Up next · awaiting generation** shows up to 100 jobs available to your account, with the app,
+chapter or job key, model and a short text preview. **Refresh backlog** updates the list without
+starting work. Jobs are oldest first; other devices and your enabled apps can change what runs next.
+
 In Auto it runs only while every condition in **When it runs** holds: on AC power (or on battery above a minimum,
 40% by default), not hot, the computer not in use (no keyboard or mouse for 2 minutes; or run slower instead), within
 the CPU level (Light / Balanced / Full), the optional daily maximum and quiet hours. A job at least 80% done finishes;
@@ -136,6 +140,10 @@ hours. The status card always says why it is not running.
 **Activity** lists every job the phone tried, with **In progress**, the verdict, **Play**, **Good** / **Not good**
 and **Share record**. The **overnight summary** notification ("Generated 42 clips, 38 accepted…") can be turned off
 in settings.
+
+**Up next · awaiting generation** shows the next 100 available jobs with short text previews.
+Tap **Refresh backlog** to check again. It includes apps you have not enabled; only enabled apps run,
+and other devices can claim these jobs before your phone does.
 
 ### What keeps running
 

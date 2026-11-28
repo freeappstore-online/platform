@@ -16,7 +16,7 @@ open class FasApi {
     companion object {
         const val ORIGIN = "https://api.freeappstore.online"
         /** The device credential goes to the native routes and to the contributor routes of community generation (#731, #820). */
-        private val ALLOWED = Regex("^/(native/|generation/open$|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
+        private val ALLOWED = Regex("^/(native/|generation/(open|backlog)$|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
         /** `Retry-After` in seconds or as an HTTP date, in milliseconds from [now]; null when unreadable. */
         internal fun retryAfterMs(value: String?, now: Long): Long? {
             val v = value?.trim() ?: return null

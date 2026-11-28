@@ -48,6 +48,7 @@ beforeEach(() => {
   root = createRoot(container)
   vi.mocked(kokoro.kokoroEncoder).mockResolvedValue(encoder)
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    if (url === `${api}/generation/backlog`) return Response.json({jobs: [{id: 'next', appId: 'books', key: 'alice/12', inputPreview: 'A waiting chapter.', inputChars: 1234, model: 'kokoro', modelVersion: 'v1.0'}], hasMore: false})
     if (url === `${api}/generation/open`) return new Response(JSON.stringify({ apps: [books, other] }))
     if (url === `${api}/apps/books/generation/submissions`) return new Response(JSON.stringify({ submissions }))
     if (url === `${api}/apps/books/generation/submissions/x1/report`) {
@@ -81,6 +82,24 @@ const click = async (el: HTMLElement) => {
 }
 const tab = (name: string) =>
   click([...document.querySelectorAll<HTMLElement>('[role=tab]')].find((t) => t.textContent === name)!)
+
+it('recovers the backlog from a failed request without starting generation', async () => {
+  const original = fetch
+  let failed = false
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (url === `${api}/generation/backlog` && !failed) {
+      failed = true
+      return new Response('unavailable', { status: 503 })
+    }
+    return original(url, options)
+  }))
+  await render()
+  expect(container.querySelector('[role=alert]')?.textContent).toContain("Couldn't load awaiting jobs")
+  await click(button('Refresh backlog')!)
+  expect(container.textContent).toContain('A waiting chapter.')
+  expect(container.querySelector('[role=alert]')).toBeNull()
+  expect(kokoro.contributeKokoroApps).not.toHaveBeenCalled()
+})
 
 it('explains and hides the runner where WebCodecs AAC is missing', async () => {
   vi.mocked(kokoro.kokoroEncoder).mockResolvedValue(null)
@@ -466,4 +485,12 @@ it('downloads an attempt’s full record as record.json and its audio (#843)', a
     run: { outcome: 'submitted', ms: 4000, record: { synthMs: 900 } }, artifact,
   })
   click.mockRestore()
+})
+
+it('shows awaiting chapters on Status without claiming them (#861)', async () => {
+  await act(async () => { root.render(<GeneratePage fas={fas} />) })
+  expect(container.textContent).toContain('Up next · awaiting generation')
+  expect(container.textContent).toContain('alice/12')
+  expect(container.textContent).toContain('A waiting chapter.')
+  expect(vi.mocked(fetch).mock.calls.every(([url]) => !String(url).endsWith('/claim'))).toBe(true)
 })
