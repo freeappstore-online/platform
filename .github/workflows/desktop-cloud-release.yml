@@ -1,6 +1,7 @@
 name: Desktop cloud release
 
 # Cloud-managed Apple certificates stay in Xcode. This workflow accepts no private signing keys.
+# Trusted main may verify an older immutable source tag; provenance identifies this verifier commit.
 # Only a tagged, tested source commit and independently verified signed ZIP bytes can be promoted.
 on:
   workflow_dispatch:
@@ -22,6 +23,9 @@ concurrency:
 
 jobs:
   resolve:
+    # Draft releases are visible only to a caller with push access; this token is step-scoped.
+    permissions:
+      contents: write
     if: github.ref == 'refs/heads/main' || github.ref == format('refs/tags/desktop-v{0}', inputs.version)
     runs-on: ubuntu-latest
     outputs:
@@ -30,6 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -67,10 +72,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ github.sha }}
           path: control
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ needs.resolve.outputs.commit }}
           path: source
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -112,10 +119,12 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ github.sha }}
           path: control
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ needs.resolve.outputs.commit }}
           path: source
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -158,6 +167,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
           ref: ${{ github.sha }}
           fetch-depth: 0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0

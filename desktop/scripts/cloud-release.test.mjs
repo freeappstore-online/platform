@@ -8,6 +8,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   draftSnapshot,
+  findRelease,
   identity,
   LINUX,
   MAC,
@@ -15,6 +16,7 @@ import {
   manifest,
   REPO,
   TEAM,
+  validateDispatch,
 } from './cloud-release.mjs';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -50,6 +52,28 @@ test('release identity rejects shell/ref injection and development build numbers
   assert.equal(expected.build, '2026112801');
 });
 
+test('trusted main can verify an older immutable app tag; tag dispatch remains exact', () => {
+  assert.doesNotThrow(() => validateDispatch(expected, 'refs/heads/main', 'b'.repeat(40)));
+  assert.doesNotThrow(() =>
+    validateDispatch(expected, `refs/tags/${expected.tag}`, expected.commit),
+  );
+  assert.throws(() => validateDispatch(expected, `refs/tags/${expected.tag}`, 'b'.repeat(40)));
+  assert.throws(() => validateDispatch(expected, 'refs/heads/untrusted', expected.commit));
+  assert.throws(() => validateDispatch(expected, 'refs/tags/desktop-v9.0.0', expected.commit));
+});
+
+test('draft discovery uses authenticated release listing, not the published-only tag endpoint', () => {
+  const { release } = fixture();
+  const calls = [];
+  const found = findRelease(expected.tag, (path) => {
+    calls.push(path);
+    return calls.length === 1 ? Array(100).fill({ tag_name: 'other' }) : [release];
+  });
+  assert.equal(found.id, release.id);
+  assert.deepEqual(calls, ['releases?per_page=100&page=1', 'releases?per_page=100&page=2']);
+  assert.throws(() => findRelease(expected.tag, () => []));
+});
+
 test('draft snapshot binds only two exact immutable Mac asset IDs, sizes and SHA256 digests', () => {
   const { release, state } = fixture();
   assert.equal(state.assets.length, 2);
@@ -68,6 +92,33 @@ test('draft snapshot binds only two exact immutable Mac asset IDs, sizes and SHA
     },
   ])
     assert.throws(() => draftSnapshot(bad, expected));
+});
+
+test('draft asset URLs permit GitHub untagged draft identifiers without relaxing host, name or digest binding', () => {
+  const { release } = fixture();
+  const draft = {
+    ...release,
+    assets: release.assets.map((a) => ({
+      ...a,
+      browser_download_url: `https://github.com/${REPO}/releases/download/untagged-516787d4eacc3cd610d0/${a.name}`,
+    })),
+  };
+  assert.equal(draftSnapshot(draft, expected).assets.length, 2);
+  for (const value of [
+    'https://foreign.invalid/file.zip',
+    `https://github.com/${REPO}/releases/download/other/${MAC[0]}`,
+    `https://github.com/${REPO}/releases/download/untagged-516787d4eacc3cd610d0/${MAC[0]}?token=bad`,
+  ]) {
+    assert.throws(() =>
+      draftSnapshot(
+        {
+          ...draft,
+          assets: [{ ...draft.assets[0], browser_download_url: value }, draft.assets[1]],
+        },
+        expected,
+      ),
+    );
+  }
 });
 
 test('manifest requires independently verified receipts and exact final artifact bytes', () => {

@@ -47,6 +47,33 @@ export function identity(version, build, commit) {
   return { version, build: String(build), commit, tag: `desktop-v${version}` };
 }
 
+// GitHub's tag endpoint excludes draft releases; discover the draft through the authenticated list.
+export function findRelease(tag, request = api) {
+  for (let page = 1; page <= 10; page++) {
+    const releases = request(`releases?per_page=100&page=${page}`);
+    if (!Array.isArray(releases)) throw new Error('Invalid release list');
+    const matches = releases.filter((release) => release?.tag_name === tag);
+    if (matches.length > 1) throw new Error('Ambiguous release tag');
+    if (matches.length === 1) return matches[0];
+    if (releases.length < 100) break;
+  }
+  throw new Error('Draft release not found');
+}
+
+export function validateDispatch(expected, ref, verifierCommit) {
+  if (!/^[a-f0-9]{40}$/.test(verifierCommit)) throw new Error('Invalid verifier commit');
+  if (ref === 'refs/heads/main') return;
+  if (ref !== `refs/tags/${expected.tag}` || verifierCommit !== expected.commit)
+    throw new Error('Only trusted main or the exact source tag may verify a release');
+}
+
+function draftAssetUrl(url, tag, name) {
+  const prefix = `https://github.com/${REPO}/releases/download/`;
+  if (typeof url !== 'string' || !url.startsWith(prefix) || !url.endsWith(`/${name}`)) return false;
+  const releasePart = url.slice(prefix.length, -name.length - 1);
+  return releasePart === tag || /^untagged-[a-f0-9]{20}$/.test(releasePart);
+}
+
 export function draftSnapshot(release, expected) {
   if (
     release?.draft !== true ||
@@ -69,8 +96,7 @@ export function draftSnapshot(release, expected) {
       asset.size < 1 ||
       asset.size > 1_500_000_000 ||
       !/^sha256:[a-f0-9]{64}$/.test(asset.digest) ||
-      asset.browser_download_url !==
-        `https://github.com/${REPO}/releases/download/${expected.tag}/${name}`
+      !draftAssetUrl(asset.browser_download_url, expected.tag, name)
     )
       throw new Error('Invalid or unbound Mac release asset');
     return { name, id: asset.id, size: asset.size, digest: asset.digest };
@@ -132,6 +158,11 @@ export function manifest(state, macReceipts, linuxReceipt, directory) {
     throw new Error('Linux build receipt mismatch');
   return {
     schemaVersion: 1,
+    verification: {
+      verifierCommit: state.verifierCommit,
+      sourceScope: 'rebuilt-dist-package-build-identity',
+      nativeDependencies: 'signature-integrity-only',
+    },
     version: state.version,
     tag: state.tag,
     commit: state.commit,
@@ -268,13 +299,13 @@ async function main() {
     // Validate before constructing any ref or API path.
     const provisional = identity(version, build, '0'.repeat(40));
     const commit = run('git', ['rev-parse', `refs/tags/${provisional.tag}^{commit}`]);
-    if (commit !== run('git', ['rev-parse', 'HEAD']))
-      throw new Error('Release tag must match the dispatched workflow commit');
+    const verifierCommit = run('git', ['rev-parse', 'HEAD']);
+    const expected = { ...identity(version, build, commit), verifierCommit };
+    validateDispatch(expected, process.env.GITHUB_REF || 'refs/heads/main', verifierCommit);
     run('git', ['merge-base', '--is-ancestor', commit, 'origin/main']);
-    const expected = identity(version, build, commit);
     const pkg = JSON.parse(run('git', ['show', `${commit}:desktop/package.json`]));
     if (pkg.version !== version) throw new Error('Tag package version differs');
-    save(output, draftSnapshot(api(`releases/tags/${expected.tag}`), expected));
+    save(output, draftSnapshot(findRelease(expected.tag), expected));
     if (process.env.GITHUB_OUTPUT)
       writeFileSync(process.env.GITHUB_OUTPUT, `commit=${commit}\ntag=${expected.tag}\n`, {
         flag: 'a',
@@ -347,7 +378,7 @@ async function main() {
     identity(state.version, state.build, state.commit);
     run('git', ['fetch', '--force', 'origin', `refs/tags/${state.tag}:refs/tags/${state.tag}`]);
     assertTag(state, process.cwd());
-    const current = draftSnapshot(api(`releases/tags/${state.tag}`), state);
+    const current = draftSnapshot(api(`releases/${state.releaseId}`), state);
     if (
       JSON.stringify(current.assets) !== JSON.stringify(state.assets) ||
       current.releaseId !== state.releaseId
