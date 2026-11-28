@@ -66,7 +66,7 @@ Android and iOS write run logs (`Run ended: …`) to the system log on the phone
 | Device credential (`ndev_`): on the device; the server keeps only its hash | Until **Disconnect** / **Sign out** / **Revoke**, or 90 days | `packages/backend/src/routes/native.ts` |
 | Device row: label (desktop: `FreeAppStore desktop (Mac)`; phones: model and OS), client kind, app version label, last seen | Deleted with the device; expired rows pruned every 15 minutes | `native-companion.ts` `pruneNative` |
 | QR pair code: SHA-256 of the code, who made it, the device it paired | 30 days after it expires | migration `0062` |
-| Pairing rate limit: a daily counter keyed by a hash of your IP | Pruned after a day | `native-auth.ts`, `proxy-rate-limit.ts` |
+| Pairing rate limit: UTC-day counter keyed by stable, unsalted SHA-256 of your IP | Days older than yesterday pruned daily at 03:00 UTC (normally about 27–51 hours); included in daily JSON backups whose expiry is unverified | `native-auth.ts`, `proxy-rate-limit.ts`, `backup.ts`; [reconciliation](native-store-data-reconciliation.md) |
 | Profile on the device (`/native/me`) | Desktop: memory only. Phones: on the phone until disconnect | `desktop/src/main/device.ts` |
 
 ## Contribute (community generation)

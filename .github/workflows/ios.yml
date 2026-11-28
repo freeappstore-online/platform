@@ -1,7 +1,28 @@
 name: iOS Companion
 on:
-  push: { branches: [main], paths: ['ios/**', '.github/workflows/ios.yml'] }
-  pull_request: { paths: ['ios/**', '.github/workflows/ios.yml'] }
+  # Store presentation/docs do not change the app binary; bundled app assets and
+  # privacy manifests remain covered by ios/** (#868).
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '!ios/store-assets/**'
+      - '!ios/README.md'
+      - '!ios/store-listing.md'
+      - '!ios/store-submission-readiness.md'
+      - '!ios/release/README.md'
+      - '!ios/Privacy/README.md'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '!ios/store-assets/**'
+      - '!ios/README.md'
+      - '!ios/store-listing.md'
+      - '!ios/store-submission-readiness.md'
+      - '!ios/release/README.md'
+      - '!ios/Privacy/README.md'
+      - '.github/workflows/ios.yml'
   workflow_dispatch:
     inputs:
       testflight:

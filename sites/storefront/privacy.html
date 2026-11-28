@@ -64,7 +64,7 @@
       <p>The companion does not use advertising, analytics or crash-reporting SDKs, and we do not sell or share your location for advertising. Your account and location traffic goes over HTTPS to api.freeappstore.online. The Store tab loads the public app list from freeappstore.online without your credentials, and your avatar image comes from your sign-in provider. On iPhone, the sharing map uses Apple Maps for backgrounds, so Apple receives the map area you view, not your track. On iPhone, <strong>Scan a code</strong> uses the camera only to read the pairing code; no image is kept or sent.</p>
       <h3>How long it is kept</h3>
       <ul>
-        <li><strong>On FreeAppStore</strong>: location points are kept 7 days, then deleted by a cleanup job that runs every 15 minutes. They are not included in database backups.</li>
+        <li><strong>On FreeAppStore</strong>: location points are kept in the active database for 7 days, then deleted by a cleanup job that runs every 15 minutes. They are excluded from our daily database exports. Cloudflare’s managed database recovery history is separate and can retain older copies after deletion from the active database, for up to 30 days depending on the plan. <a href="https://developers.cloudflare.com/d1/reference/time-travel/">How Cloudflare recovery history works</a>.</li>
         <li><strong>Upload queue on the phone</strong>: points waiting to upload are dropped after 7 days.</li>
         <li><strong>Sharing history on the phone</strong>: a 30-day history of what you shared, for your own map, timeline and activity log. It is never uploaded and is excluded from device backups.</li>
       </ul>

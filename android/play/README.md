@@ -2,6 +2,16 @@
 
 English listing preparation for `online.freeappstore.companion`, tracked in platform #864. Files here are reviewable inputs; preparing them does not upload or publish a store listing.
 
+## Saved listing status — 2026-11-28
+
+The owner saved both `en-GB` and `en-US` in Play Console. A fresh Publisher API readback at 10:43 UTC matched all three text fields exactly against these files. The default `en-GB` icon, feature graphic and four ordered phone screenshots matched every SHA-256 in `export-manifest.json`; `en-US` inherits these default graphics without overrides. Order: Store, Favourites, Contribute, Sharing. Original captures and source/APK provenance remain in `captures.json`.
+
+The feature graphic and captioned screenshot compositions are labelled as created or edited using AI; the preserved canonical icon is not. The underlying screenshots are real app captures, not generated UI. This follows the asset-specific declaration flow in Google's [current guidance](https://support.google.com/googleplay/android-developer/answer/17262077).
+
+Console shows **Ready to send for review**, not an approved or public listing. **Send app for review** is disabled: the dashboard still requires sign-in details, target audience and Data safety (8 of 11 setup tasks completed). The owner saved the Productivity category and published the existing public support email and website; the category/contact task is marked complete. See [submission readiness](../store-submission-readiness.md). Internal testing remains active independently of listing approval.
+
+The service account uploaded and hash-verified the images but received HTTP 403 at edit validation on two attempts, including one with no concurrent release edit. Neither API edit was committed. The existing owner Console session saved the listing; no service-account permission was expanded. Use the read-only `inspect` command to verify state. Do not assume `apply` is operational with the present account grants, or remove Google's asset declaration to work around it.
+
 ## Copy and graphics
 
 - `en-US/title.txt`, `short-description.txt`, `full-description.txt`: Play listing copy. The description distinguishes browser apps, local shortcuts, optional contribution and optional background location.
