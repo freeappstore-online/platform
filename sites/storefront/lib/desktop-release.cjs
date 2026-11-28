@@ -13,7 +13,7 @@ const ASSETS = [
   'FreeAppStore-mac-arm64.zip', 'FreeAppStore-mac-x64.zip',
   'FreeAppStore-win-x64.exe', 'FreeAppStore-linux-x86_64.AppImage',
 ];
-const CORE_ASSETS = ASSETS.filter(name => !name.endsWith('.exe'));
+const CORE_ASSETS = ASSETS.filter(name => name.endsWith('.zip') || name.endsWith('.AppImage'));
 
 function verifyProvenance(manifest, bundle, release, run = execFileSync) {
   const directory = mkdtempSync(join(tmpdir(), 'fas-signing-evidence-'));
@@ -21,7 +21,7 @@ function verifyProvenance(manifest, bundle, release, run = execFileSync) {
     const artifact = join(directory, SIGNING), proof = join(directory, PROVENANCE);
     writeFileSync(artifact, manifest); writeFileSync(proof, bundle);
     // Only our release workflow on main or this version tag may certify download eligibility.
-    const identity = '^https://github\\.com/freeappstore-online/platform/\\.github/workflows/desktop-release\\.yml@refs/(heads/main|tags/' + release.tag.replaceAll('.', '\\.') + ')$';
+    const identity = '^https://github\\.com/freeappstore-online/platform/\\.github/workflows/desktop-(?:release|cloud-release)\\.yml@refs/(heads/main|tags/' + release.tag.replaceAll('.', '\\.') + ')$';
     run('gh', ['attestation', 'verify', artifact, '--bundle', proof,
       '--repo', 'freeappstore-online/platform', '--cert-identity-regex', identity,
       '--deny-self-hosted-runners'], { stdio: 'ignore', timeout: 20_000 });
@@ -41,7 +41,7 @@ function candidates(releases) {
     const date = new Date(release.published_at);
     if (!Number.isFinite(date.getTime())) return [];
     const required = [...CORE_ASSETS, SIGNING, PROVENANCE];
-    if (release.assets.some(a => a.name === 'FreeAppStore-win-x64.exe')) required.push('FreeAppStore-win-x64.exe');
+    for (const name of ASSETS) if (!required.includes(name) && release.assets.some(a => a.name === name)) required.push(name);
     if (!required.every(name => release.assets.some(asset =>
       asset.name === name && asset.state === 'uploaded' && asset.size > 0 &&
       asset.browser_download_url === `${RELEASES}/download/${release.tag_name}/${name}`))) return [];
@@ -66,7 +66,8 @@ function verifiedRelease(release, proof) {
   };
   if (!platforms.mac) return null;
   if (present.some(name => name.endsWith('.exe')) && (proof.windows?.authenticode !== true || proof.windows?.timestamped !== true)) return null;
-  return { version: release.version, tag: release.tag, publishedAt: release.publishedAt, parts: release.parts, platforms };
+  const macFormat = ['x64', 'arm64'].every(arch => present.includes(`FreeAppStore-mac-${arch}.dmg`)) ? 'dmg' : 'zip';
+  return { version: release.version, tag: release.tag, publishedAt: release.publishedAt, parts: release.parts, platforms, macFormat };
 }
 
 function publishedDesktopRelease(releases, signingManifests = {}) {
@@ -137,6 +138,12 @@ function renderDesktopRelease(html, release) {
       if (!release.platforms[platform]) html = html.replace(new RegExp(`<li><a[^>]+data-asset="${asset}[^"]+"[\\s\\S]*?<\\/li>`, 'g'), '');
     }
     if (!release.platforms.windows) details += ' · Windows download is awaiting installation verification.';
+    if (release.macFormat === 'zip') {
+      html = html.replaceAll('FreeAppStore-mac-arm64.dmg', 'FreeAppStore-mac-arm64.zip')
+        .replaceAll('FreeAppStore-mac-x64.dmg', 'FreeAppStore-mac-x64.zip')
+        .replaceAll('<span>.dmg</span>', '<span>.zip</span>')
+        .replace('Open the .dmg and drag', 'Open the .zip, then drag');
+    }
     html = html.replaceAll(`${RELEASES}/download/desktop-latest/`, `${RELEASES}/download/${release.tag}/`)
       .replaceAll(`${RELEASES}/tag/desktop-latest`, `${RELEASES}/tag/${release.tag}`);
   }

@@ -50,7 +50,7 @@ test('refuses drafts, unpublished dates, malformed tags and incomplete or foreig
     { ...valid, draft: true }, { ...valid, draft: undefined },
     { ...valid, published_at: null }, { ...valid, published_at: 'not a date' },
     { ...valid, tag_name: 'desktop-v0.7.0"><script>' },
-    { ...valid, assets: valid.assets.slice(1) },
+    { ...valid, assets: valid.assets.filter(a => a.name !== 'FreeAppStore-mac-arm64.zip') },
     ...['size', 'state', 'browser_download_url'].map(key => ({ ...valid, assets: valid.assets.map((asset, i) =>
       i ? asset : { ...asset, [key]: key === 'size' ? 0 : key === 'state' ? 'new' : 'https://example.com/installer' }) })),
   ]) {
@@ -196,6 +196,8 @@ test('cryptographic verification binds the manifest to the release workflow and 
     const prefix = 'https://github.com/freeappstore-online/platform/.github/workflows/desktop-release.yml@';
     assert.ok(identity.test(prefix + 'refs/heads/main'));
     assert.ok(identity.test(prefix + 'refs/tags/desktop-v0.7.0'));
+    assert.ok(identity.test(prefix.replace('desktop-release.yml', 'desktop-cloud-release.yml') + 'refs/heads/main'));
+    assert.ok(!identity.test(prefix.replace('desktop-release.yml', 'untrusted.yml') + 'refs/heads/main'));
     assert.ok(!identity.test(prefix + 'refs/pull/123/merge'));
     assert.ok(!identity.test(prefix + 'refs/tags/desktop-v0.6.0'));
     assert.equal(args[args.indexOf('--repo') + 1], 'freeappstore-online/platform');
@@ -225,4 +227,19 @@ test('verified Mac and Linux release does not depend on Windows Store enrollment
   assert.equal(selected.platforms.mac, true); assert.equal(selected.platforms.linux, true); assert.equal(selected.platforms.windows, false);
   const html = renderDesktopRelease(template, selected);
   assert.ok(html.includes('data-asset="mac-arm64"')); assert.ok(!html.includes('data-asset="win-x64"'));
+});
+
+
+test('cloud-notarized ZIP releases render matching links and install instructions without requiring DMGs', () => {
+  const value = release();
+  value.assets = value.assets.filter(a => !a.name.endsWith('.dmg') && !a.name.endsWith('.exe'));
+  const manifest = proof(); manifest.windows = null;
+  manifest.artifacts = manifest.artifacts.filter(a => !a.name.endsWith('.dmg') && !a.name.endsWith('.exe'));
+  const selected = publishedDesktopRelease([value], { [value.tag_name]: manifest });
+  assert.equal(selected.macFormat, 'zip');
+  const html = renderDesktopRelease(template, selected);
+  assert.match(html, /FreeAppStore-mac-arm64\.zip" data-asset="mac-arm64"/);
+  assert.match(html, /FreeAppStore-mac-x64\.zip" data-asset="mac-x64"/);
+  assert.match(html, /Open the \.zip, then drag/);
+  assert.doesNotMatch(html, /\.dmg/);
 });

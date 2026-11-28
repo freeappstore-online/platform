@@ -11,7 +11,7 @@ on:
   # Releases created by GITHUB_TOKEN do not fire a release event. workflow_run
   # refreshes the download page after the gated installers have been published.
   workflow_run:
-    workflows: ['Desktop release']
+    workflows: ['Desktop release', 'Desktop cloud release']
     types: [completed]
 
 permissions:
