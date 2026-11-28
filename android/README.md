@@ -38,10 +38,22 @@ The first build downloads the pinned sherpa-onnx AAR (52 MB) into `app/libs/` (u
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`. Package `online.freeappstore.companion`, Android 10 (API 29)
 minimum, compile and target API 36. CI: `.github/workflows/android.yml`.
 
+## Install and update
+
+Use [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583)
+with an account selected in Play Console's tester list. Join the test, then install or update through Google Play.
+The internal track is limited to invited testers; it is not a public production listing. Do not install developer
+or release APKs onto the user's phone with USB/ADB or sideloading. APK artifacts remain available for CI verification.
+
+The publisher app and Play App Signing are already configured. The owner-only tester list is selected on the
+internal track. Production still needs the remaining app-content declarations and store listing tracked in #654
+and #655. Preserve app data when changing distribution channels; do not uninstall an existing app merely to bypass
+a signing mismatch.
+
 ## Release
 
 Ported from the PAS pipeline (#651). On a push to `main`, `.github/workflows/android.yml` runs a `release` job after
-`build`: it restores the upload keystore into a private temp dir, builds `:app:assembleRelease :app:bundleRelease
+both `build` and `emulator` pass: it restores the upload keystore into a private temp dir, builds `:app:assembleRelease :app:bundleRelease
 :app:lintRelease` with `scripts/build-android-release.sh`, checks that the APK and AAB signer matches the pinned
 `android/signing/upload-certificate.pem`, and keeps the APK, AAB, R8 `mapping.txt` and `release.json` as an artifact.
 Pull requests never get signing or Play credentials.
@@ -51,8 +63,9 @@ Pull requests never get signing or Play credentials.
 - **Unsigned releases are refused.** `assembleRelease` and `bundleRelease` fail without the signing env with
   "Release signing is required. Use scripts/build-android-release.sh with FAS upload credentials." There is no
   debug-key fallback.
-- **Play upload.** The upload is off until requested. It runs on a manual run with `publish=true`, or on every `main`
-  push once the repo variable `ANDROID_PLAY_PUBLISH_ENABLED=true` is set. The track defaults to **`internal`**
+- **Play upload.** The repository is configured with `ANDROID_PLAY_PUBLISH_ENABLED=true` and
+  `ANDROID_PLAY_TRACK=internal`: eligible `main` pushes publish to internal testing after both test gates pass.
+  A manual run uploads only with `publish=true`. The track defaults to **`internal`**
   (manual input, or the repo variable `ANDROID_PLAY_TRACK`). `scripts/android-play-release.mjs next-code` picks a
   versionCode above every Play track, bundle and APK, and never below `version.properties` or the run number. The
   publish step uploads, validates, commits, then verifies the track through a fresh edit. Track acceptance is not
