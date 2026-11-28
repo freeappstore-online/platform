@@ -21,7 +21,7 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 | | Web (browser) | Desktop | Android | iPhone |
 |---|---|---|---|---|
 | How to get it | [freeappstore.online](https://freeappstore.online) | [Download](https://freeappstore.online/download): verified installers appear when available; Windows Store publication is being prepared | [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583), for invited testers | TestFlight is being prepared (#863); no tester download yet |
-| Release status | Public | Signed Mac release and Linux release being verified; Windows Store pending | 0.2.0 (62), internal testing; not a public production release | 0.2.0 (55) signed; App Store Connect app record and upload pending |
+| Release status | Public | 1.0.0 for Mac and Linux; Windows Store pending | 0.2.0 (62), internal testing; not a public production release | 0.2.0 (55) signed; App Store Connect app record and upload pending |
 | Minimum system | A current browser | What Electron 45 supports; 64-bit only | Android 10 | iOS 17 |
 | Use apps | Yes | In their own windows | Opens them in the browser | Opens them in Safari |
 | App data | In that browser | In the desktop app, separate from every browser | In the browser | In Safari |

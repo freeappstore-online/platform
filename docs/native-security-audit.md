@@ -2,8 +2,10 @@
 
 Tracked in [#857](https://github.com/freeappstore-online/platform/issues/857). This is a repository and local-build
 review, with automated regression tests and a physical iPhone install. It is not an independent penetration test
-or a claim that every native dependency has been audited. Existing downloadable desktop 0.6.0 builds remain unsigned
-previews. They are no longer eligible for the recommended download page; do not label them signed.
+or a claim that every native dependency has been audited. Historical desktop 0.6.0 builds remain unsigned previews and are not eligible for the recommended download page.
+Desktop 1.0.0 is now published with Developer ID-signed, notarized Mac ZIPs for Intel and Apple Silicon,
+and a Linux AppImage. The [release workflow](https://github.com/freeappstore-online/platform/actions/runs/46121391118)
+passed all tests and verification gates before publication.
 
 ## Installation channels
 
@@ -37,7 +39,7 @@ workflow identity and main/version-tag ref, before trusting its eligibility flag
 | Pairing/profile requests could hang or follow redirects with request bodies | Reject redirects, cap requests at 20 seconds | Device/API regression suite |
 | App discovery waited for generation conditions and could remain on Loading | Separate bounded, cancellable read-only discovery from job execution | Off/paused/manual refresh, timeout/retry and account-change tests; Electron integration test (#858) |
 | AI activity disappeared on process exit | Atomic private local metadata history, bounded to 1,000 calls; visible read/write errors and explicit clearing | Actual MCP call followed by Electron restart and durable clearing (#859) |
-| Release pipeline could publish unsigned installers | Require credentials before tagging, fail on signing failures, verify expected publisher and notarization, publish signed provenance | actionlint, script syntax and updater-hash regression test. Successful signed builds still require the credentials below. |
+| Release pipeline could publish unsigned installers | Require credentials before tagging, fail on signing failures, verify expected publisher and notarization, publish signed provenance | actionlint, script syntax and updater-hash regression test. Both real cloud-signed Mac packages passed hosted signature/notarization/source verification in run 46121391118. |
 
 Advisories: [sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj),
 [sharp HEIF](https://github.com/advisories/GHSA-rgj7-g3m4-5g8c),
@@ -79,7 +81,13 @@ An alternative using the already-authorized Xcode account has now been proven: A
 signing and notarization produced an app accepted by Gatekeeper after ZIP extraction and quarantine was applied.
 That probe was an old development package and is not a release candidate. `desktop/scripts/cloud-sign-mac.sh`
 builds both architectures from an exact release tag for the separately verified cloud-release promotion path;
-it does not require exporting Apple's private signing key. See [desktop/SIGNING.md](../desktop/SIGNING.md).
+it does not require exporting Apple's private signing key. The production 1.0.0 release followed this route for
+both architectures. CI compared the packaged JavaScript with a fresh build of tagged source
+`3fe64a94bd0d74cdd838441adc72ce8352b63b4a`, checked archive safety and full installer hashes, then verified
+Developer ID, hardened runtime, stapled tickets and Gatekeeper acceptance before publishing. The provenance
+records the verification workflow and its source separately from the application source. It attests these checks;
+it is not a claim of a fully reproducible native build or an independent rebuild of Electron and its native dependencies.
+See [desktop/SIGNING.md](../desktop/SIGNING.md).
 
 Use the ops store and an ops issue to provision these scoped GitHub Actions secrets; never paste credentials in
 issues, source files or command arguments:
@@ -104,11 +112,11 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
 
 ## Outstanding release requirements
 
-- **macOS:** cloud-managed Developer ID signing, accepted notarization, stapling and Gatekeeper acceptance have
-  been verified using the existing Xcode account (ops#61). A fresh release for both architectures must still pass
-  source-bound CI verification and publication. Exportable P12/API credentials are absent but are no longer a
-  blocker for this account-backed route. The public CSR and encrypted private key prepared in ops#61 remain an
-  unused fallback; they are not the cloud-managed key.
+- **macOS:** [desktop 1.0.0](https://github.com/freeappstore-online/platform/releases/tag/desktop-v1.0.0),
+  build 2026112801, is published for Intel and Apple Silicon. Cloud-managed Developer ID signing, accepted
+  notarization, stapling, ZIP extraction with quarantine, Gatekeeper and source-bound hosted CI verification passed.
+  No Gatekeeper bypass is required. Exportable P12/API credentials are absent and unnecessary for this account-backed
+  route. The public CSR and encrypted private key in ops#61 remain an unused fallback, not the cloud-managed key.
 - **Windows:** Microsoft Store submission packaging is implemented, including Store-managed updates/startup and
   a CI-only package fixture. Actual submission requires a reserved Partner Center identity, a 1.x package version,
   listing/certification and an installable Store product. See [desktop/SIGNING.md](../desktop/SIGNING.md) and
@@ -126,5 +134,5 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
   No simulator or development-signed binary may be advertised as a public iPhone release.
 - **Android:** internal Play testing is live as recorded above. Public Play availability still requires the listing, declarations,
   testing/review and release-track work tracked in [#654](https://github.com/freeappstore-online/platform/issues/654).
-- The new signed desktop path has not run successfully with real credentials. Both Mac architectures and Windows
-  must be smoke-tested from the final signed packages before the download page can claim signed availability.
+- The cloud-managed Mac/Linux release path completed successfully with real signed Mac artifacts. Windows remains
+  unavailable until its own Store certification and actual installation checks pass; it does not block verified Mac downloads.
