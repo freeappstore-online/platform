@@ -82,7 +82,7 @@
       <ul>
         <li>The desktop app passes requests between your AI app (such as Claude Code or Claude Desktop) and your open FreeAppStore apps on this computer only (127.0.0.1), protected by a key stored on this computer. These requests never reach FreeAppStore's servers.</li>
         <li><strong>Your AI app receives what an app's tools return</strong>, which can include your app data. If your AI app uses a cloud model, it sends that data to its provider, under that provider's terms. FreeAppStore cannot control that. Connect only AI apps you trust with the data, and use an app's <strong>Allow AI access</strong> switch or <strong>Pause AI access</strong> when you don't want it read.</li>
-        <li>The desktop app's Activity list (which tool ran, for which app, and whether it worked) is kept in memory only and is gone when you quit. It does not record what was sent or returned.</li>
+        <li>The desktop app's Activity list keeps the latest 1,000 calls on this computer across restarts and updates: when a tool ran, for which app, and whether it worked. It does not save tool inputs, returned data or app error text. Clear history in Activity deletes this local record. Older preview builds kept the list in memory only and cleared it on quit.</li>
         <li>Apps in desktop windows keep their data in the desktop app, separate from your browsers. Nothing syncs the two.</li>
       </ul>
       <h3>What the desktop app connects to</h3>
