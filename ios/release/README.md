@@ -6,8 +6,10 @@ Phone installs and updates use TestFlight. Do not use direct Xcode/devicectl ins
 
 ## One-time setup
 
-1. In App Store Connect, create or find **FreeAppStore**, bundle ID `online.freeappstore.companion`, under the intended paid Apple team. Record its numeric app ID.
-2. Create an **internal** TestFlight group and invite the intended App Store Connect user (the Apple account used in TestFlight on the phone). Record the group ID. A group with no testers fails preflight. Internal testing is the initial private distribution channel; broader public access requires an external group and Apple's beta review.
+1. The existing App Store Connect record is **FreeAppStore Companion**, app ID `6840294127`, bundle ID `online.freeappstore.companion`, under team `55DT52UQXE`. The shorter name FreeAppStore was unavailable. Reuse this record.
+2. The **Internal testers** group is `27c9ed6e-e736-4f73-898c-ea8ff1964e14`, with the owner account added and automatic distribution enabled. A group with no testers fails preflight. Internal testing is the initial private distribution channel; broader public access requires an external group and Apple's beta review.
+The existing Xcode-account route below works without exporting signing credentials. Steps 3–6 are for configuring fully automated CI signing:
+
 3. Issue an Apple Distribution certificate and App Store Connect distribution provisioning profile for this exact bundle ID. Export the certificate with its private key as a password-protected P12. The profile must not list devices, permit debugging, or be an enterprise profile.
 4. Create an App Store Connect API key with access to this app and the build/TestFlight operations used below. Keep the key's scope as narrow as Apple supports. Accept any outstanding Apple agreements as the Account Holder. Do not send keys in chat.
 5. Track credential provisioning in [ops#62](https://github.com/serge-ivo/ops/issues/62), which declares these **fas** keys with consumer `github-repo-secret: freeappstore-online/platform`, then place them with `ops put fas KEY`:
@@ -52,7 +54,7 @@ actionlint .github/workflows/ios.yml
 
 ## First release using an existing Xcode account
 
-On 2026-11-28, the signed-in Xcode account on the maintainer Mac successfully archived and exported this app with **Apple Distribution** signing for team `55DT52UQXE`. The exported profile was an App Store profile (`get-task-allow=false`, beta reports enabled, no device list), and deep/strict signature verification passed. This establishes account-backed distribution signing access even though CI secrets are absent. It does not establish an uploaded TestFlight build. The local Xcode was 16.0, below Apple's current SDK minimum.
+On 2026-11-28, the signed-in Xcode account on the maintainer Mac successfully archived and exported this app with **Apple Distribution** signing for team `55DT52UQXE`. The exported profile was an App Store profile (`get-task-allow=false`, beta reports enabled, no device list), and deep/strict signature verification passed. This establishes account-backed distribution signing access even though CI secrets are absent. The initial local archive used Xcode 16.0, below Apple's current SDK minimum; it was not uploaded. CI subsequently produced the verified SDK 26.5 archive **0.2.0 (55)** in run [46118297110](https://github.com/freeappstore-online/platform/actions/runs/46118297110), from source `aaa6452c0ad12594e573d03423e698810ac97cc2`. After the app record was created, account-backed upload succeeded on 2026-11-28. Apple processing completed, the internal group shows build **0.2.0 (55)** as **Testing**, and the owner tester shows **Invited**. The build ID is `00e8d03a-c38e-43bd-ba88-de97f36a8502`. Physical installation and contribution verification remain tracked in #863. Apple accepted SDK 26.5 with an advisory that uploads from April 2027 require SDK 27 or later.
 
 For this situation, dispatch the credential-free archive path:
 

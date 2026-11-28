@@ -20,8 +20,8 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 
 | | Web (browser) | Desktop | Android | iPhone |
 |---|---|---|---|---|
-| How to get it | [freeappstore.online](https://freeappstore.online) | [Download](https://freeappstore.online/download): verified installers appear when available; Windows Store publication is being prepared | [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583), for invited testers | TestFlight is being prepared (#863); no tester download yet |
-| Release status | Public | 1.0.0 for Mac and Linux; Windows Store pending | 0.2.0 (62), internal testing; not a public production release | 0.2.0 (55) signed; App Store Connect app record and upload pending |
+| How to get it | [freeappstore.online](https://freeappstore.online) | [Download](https://freeappstore.online/download): verified installers appear when available; Windows Store publication is being prepared | [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583), for invited testers | TestFlight invitation, for invited internal testers (#863) |
+| Release status | Public | 1.0.0 for Mac and Linux; Windows Store pending | 0.2.0 (62), internal testing; not a public production release | 0.2.0 (55), internal TestFlight testing; not a public production release |
 | Minimum system | A current browser | What Electron 45 supports; 64-bit only | Android 10 | iOS 17 |
 | Use apps | Yes | In their own windows | Opens them in the browser | Opens them in Safari |
 | App data | In that browser | In the desktop app, separate from every browser | In the browser | In Safari |
@@ -33,9 +33,9 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 | Battery, heat and data conditions | No | Power, battery and heat; no mobile-data setting | Yes | Yes |
 | Overnight summary | No | No | Yes | Yes |
 | Pair a phone by QR code | Console: **Settings > Devices > Add a phone** | **Account > Add a phone** | Scanning: in progress (#845) | Scan or type the code |
-| Updates | Prompted in each app | Mac: notification and download. Linux AppImage: in-app update. Windows Store builds: Store-managed | Google Play | TestFlight, once available |
+| Updates | Prompted in each app | Mac: notification and download. Linux AppImage: in-app update. Windows Store builds: Store-managed | Google Play | TestFlight |
 
-Internal testing requires an invited account. Android is available to the configured internal testers; neither phone
+Internal testing requires an invited account. Android and iPhone are available to their configured internal testers; neither phone
 app has a public production listing yet. The download page is the current source for available desktop installers.
 
 ## Desktop
@@ -125,9 +125,11 @@ Android (10 and later): invited testers can opt in through [Google Play internal
 then install or update from Google Play using the invited Google account. The current tester list is limited; a public
 production listing is still being prepared (#658).
 
-iPhone (iOS 17 and later): TestFlight distribution is being prepared (#863). The signed build is ready, but its App
-Store Connect app record, upload and tester availability are not complete. A TestFlight invitation will be provided
-when it is available. Phone distribution uses these store channels.
+iPhone (iOS 17 and later): invited testers can install **FreeAppStore Companion 0.2.0 (55)** through the Apple
+TestFlight invitation sent to their invited account. The build has finished processing and is marked **Testing**
+in the internal group (#863). The current group is limited to the owner; there is no public beta invitation or
+production App Store listing yet. Updates use TestFlight. Keep the existing app data when updating; installation
+and contribution must be verified on the phone separately from server-side build availability.
 
 ### Connect
 

@@ -19,7 +19,7 @@ Bundle ID: `online.freeappstore.companion` (`FAS_BUNDLE_ID` in `Config/Base.xcco
 
 `ContributeTests.testRealKokoroNarratesAndEncodes` runs the real model when `TEST_RUNNER_FAS_KOKORO_ARCHIVE` names a local copy of the pinned `kokoro-multi-lang-v1_0.tar.bz2`; otherwise it is skipped.
 
-Phone installs and updates use **TestFlight**, through the manually dispatched release job in `.github/workflows/ios.yml`. See [TestFlight setup, release and verification](release/README.md). Simulator and unsigned CI builds above remain development checks; they are not distribution releases. `DEVELOPMENT_TEAM` remains local/CI configuration and is not committed.
+Phone installs and updates use **TestFlight**. The first internal release, **FreeAppStore Companion 0.2.0 (55)**, is available to the invited owner account. Builds can use the existing Xcode account with a verified CI archive, or the manually dispatched signing job in `.github/workflows/ios.yml` once its credentials are provisioned. See [TestFlight setup, release and verification](release/README.md). Simulator and unsigned CI builds above remain development checks; they are not distribution releases. `DEVELOPMENT_TEAM` remains local/CI configuration and is not committed.
 
 ## Version and branding
 
