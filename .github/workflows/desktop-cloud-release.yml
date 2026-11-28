@@ -47,6 +47,17 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
           RELEASE_BUILD: ${{ inputs.build }}
         run: node desktop/scripts/cloud-release.mjs resolve "$RELEASE_VERSION" "$RELEASE_BUILD" cloud-release-state.json
+      - name: Stage only snapshotted draft asset IDs and verify their GitHub digests
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node desktop/scripts/cloud-release.mjs download cloud-release-state.json x64 incoming/x64
+          node desktop/scripts/cloud-release.mjs download cloud-release-state.json arm64 incoming/arm64
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloud-release-inputs
+          path: incoming/
+          if-no-files-found: error
       - name: Exercise promotion and archive safety checks
         run: node --test desktop/scripts/cloud-release.test.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -89,11 +100,16 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      - name: Fetch only the snapshotted asset ID and verify its GitHub digest
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cloud-release-inputs
+          path: incoming
+      - name: Stage the original ZIP for digest and signature verification
         env:
-          GH_TOKEN: ${{ github.token }}
           RELEASE_ARCH: ${{ matrix.arch }}
-        run: node control/desktop/scripts/cloud-release.mjs download cloud-release-state.json "$RELEASE_ARCH" out
+        run: |
+          mkdir out
+          cp "incoming/$RELEASE_ARCH/FreeAppStore-mac-$RELEASE_ARCH.zip" out/
       - name: Rebuild the exact tagged JavaScript with the same build number
         working-directory: source/desktop
         env:

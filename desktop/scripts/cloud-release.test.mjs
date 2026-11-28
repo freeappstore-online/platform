@@ -278,3 +278,19 @@ test('promotion workflow is main-or-exact-tag-only and cannot publish before sou
   assert.doesNotMatch(workflow, /secrets\./);
   assert.match(workflow, /subject-path: out\/FreeAppStore-\*/);
 });
+
+test('draft downloads use only the resolve token and Mac verification consumes immutable staged bytes', () => {
+  const workflow = readFileSync(
+    join(dir, '../../.github/workflows/desktop-cloud-release.yml'),
+    'utf8',
+  );
+  const resolveJob = workflow.split('  resolve:')[1].split('  test:')[0];
+  const macJob = workflow.split('  verify-mac:')[1].split('  linux:')[0];
+  assert.match(resolveJob, /contents: write/);
+  assert.match(resolveJob, /download cloud-release-state.json x64 incoming\/x64/);
+  assert.match(resolveJob, /download cloud-release-state.json arm64 incoming\/arm64/);
+  assert.match(resolveJob, /name: cloud-release-inputs/);
+  assert.match(macJob, /name: cloud-release-inputs/);
+  assert.match(macJob, /verify-mac cloud-release-state.json "\$RELEASE_ARCH" out source/);
+  assert.doesNotMatch(macJob, /GH_TOKEN|contents: write/);
+});
