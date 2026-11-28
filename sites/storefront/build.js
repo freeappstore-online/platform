@@ -871,7 +871,7 @@ const [histories, auditMap, crossRegistry, manifests, buildInfos, pasCapabilitie
   fetchPasCapabilities(),
   // A local API fixture lets offline builds exercise the complete download page.
   process.env.FAS_DESKTOP_RELEASE_PATH
-    ? publishedDesktopRelease(JSON.parse(fs.readFileSync(process.env.FAS_DESKTOP_RELEASE_PATH, 'utf8')))
+    ? (() => { const fixture = JSON.parse(fs.readFileSync(process.env.FAS_DESKTOP_RELEASE_PATH, 'utf8')); return publishedDesktopRelease(fixture.releases, fixture.signingManifests); })()
     : fetchDesktopRelease({ token: GH_TOKEN, offline: OFFLINE_BUILD }),
 ]);
 

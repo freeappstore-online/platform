@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore</title>
-  <meta name="description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Preview builds for Mac, Windows and Linux." />
+  <meta name="description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Signed desktop downloads for Mac, Windows and Linux." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore" />
-  <meta property="og:description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Preview builds for Mac, Windows and Linux." />
+  <meta property="og:description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer. Signed desktop downloads for Mac, Windows and Linux." />
   <meta property="og:url" content="https://freeappstore.online/download" />
   <meta property="og:image" content="https://freeappstore.online/og-image.png?v=2026-11-18" />
   <meta property="og:image:width" content="1200" />
@@ -49,13 +49,16 @@
     </div>
     <div class="page-content">
       <section class="dl-primary" aria-labelledby="dl-primary-title">
-        <p class="dl-badge">Preview build</p>
+        <p class="dl-badge">{{DESKTOP_BADGE}}</p>
         <h2 id="dl-primary-title">Download</h2>
         <p id="dl-release">{{DESKTOP_RELEASE}}</p>
+        <!-- VERIFIED_PRIMARY_START -->
         <p id="dl-detected">Choose the installer for your computer below.</p>
         <div class="dl-buttons" id="dl-buttons"></div>
+        <!-- VERIFIED_PRIMARY_END -->
       </section>
 
+      <!-- VERIFIED_DOWNLOADS_START -->
       <h2 id="all">All installers</h2>
       <ul class="dl-list">
         <li><a href="https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-arm64.dmg" data-asset="mac-arm64">Mac, Apple Silicon (M1–M4)</a> <span>.dmg</span></li>
@@ -65,6 +68,8 @@
       </ul>
       <p>Not sure which Mac you have? Open the Apple menu › <strong>About This Mac</strong>: "Chip: Apple M…" means Apple Silicon, "Processor: … Intel" means Intel. <a href="https://github.com/freeappstore-online/platform/releases/tag/desktop-latest">Zip builds for Mac</a> · <a href="https://github.com/freeappstore-online/platform/releases?q=desktop-v">Previous versions</a>.</p>
 
+      <!-- VERIFIED_DOWNLOADS_END -->
+
       <h2 id="what">What it does</h2>
       <ul>
         <li><strong>AI in your apps:</strong> apps that turn on <strong>Allow AI access</strong> offer tools (for example, the spreadsheet lets an AI read and edit your workbook). An AI app on your computer, such as Claude Code or Claude Desktop, uses those tools through the desktop app.</li>
@@ -73,25 +78,26 @@
         <li><strong>Contribute (optional):</strong> connect this computer to your account and it can make narration for store apps that ask for it, with a voice model that runs on your computer. Nothing is generated until you choose apps and download the model (350 MB). <a href="/privacy#contribute">What it sends and who sees it</a>.</li>
       </ul>
 
-      <h2 id="first-launch">First launch</h2>
-      <p>These preview builds aren't signed by Apple or Microsoft yet, so your computer warns you the first time. That's expected.</p>
+      <!-- VERIFIED_INSTALL_START -->
+      <h2 id="first-launch">Install</h2>
+      <!-- MAC_INSTALL_START -->
       <h3 id="mac">Mac</h3>
       <ol>
         <li>Open the .dmg and drag <strong>FreeAppStore</strong> to <strong>Applications</strong>.</li>
-        <li>Open FreeAppStore from Applications. macOS blocks it the first time; click <strong>Done</strong> (or <strong>OK</strong>).</li>
-        <li>Open <strong>System Settings</strong> › <strong>Privacy &amp; Security</strong>, scroll down and click <strong>Open Anyway</strong> next to the FreeAppStore message. Confirm with your password.</li>
+        <li>Open FreeAppStore from Applications.</li>
       </ol>
-      <p>If macOS says the app "is damaged and can't be opened", run this once in Terminal, then open it again:</p>
-      <pre><code>xattr -dr com.apple.quarantine /Applications/FreeAppStore.app</code></pre>
+      <!-- MAC_INSTALL_END -->
+      <!-- WINDOWS_INSTALL_START -->
       <h3 id="windows">Windows</h3>
-      <ol>
-        <li>Run <strong>FreeAppStore-win-x64.exe</strong>.</li>
-        <li>If Windows SmartScreen shows "Windows protected your PC", click <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
-      </ol>
+      <p>Run <strong>FreeAppStore-win-x64.exe</strong> and follow the installer.</p>
+      <!-- WINDOWS_INSTALL_END -->
+      <!-- LINUX_INSTALL_START -->
       <h3 id="linux">Linux</h3>
       <p>Make the AppImage executable, then run it:</p>
       <pre><code>chmod +x FreeAppStore-linux-x86_64.AppImage
 ./FreeAppStore-linux-x86_64.AppImage</code></pre>
+      <!-- LINUX_INSTALL_END -->
+      <!-- VERIFIED_INSTALL_END -->
 
       <h2 id="claude-code">Connect Claude Code or Claude Desktop</h2>
       <ol>
@@ -101,8 +107,8 @@
       </ol>
       <p>FreeAppStore keeps running in the background from the menu bar (the system tray on Windows) after you close its window, and opens at login; you can turn that off on the Home screen. <strong>Pause AI access</strong>, on the Home screen or in the menu-bar menu, stops every AI call until you resume. To quit, choose <strong>Quit FreeAppStore</strong> from the menu-bar menu. Another AI app? Use <strong>Manual setup</strong> at the bottom of the Home screen.</p>
 
-      <h2 id="preview">About this preview</h2>
-      <p>This is an early build for trying things out. On Windows and Linux it updates itself. On Mac it tells you when a new version is out and opens its download, because the Mac build isn't signed yet. Signed installers are coming. Your version is on the <strong>Account</strong> page. Found a problem? <a href="https://github.com/freeappstore-online/platform/issues">Open an issue</a> with that version.</p>
+      <h2 id="preview">Updates and support</h2>
+      <p>The <strong>Account</strong> page shows your installed version and lets you check for updates. Found a problem? <a href="https://github.com/freeappstore-online/platform/issues">Open an issue</a> with that version.</p>
       <p>What each app can and can't do, and what to do when something looks wrong: <a href="https://docs.freeappstore.online/devices/">Desktop and phone apps guide</a>. What it stores and sends: <a href="/privacy#desktop">privacy policy</a>.</p>
 
       <p><a href="/">Browse free apps</a> · <a href="/install">Install apps without the desktop app</a> · <a href="https://docs.freeappstore.online/mcp/">Docs: local AI access</a></p>

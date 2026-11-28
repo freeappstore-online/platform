@@ -16,7 +16,9 @@
 
   function show(text, assets) {
     detected.textContent = text;
-    buttons.replaceChildren(...assets.map((asset, i) => {
+    const available = assets.filter(asset => href(asset));
+    if (!available.length) detected.textContent = 'A verified installer for this computer is being prepared. Available platforms are listed below.';
+    buttons.replaceChildren(...available.map((asset, i) => {
       const a = document.createElement('a');
       a.href = href(asset);
       a.className = i === 0 ? 'btn-primary' : 'app-btn-secondary';

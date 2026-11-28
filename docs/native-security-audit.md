@@ -3,7 +3,28 @@
 Tracked in [#857](https://github.com/freeappstore-online/platform/issues/857). This is a repository and local-build
 review, with automated regression tests and a physical iPhone install. It is not an independent penetration test
 or a claim that every native dependency has been audited. Existing downloadable desktop 0.6.0 builds remain unsigned
-previews. Do not label them signed or remove their first-launch instructions.
+previews. They are no longer eligible for the recommended download page; do not label them signed.
+
+## Installation channels
+
+The requested installation policy is TestFlight for iPhone, Google Play testing for Android, and verified
+desktop downloads from the website. Do not install phone builds directly with devicectl/ADB or tell users to
+bypass Gatekeeper/SmartScreen. Existing phone data must be preserved when moving to store distribution.
+
+Android 0.2.0 (version code 61) is published to the **internal** Play track and was verified through a fresh
+Publisher API edit. The owner-only tester list is selected and the track is Active. Eligible testers can
+[join through Google Play](https://play.google.com/apps/internaltest/4701334236045250583). This is not public
+production availability. Future Android main builds publish to internal testing only after build and emulator
+checks pass. Evidence is recorded in [#857](https://github.com/freeappstore-online/platform/issues/857).
+
+The storefront requires `FreeAppStore-signing.json`, its cryptographically verified provenance from the trusted
+desktop release workflow, the versioned Mac/Linux installer set, and matching GitHub asset SHA-256 digests before showing downloads.
+Direct Windows installers are optional; Windows Store preparation must not block Mac delivery. Missing/unavailable evidence yields a
+downloads-coming-soon message, never a fallback to the old unsigned `desktop-latest` assets. Windows links also
+require actual installation/SmartScreen verification; a valid Authenticode signature alone is insufficient.
+The signing manifest is release-pipeline evidence, not a replacement for independently verifying downloaded
+installer signatures. The storefront runs `gh attestation verify` on that manifest, with the expected repository,
+workflow identity and main/version-tag ref, before trusting its eligibility flags.
 
 ## Findings addressed
 
@@ -76,16 +97,19 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
 
 ## Outstanding release requirements
 
-- **macOS:** no Developer ID Application certificate/private key or notarization API key is provisioned for this
-  repository. The local keychain has development identities only. The Apple Account Holder must issue Developer ID
+- **macOS:** the local keychain has development identities only. A Developer ID private key has now been generated
+  into the encrypted ops store, with a matching public CSR at `build/signing/FreeAppStore-Developer-ID.certSigningRequest`
+  (ops#61). No Developer ID certificate or usable notarization API credential is provisioned yet. The claim in an
+  older issue that ASC keys were already stored was checked and found stale. The Apple Account Holder must issue Developer ID
   ([#807](https://github.com/freeappstore-online/platform/issues/807)).
 - **Windows:** no signing identity/provider is provisioned. Publisher identity and provider must be established
   ([#808](https://github.com/freeappstore-online/platform/issues/808)). Microsoft Artifact Signing eligibility must
   be checked for the actual publisher; do not assume an Australian individual qualifies.
-- **iOS:** the paid team's development-signed 0.2.0 build installs on the paired iPhone. Apple Distribution,
-  distribution provisioning, App Store Connect credentials, TestFlight/App Store release workflow and store review
-  remain outstanding. No simulator or development-signed binary may be advertised as a public iPhone release.
-- **Android:** signed release builds exist in CI. Public Play availability still requires the listing, declarations,
+- **iOS:** the paid team's development-signed 0.2.0 build is on the paired iPhone; this is not TestFlight delivery.
+  Distribution provisioning, usable App Store Connect credentials, a processed TestFlight build and tester access
+  remain outstanding, tracked in [#863](https://github.com/freeappstore-online/platform/issues/863).
+  No simulator or development-signed binary may be advertised as a public iPhone release.
+- **Android:** internal Play testing is live as recorded above. Public Play availability still requires the listing, declarations,
   testing/review and release-track work tracked in [#654](https://github.com/freeappstore-online/platform/issues/654).
 - The new signed desktop path has not run successfully with real credentials. Both Mac architectures and Windows
   must be smoke-tested from the final signed packages before the download page can claim signed availability.
