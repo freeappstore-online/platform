@@ -1,0 +1,46 @@
+{
+  "device": "iphone-medium",
+  "kind": "real app screenshot with editorial caption; raw UI retained",
+  "screenshots": [
+    {
+      "file": "01-store-overview.png",
+      "caption": "Find your next favourite app.",
+      "raw": "iphone-medium/01-store-overview.png",
+      "rawSha256": "11e7cb7435fe707a191672792ef80ad46997c6f7672e8c25fc262468c17fe00e",
+      "sha256": "f58b8bce83a46801b018352a7b31fc2ca38c4cabbd63bb841cc851a6af85e361",
+      "width": 1206,
+      "height": 2622,
+      "alpha": false
+    },
+    {
+      "file": "02-favourites.png",
+      "caption": "Your favourites. Always close.",
+      "raw": "iphone-medium/02-favourites.png",
+      "rawSha256": "5c3effbf66eaa5a5bf2805931040ecef1c7734ca885c10c55970d405d03631cf",
+      "sha256": "81b140fbeb9bc380a1401ce2be7d6a4c9395f6f7650d9c22d994ccbb54542d5d",
+      "width": 1206,
+      "height": 2622,
+      "alpha": false
+    },
+    {
+      "file": "03-app-details.png",
+      "caption": "A closer look, before you open.",
+      "raw": "iphone-medium/03-app-details.png",
+      "rawSha256": "c71d1a615b3cf83c9d13acda36080e3b9e06b7f537c158aca94bea4a0109c5b6",
+      "sha256": "67c073cb2f2845b09790ae56b3837b9e5db58d0f2801443c88c0d62c07006b9f",
+      "width": 1206,
+      "height": 2622,
+      "alpha": false
+    },
+    {
+      "file": "04-home-screen-guide.png",
+      "caption": "Make room on your Home Screen.",
+      "raw": "iphone-medium/04-home-screen-guide.png",
+      "rawSha256": "69e61111e904b43476f76def3251bebfb6ab3fc2ffcb0d2669d65a735e83049e",
+      "sha256": "b82392b5cb51123670c176af51afd24cbd66a66f04d1ceac88e9c7aff4b540f5",
+      "width": 1206,
+      "height": 2622,
+      "alpha": false
+    }
+  ]
+}

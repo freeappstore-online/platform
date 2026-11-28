@@ -1,0 +1,10 @@
+{
+  "kind": "brand creative, not app screenshot",
+  "width": 3840,
+  "height": 1646,
+  "colourSpace": "sRGB",
+  "alpha": false,
+  "sha256": "6c58c90f6a573fad8ab45739b7fa9907f984f92c97d8f975afd56dd3c89f3bb6",
+  "source": "render.mjs + brand/assets/wordmark-dark.svg",
+  "font": "Manrope, SIL OFL in android/play/design/fonts/OFL.txt"
+}

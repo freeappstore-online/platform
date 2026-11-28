@@ -1,0 +1,57 @@
+{
+  "capturedAt": "2026-11-28",
+  "runtimeSource": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+  "captureBuild": "0.2.0 (dev, 071714e)",
+  "simulatorOS": "iOS 18.0",
+  "account": "signed out",
+  "data": "live public registry; local favourites selected in actual UI",
+  "screenshots": [
+    {
+      "file": "iphone-medium/01-store-overview.png",
+      "sha256": "11e7cb7435fe707a191672792ef80ad46997c6f7672e8c25fc262468c17fe00e",
+      "width": 1206,
+      "height": 2622,
+      "mode": "RGBA",
+      "alphaExtrema": [
+        255,
+        255
+      ]
+    },
+    {
+      "file": "iphone-medium/02-favourites.png",
+      "sha256": "5c3effbf66eaa5a5bf2805931040ecef1c7734ca885c10c55970d405d03631cf",
+      "width": 1206,
+      "height": 2622,
+      "mode": "RGBA",
+      "alphaExtrema": [
+        255,
+        255
+      ]
+    },
+    {
+      "file": "iphone-medium/03-app-details.png",
+      "sha256": "c71d1a615b3cf83c9d13acda36080e3b9e06b7f537c158aca94bea4a0109c5b6",
+      "width": 1206,
+      "height": 2622,
+      "mode": "RGBA",
+      "alphaExtrema": [
+        255,
+        255
+      ]
+    },
+    {
+      "file": "iphone-medium/04-home-screen-guide.png",
+      "sha256": "69e61111e904b43476f76def3251bebfb6ab3fc2ffcb0d2669d65a735e83049e",
+      "width": 1206,
+      "height": 2622,
+      "mode": "RGBA",
+      "alphaExtrema": [
+        255,
+        255
+      ]
+    }
+  ],
+  "deviceFamily": [
+    1
+  ]
+}
