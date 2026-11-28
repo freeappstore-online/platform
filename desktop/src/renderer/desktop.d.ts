@@ -49,7 +49,7 @@ export interface DesktopState {
   /** The GitHub release notes for this version. */
   releaseNotes: string;
   /** A newer version (#839); `auto`: automatic checks are on; `supported`: an installed build, which can update. */
-  updates: UpdateState & { auto: boolean; supported: boolean };
+  updates: UpdateState & { auto: boolean; supported: boolean; storeManaged?: boolean };
   /** The Store's apps opened on this computer, most recent first, and the starred ones (#840). */
   store: { recent: string[]; favorites: string[] };
   /** Publish (#800): the CLI's sign-in, this account's apps, the app folders here and the last command. */

@@ -48,13 +48,16 @@ export class Updates {
     private readonly options: {
       /** This platform installs updates itself (not macOS's unsigned builds). */
       canInstall: boolean;
+      /** Microsoft Store owns updates for its packaged builds. Never contact the direct-download channel. */
+      storeManaged?: boolean;
       /** Automatic checks are on. */
       enabled(): boolean;
       changed(): void;
     },
   ) {
-    updater.autoDownload = options.canInstall;
-    updater.autoInstallOnAppQuit = options.canInstall;
+    updater.autoDownload = options.canInstall && !options.storeManaged;
+    updater.autoInstallOnAppQuit = options.canInstall && !options.storeManaged;
+    if (options.storeManaged) return;
     const busy = () => this.state.status === 'downloading' || this.state.status === 'ready';
     updater.on('checking-for-update', () => {
       if (!busy()) this.set({ status: 'checking', error: null });
@@ -88,6 +91,7 @@ export class Updates {
 
   /** Look now, then once a day while automatic checks are on. */
   start() {
+    if (this.options.storeManaged) return;
     if (this.options.enabled()) this.check();
     this.timer ??= setInterval(() => {
       if (this.options.enabled()) this.check();
@@ -95,6 +99,7 @@ export class Updates {
   }
 
   check() {
+    if (this.options.storeManaged) return;
     if (this.state.status === 'downloading' || this.state.status === 'ready') return;
     // Failures also arrive as the `error` event.
     this.updater.checkForUpdates().catch(() => {});
@@ -102,6 +107,7 @@ export class Updates {
 
   /** Restart to update: quits, installs and starts the new version. */
   install() {
+    if (this.options.storeManaged) return;
     if (this.state.status === 'ready') this.updater.quitAndInstall();
   }
 

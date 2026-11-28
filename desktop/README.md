@@ -226,6 +226,7 @@ Mandarin), and keeps going while the window is closed, as long as FreeAppStore r
   Activity screen can clear this computer's record. A corrupt file is preserved and shown as an error.
 - Native pairing/profile requests reject redirects and time out after 20 seconds.
 - Public signing gates, verified findings and remaining distribution requirements: [native security audit](../docs/native-security-audit.md).
+- Signing credentials, Microsoft Store packaging and exact installer verification: [trusted desktop distribution](SIGNING.md).
 
 ## Test
 

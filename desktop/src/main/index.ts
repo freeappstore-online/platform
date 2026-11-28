@@ -154,7 +154,12 @@ function state() {
     openAtLogin: settings.openAtLogin,
     version,
     releaseNotes: releaseNotesUrl(app.getVersion()),
-    updates: { ...updates.state, auto: settings.autoUpdate, supported: app.isPackaged },
+    updates: {
+      ...updates.state,
+      auto: settings.autoUpdate,
+      supported: app.isPackaged && !process.windowsStore,
+      storeManaged: Boolean(process.windowsStore),
+    },
     store: { recent: settings.recentApps, favorites: settings.favoriteApps },
     publish: publisher.state,
     openApps: hub.openApps(),
@@ -328,6 +333,8 @@ function setPaused(paused: boolean): void {
 }
 
 function applyLoginItem(): void {
+  // Store packages use Windows' startup controls rather than a mutable executable registration.
+  if (process.windowsStore) return;
   // `args` is for Windows; macOS reports a login launch through wasOpenedAtLogin.
   if (manageLoginItem)
     app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, args: ['--hidden'] });
@@ -565,6 +572,7 @@ ipcMain.handle('home:publish-push', (event, path: unknown, message: unknown) => 
 
 const updates = new Updates(electronUpdater.autoUpdater, {
   canInstall: process.platform !== 'darwin',
+  storeManaged: Boolean(process.windowsStore),
   enabled: () => settings.autoUpdate && app.isPackaged,
   changed: () => pushState(),
 });

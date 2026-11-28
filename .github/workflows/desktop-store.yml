@@ -1,0 +1,49 @@
+name: Desktop Microsoft Store submission package
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-store-package
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: desktop
+        shell: pwsh
+    env:
+      WINDOWS_STORE_IDENTITY_NAME: ${{ vars.WINDOWS_STORE_IDENTITY_NAME }}
+      WINDOWS_STORE_PUBLISHER: ${{ vars.WINDOWS_STORE_PUBLISHER }}
+      WINDOWS_STORE_PUBLISHER_DISPLAY_NAME: ${{ vars.WINDOWS_STORE_PUBLISHER_DISPLAY_NAME }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Require the real reserved Partner Center identity
+        run: |
+          foreach ($name in @('WINDOWS_STORE_IDENTITY_NAME', 'WINDOWS_STORE_PUBLISHER', 'WINDOWS_STORE_PUBLISHER_DISPLAY_NAME')) {
+            if (-not [Environment]::GetEnvironmentVariable($name)) { throw "Missing Partner Center identity: $name" }
+          }
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          FAS_BUILD_NUMBER: ${{ github.run_number }}
+      - run: pnpm exec electron-builder --win appx --x64 --config electron-builder.store.cjs --publish never
+      - run: ./scripts/verify-store-package.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: freeappstore-store-submission-${{ github.run_number }}
+          path: desktop/release-store/*.appx
+          if-no-files-found: error
+      - run: Add-Content $env:GITHUB_STEP_SUMMARY 'APPX is for Partner Center submission only. It is not a signed public installer. Microsoft signs it after certification; verify the live Store listing before linking it on the website.'

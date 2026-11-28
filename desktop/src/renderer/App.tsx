@@ -359,21 +359,27 @@ function Status({ state }: { state: DesktopState }) {
           {state.paused ? 'Resume AI access' : 'Pause AI access'}
         </button>
       </div>
-      <label className="mt-4 pt-4 border-t border-line flex items-center gap-3 text-sm cursor-pointer">
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-[var(--accent)] cursor-pointer"
-          checked={state.openAtLogin}
-          onChange={(event) => desktop.setOpenAtLogin(event.target.checked)}
-        />
-        <span>
-          <span className="font-semibold text-ink">Open at login</span>
-          <span className="text-muted">
-            {' '}
-            — start FreeAppStore in the background when you log in
+      {state.updates.storeManaged ? (
+        <p className="mt-4 pt-4 border-t border-line text-sm text-muted">
+          Manage opening at login in Windows Settings › Apps › Startup.
+        </p>
+      ) : (
+        <label className="mt-4 pt-4 border-t border-line flex items-center gap-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--accent)] cursor-pointer"
+            checked={state.openAtLogin}
+            onChange={(event) => desktop.setOpenAtLogin(event.target.checked)}
+          />
+          <span>
+            <span className="font-semibold text-ink">Open at login</span>
+            <span className="text-muted">
+              {' '}
+              — start FreeAppStore in the background when you log in
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
+      )}
     </section>
   );
 }
@@ -2417,7 +2423,9 @@ function About({ state, openWhatsNew }: { state: DesktopState; openWhatsNew: () 
           </div>
         ) : (
           <p className="mt-4 mb-0 text-xs text-muted">
-            Development build: installed builds check for updates.
+            {updates.storeManaged
+              ? 'Updates are managed by Microsoft Store. Open its Library to check for updates.'
+              : 'Development build: installed builds check for updates.'}
           </p>
         )}
       </section>

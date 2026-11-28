@@ -14,6 +14,27 @@ function fakeUpdater() {
 describe('updates (#839)', () => {
   afterEach(() => vi.useRealTimers());
 
+  it('never checks, downloads or installs website updates for a Microsoft Store package', () => {
+    vi.useFakeTimers();
+    const updater = fakeUpdater();
+    const updates = new Updates(updater, {
+      canInstall: true,
+      storeManaged: true,
+      enabled: () => true,
+      changed() {},
+    });
+    updates.start();
+    updates.check();
+    vi.advanceTimersByTime(DAY);
+    updater.emit('update-downloaded', { version: '2.0.0' });
+    updates.install();
+    expect(updater.autoDownload).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(updater.checkForUpdates).not.toHaveBeenCalled();
+    expect(updater.quitAndInstall).not.toHaveBeenCalled();
+    expect(updates.state.status).toBe('idle');
+  });
+
   it('downloads on Windows and Linux, then offers Restart to update', () => {
     const updater = fakeUpdater();
     const changed = vi.fn();

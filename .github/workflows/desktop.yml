@@ -125,3 +125,12 @@ jobs:
             const s = require(require('path').resolve(process.argv[1], 'app.asar/node_modules/sherpa-onnx-node'));
             if (typeof s.OfflineTts !== 'function') throw new Error('no OfflineTts');
             console.log('sherpa-onnx', s.version, process.platform, process.arch);" "$res"
+      - name: Build Microsoft Store package with an explicit CI-only identity
+        if: runner.os == 'Windows'
+        env:
+          FAS_STORE_SMOKE: '1'
+        run: pnpm exec electron-builder --win appx --x64 --config electron-builder.store.cjs --publish never
+      - name: Verify the Store package structure (never install or publish this fixture)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-store-package.ps1 -Smoke
