@@ -39,7 +39,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with: { xcode-version: '16' }
       # XcodeGen is pinned (not brew's latest): generator versions change the output, e.g. 2.47 adds
@@ -69,8 +69,8 @@ jobs:
   release-tools:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '22' }
       - run: node --test ios/release/testflight.test.mjs
       - run: python3 -m unittest discover -s ios/release -p '*_test.py'
@@ -85,10 +85,10 @@ jobs:
     timeout-minutes: 60
     concurrency: { group: fas-ios-testflight, cancel-in-progress: false }
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with: { xcode-version: latest-stable }
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '22' }
       - name: Validate release configuration
         env:
@@ -147,7 +147,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with: { xcode-version: latest-stable }
       - name: Archive without credentials
@@ -163,7 +163,7 @@ jobs:
           python3 ios/release/archive-manifest.py create "$RUNNER_TEMP/FreeAppStore.xcarchive" "$RUNNER_TEMP/archive-input.json" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$version"
           ditto -c -k --keepParent "$RUNNER_TEMP/FreeAppStore.xcarchive" "$RUNNER_TEMP/FreeAppStore.xcarchive.zip"
           cd "$RUNNER_TEMP" && shasum -a 256 FreeAppStore.xcarchive.zip > archive.sha256
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fas-ios-archive-${{ github.run_id }}
           retention-days: 1
