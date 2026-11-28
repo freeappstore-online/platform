@@ -18,8 +18,9 @@ name: Desktop release
 # Each run publishes a versioned release `desktop-v<version>` and refreshes the fixed release `desktop-latest`,
 # whose download URLs never change:
 #   https://github.com/freeappstore-online/platform/releases/download/desktop-latest/<asset>
-# The download page (sites/storefront/download.html) links there, so it keeps working whatever other releases this
-# repo gets later.
+# The download page resolves complete versioned releases at build time and links to the exact installers shown.
+# desktop-latest remains its fallback if metadata is unavailable, and the installed apps' update channel.
+# deploy-storefront.yml rebuilds the page after this workflow succeeds.
 on:
   push:
     tags: ['desktop-v*']

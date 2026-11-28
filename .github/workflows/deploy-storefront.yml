@@ -8,22 +8,30 @@ on:
       - 'config/monitoring-fixtures.json'
       - '.github/workflows/deploy-storefront.yml'
   workflow_dispatch:
+  # Releases created by GITHUB_TOKEN do not fire a release event. workflow_run
+  # refreshes the download page after the gated installers have been published.
+  workflow_run:
+    workflows: ['Desktop release']
+    types: [completed]
 
 permissions:
   contents: read
 
 concurrency:
-  group: deploy-storefront-${{ github.ref }}
+  group: deploy-storefront-main
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sites/storefront
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:

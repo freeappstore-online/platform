@@ -8,8 +8,8 @@ Each app has one committed version, numbers every CI build, and says so when a b
 | Android (`android/`) | `android/version.properties` `versionName` | `versionCode` from `ANDROID_BUILD_NUMBER` (run number, or above every Play track) | `android-v<version>` |
 | iOS (`ios/`) | `ios/Config/Version.xcconfig` `MARKETING_VERSION` | `CURRENT_PROJECT_VERSION` (run number) | `ios-v<version>` |
 
-Versions are semver (`0.3.0`). The version file always holds the latest released version; a release bumps it. Every
-build also carries its build number and the short commit:
+Versions are semver (`0.3.0`). The release workflow bumps the version file before building, so its version may not
+yet have published installers. Every build also carries its build number and the short commit:
 
 - a CI build shows `0.3.0 (57, abc1234)`;
 - a local build shows `0.3.0 (dev, abc1234)`. It never claims a real build number.
@@ -29,6 +29,12 @@ That label is what each app shows in About (desktop: the Account page; Android a
 - **iOS.** `Config/Version.xcconfig`; CI passes `CURRENT_PROJECT_VERSION`, `FAS_COMMIT` and `FAS_DEV_BUILD=NO`. A local
   build keeps build `1`, shown as `dev`, and gets its commit from the scheme pre-action `scripts/write-commit.sh`.
 
+The [desktop download page](https://freeappstore.online/download) shows the newest complete published desktop
+release's version, publication date (UTC) and **What's new** link. Its installer links point to that exact version,
+including the OS-specific download buttons. The storefront rebuilds after a successful Desktop release workflow.
+If GitHub metadata is unavailable, the page keeps the `desktop-latest` links and says version details are unavailable;
+it never substitutes the source version or an unpublished tag. **Previous versions** opens the desktop release history.
+
 ## Cutting a release
 
 Run the app's release workflow on `main` with the new version. It writes the version to the app's version file in a
@@ -37,7 +43,7 @@ notes list the app's commits since its previous tag (`scripts/app-release.sh not
 the committed one or a tag that exists. The committed version may be released as it is (a first release).
 
 ```sh
-# Desktop: also builds the installers and refreshes desktop-latest (the download page's links).
+# Desktop: also builds the installers and refreshes desktop-latest (the installed apps' update channel).
 gh workflow run desktop-release.yml --repo freeappstore-online/platform --ref main -f version=0.3.0
 
 # Android: then runs android.yml on the release tag, which builds the signed release (and uploads it to Play's internal track

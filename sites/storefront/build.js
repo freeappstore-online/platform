@@ -26,6 +26,7 @@ const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
 const { isPublicListing } = require('./lib/discovery.cjs');
 const { CROSS_STORE_REGISTRY_PATH, crossStoreItems } = require('./lib/cross-store.cjs');
 const { appSeo } = require('./lib/app-seo.cjs');
+const { publishedDesktopRelease, fetchDesktopRelease, renderDesktopRelease } = require('./lib/desktop-release.cjs');
 const appKinds = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'app-kinds.json'), 'utf8'));
 const { groupCategories, renderCategoryCard, renderCategoryPage } = require('./lib/categories.cjs');
 const apps = registry.apps.filter(isPublicListing);
@@ -859,13 +860,17 @@ async function fetchCrossStoreRegistry() {
 
 (async () => {
 console.log(`Fetching commit history for ${apps.length} apps (with disk cache fallback)...`);
-const [histories, auditMap, crossRegistry, manifests, buildInfos, pasCapabilitiesLive] = await Promise.all([
+const [histories, auditMap, crossRegistry, manifests, buildInfos, pasCapabilitiesLive, desktopRelease] = await Promise.all([
   fetchAllHistories(apps),
   fetchAuditSummary(),
   fetchCrossStoreRegistry(),
   Promise.all(apps.map((a) => fetchManifest(a.appUrl))),
   Promise.all(apps.map((a) => fetchBuildInfo(a.appUrl))),
   fetchPasCapabilities(),
+  // A local API fixture lets offline builds exercise the complete download page.
+  process.env.FAS_DESKTOP_RELEASE_PATH
+    ? publishedDesktopRelease(JSON.parse(fs.readFileSync(process.env.FAS_DESKTOP_RELEASE_PATH, 'utf8')))
+    : fetchDesktopRelease({ token: GH_TOKEN, offline: OFFLINE_BUILD }),
 ]);
 
 // Cross-store search cards are created at runtime, but their colors must be
@@ -1426,6 +1431,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
 // Apply the normal static-page substitution pipeline. This keeps static and
 // generated pages on the shared shell, analytics, asset versioning, and SRI.
 function processStaticHtml(html, file) {
+  if (file === 'download.html') html = renderDesktopRelease(html, desktopRelease);
   html = injectPartials(html);
   html = addMainTarget(html);
   html = injectSettingsBootstrap(html, file);
