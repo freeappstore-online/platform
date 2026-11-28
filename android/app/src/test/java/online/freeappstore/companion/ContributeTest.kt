@@ -28,8 +28,6 @@ class ContributeTest {
         assertEquals("alice/0", result.jobs.first().key)
         assertEquals("Waiting chapter", result.jobs.first().inputPreview)
         assertTrue(result.hasMore)
-        assertNotNull(FasApi.endpoint("/generation/backlog"))
-        assertNull(FasApi.endpoint("/generation/backlog/other"))
     }
 
     private val now = 1_000_000_000_000L

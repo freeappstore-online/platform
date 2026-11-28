@@ -31,6 +31,11 @@ class PairCodeTest {
         val api = Api(reply = """{"user":{"id":"u1"}}""")
         api.request("GET", "/native/me", "ndev_test")
         api.post("/generation/open", "ndev_test", mapOf("X-Other" to "1"))
+        api.request("GET", "/generation/backlog", "ndev_test")
+        assertThrows(IllegalArgumentException::class.java) {
+            api.request("GET", "/generation/backlog/other", "ndev_test")
+        }
+        assertEquals(3, api.calls.size)
         for (call in api.calls) {
             assertEquals("android", call.getRequestProperty("X-FAS-Client"))
             assertEquals(AppInfo.current.label, call.getRequestProperty("X-FAS-App-Version"))
