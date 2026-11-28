@@ -23,6 +23,12 @@ tools. Protocol and deep links: [docs/native-companion.md](../docs/native-compan
   no-backup storage, deletable); WorkManager runs it while plugged in on an unmetered network by default, with a
   foreground notification. Protocol: [docs/native-companion.md](../docs/native-companion.md#contribute-android-731).
 
+## Play listing assets
+
+English copy, the feature graphic, native-resolution screenshot capture and the validated export manifest live in
+[play/README.md](play/README.md). Screenshots come from a clean emulator running the actual app; store uploads and
+production approval remain separate from local asset preparation.
+
 ## Build
 
 JDK 17+ and Android SDK platform 36. Set `ANDROID_HOME` or put `sdk.dir=/path/to/sdk` in an untracked

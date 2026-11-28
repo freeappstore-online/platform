@@ -1,0 +1,19 @@
+Your FreeAppStore apps, close at hand.
+
+Browse everyday web apps, save your favourites and return to recently opened apps from one place. Open an app in your browser and, where supported, add it to your home screen.
+
+FIND AND RETURN
+Search the app catalogue or explore categories. Favourites and recently used shortcuts stay on this phone, with a control to clear your recent list. Browsing does not require an account.
+
+CONTRIBUTE WHEN YOU CHOOSE
+Connect your FreeAppStore account and choose which apps this phone can help. Contribute generates audio, such as book narration, using a voice model that runs on your phone. The model is an additional download of about 350 MB; generated audio is uploaded to FreeAppStore for checking before it becomes available in the selected app.
+
+See the next items awaiting generation and review this phone's contribution activity. Apps must publish jobs before there is work to do. Choose Auto, Run now or Off, and adjust network, charging and battery settings. Automatic work runs only when your conditions and Android's background scheduling allow it; it is not continuous or guaranteed.
+
+OPTIONAL LOCATION SHARING
+For compatible apps, such as route tracking, you can enable location sharing separately for each app. Background location is used only after you grant the required permissions and enable sharing. Pause sharing or turn an app's access off from the companion.
+
+YOU STAY IN CONTROL
+Contribution and location sharing are optional. You choose the apps that receive generated audio or location data. Review activity, manage this phone's connection and disconnect your account in Settings.
+
+FreeAppStore opens web apps in your browser. Their browser data is separate from the companion's local data, and each app may have its own sign-in or internet requirements.

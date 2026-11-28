@@ -1,0 +1,58 @@
+{
+  "03-contribute": {
+    "file": "en-US/images/phoneScreenshots/03-contribute.png",
+    "alt": "Choose to help apps generate audio on your phone. Contribution requires sign-in and is optional.",
+    "width": 1080,
+    "height": 1920,
+    "sha256": "f41f9c9b222417dbc8eb84a0b8d7e01097ccd1b3f75348de93958b86687a0375",
+    "capturedAt": "2026-11-28T10:20:28.853Z",
+    "avd": "fas_play_listing",
+    "api": 34,
+    "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+    "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+    "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+    "account": "signed-out clean emulator"
+  },
+  "04-sharing": {
+    "file": "en-US/images/phoneScreenshots/04-sharing.png",
+    "alt": "Optional companion sharing connects supported web apps to phone features you choose to allow.",
+    "width": 1080,
+    "height": 1920,
+    "sha256": "e5ee626f65d6b2ad99b2710ceed57d82f5ec22aa78bfb78c6ed88f7d6d4a33a9",
+    "capturedAt": "2026-11-28T10:20:49.232Z",
+    "avd": "fas_play_listing",
+    "api": 34,
+    "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+    "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+    "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+    "account": "signed-out clean emulator"
+  },
+  "01-store": {
+    "file": "en-US/images/phoneScreenshots/01-store.png",
+    "alt": "Browse the FreeAppStore catalogue, with app categories and search.",
+    "width": 1080,
+    "height": 1920,
+    "sha256": "4a378e73f3ede31eedac7fd0268f7cc19ca3ce42118de0dee957c8c4d05a2ae5",
+    "capturedAt": "2026-11-28T10:21:09.494Z",
+    "avd": "fas_play_listing",
+    "api": 34,
+    "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+    "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+    "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+    "account": "signed-out clean emulator"
+  },
+  "02-favourites": {
+    "file": "en-US/images/phoneScreenshots/02-favourites.png",
+    "alt": "Keep Notes and Language in local favourites for quick access from the Store tab.",
+    "width": 1080,
+    "height": 1920,
+    "sha256": "e8412281948e4f800d557b768e3f9d9685157e80f457f94ba09671fa3b92450e",
+    "capturedAt": "2026-11-28T10:24:02.473Z",
+    "avd": "fas_play_listing",
+    "api": 34,
+    "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+    "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+    "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+    "account": "signed-out clean emulator"
+  }
+}

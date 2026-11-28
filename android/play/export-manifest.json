@@ -1,0 +1,167 @@
+{
+  "locales": [
+    "en-GB",
+    "en-US"
+  ],
+  "package": "online.freeappstore.companion",
+  "preparedOnly": true,
+  "requirements": "https://support.google.com/googleplay/android-developer/answer/9866151",
+  "assets": [
+    {
+      "file": "en-US/title.txt",
+      "kind": "text",
+      "characters": 12,
+      "sha256": "290a11ec67cd43ad861076b2467657ed36d57a90dc72de42edabfca24236908a"
+    },
+    {
+      "file": "en-US/short-description.txt",
+      "kind": "text",
+      "characters": 67,
+      "sha256": "1ac08096f6106ba3491d1d076daf3a702f92d9f7692a635ce2c65b677a74306b"
+    },
+    {
+      "file": "en-US/full-description.txt",
+      "kind": "text",
+      "characters": 1810,
+      "sha256": "52ad731935cd7b17c487ddc530c59ceedc3dac599ba87ae610a4fcf8dcc5a1af"
+    },
+    {
+      "file": "../../brand/native-assets/play-icon-512.png",
+      "kind": "icon",
+      "width": 512,
+      "height": 512,
+      "bytes": 14133,
+      "sha256": "cdb85693fa0379cde698d0dc79fc7892b3b9316ac18f02fd5c3255b0a30fddff",
+      "alt": "FreeAppStore blue four-tile icon."
+    },
+    {
+      "file": "en-US/images/featureGraphic.png",
+      "kind": "featureGraphic",
+      "width": 1024,
+      "height": 500,
+      "bytes": 58263,
+      "sha256": "91ad4e2eee1b5e85499988647ff9e421437ada0687ad0d17487586f005c9e0bc",
+      "alt": "FreeAppStore. Your apps, within reach. Browse web apps, save favourites and choose how your phone contributes."
+    },
+    {
+      "file": "en-US/images/phoneScreenshots/01-store.png",
+      "alt": "Browse the FreeAppStore catalogue, with app categories and search.",
+      "width": 1080,
+      "height": 1920,
+      "sha256": "4a378e73f3ede31eedac7fd0268f7cc19ca3ce42118de0dee957c8c4d05a2ae5",
+      "capturedAt": "2026-11-28T10:21:09.494Z",
+      "avd": "fas_play_listing",
+      "api": 34,
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+      "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+      "account": "signed-out clean emulator",
+      "kind": "rawScreenshot",
+      "bytes": 143079
+    },
+    {
+      "file": "en-US/images/phoneScreenshots/02-favourites.png",
+      "alt": "Keep Notes and Language in local favourites for quick access from the Store tab.",
+      "width": 1080,
+      "height": 1920,
+      "sha256": "e8412281948e4f800d557b768e3f9d9685157e80f457f94ba09671fa3b92450e",
+      "capturedAt": "2026-11-28T10:24:02.473Z",
+      "avd": "fas_play_listing",
+      "api": 34,
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+      "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+      "account": "signed-out clean emulator",
+      "kind": "rawScreenshot",
+      "bytes": 144022
+    },
+    {
+      "file": "en-US/images/phoneScreenshots/03-contribute.png",
+      "alt": "Choose to help apps generate audio on your phone. Contribution requires sign-in and is optional.",
+      "width": 1080,
+      "height": 1920,
+      "sha256": "f41f9c9b222417dbc8eb84a0b8d7e01097ccd1b3f75348de93958b86687a0375",
+      "capturedAt": "2026-11-28T10:20:28.853Z",
+      "avd": "fas_play_listing",
+      "api": 34,
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+      "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+      "account": "signed-out clean emulator",
+      "kind": "rawScreenshot",
+      "bytes": 92198
+    },
+    {
+      "file": "en-US/images/phoneScreenshots/04-sharing.png",
+      "alt": "Optional companion sharing connects supported web apps to phone features you choose to allow.",
+      "width": 1080,
+      "height": 1920,
+      "sha256": "e5ee626f65d6b2ad99b2710ceed57d82f5ec22aa78bfb78c6ed88f7d6d4a33a9",
+      "capturedAt": "2026-11-28T10:20:49.232Z",
+      "avd": "fas_play_listing",
+      "api": 34,
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9",
+      "method": "Real app UI; CUA navigation; unmodified adb screencap export",
+      "account": "signed-out clean emulator",
+      "kind": "rawScreenshot",
+      "bytes": 90475
+    },
+    {
+      "file": "en-US/images/listingPhoneScreenshots/01-store.png",
+      "kind": "phoneScreenshot",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 289265,
+      "sha256": "96dbbf470c18649ca1f845fdd25517d6ed5753a0116c0b7792e3e331922db1ee",
+      "alt": "Browse the FreeAppStore catalogue, with app categories and search.",
+      "caption": "Find your next favourite app.",
+      "rawFile": "en-US/images/phoneScreenshots/01-store.png",
+      "rawSha256": "4a378e73f3ede31eedac7fd0268f7cc19ca3ce42118de0dee957c8c4d05a2ae5",
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9"
+    },
+    {
+      "file": "en-US/images/listingPhoneScreenshots/02-favourites.png",
+      "kind": "phoneScreenshot",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 276915,
+      "sha256": "2a0c043abc9df6a27e845c9b498f7113369d5130f21fde39fea32f8f02dca79b",
+      "alt": "Keep Notes and Language in local favourites for quick access from the Store tab.",
+      "caption": "Your favourites. Always close.",
+      "rawFile": "en-US/images/phoneScreenshots/02-favourites.png",
+      "rawSha256": "e8412281948e4f800d557b768e3f9d9685157e80f457f94ba09671fa3b92450e",
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9"
+    },
+    {
+      "file": "en-US/images/listingPhoneScreenshots/03-contribute.png",
+      "kind": "phoneScreenshot",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 224499,
+      "sha256": "4bfad811be147fa63680d0d815441d977d2c2290c79bb55b46c453b48715fc0e",
+      "alt": "Choose to help apps generate audio on your phone. Contribution requires sign-in and is optional.",
+      "caption": "Give your phone a way to help.",
+      "rawFile": "en-US/images/phoneScreenshots/03-contribute.png",
+      "rawSha256": "f41f9c9b222417dbc8eb84a0b8d7e01097ccd1b3f75348de93958b86687a0375",
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9"
+    },
+    {
+      "file": "en-US/images/listingPhoneScreenshots/04-sharing.png",
+      "kind": "phoneScreenshot",
+      "width": 1080,
+      "height": 1920,
+      "bytes": 216771,
+      "sha256": "a8ab8034097ef507101e939d8efecfcf353561cc4dd7cb1c0075d07f359c9770",
+      "alt": "Optional companion sharing connects supported web apps to phone features you choose to allow.",
+      "caption": "Share only when you choose.",
+      "rawFile": "en-US/images/phoneScreenshots/04-sharing.png",
+      "rawSha256": "e5ee626f65d6b2ad99b2710ceed57d82f5ec22aa78bfb78c6ed88f7d6d4a33a9",
+      "sourceCommit": "071714ed33be9850f20866314ce06a8ce36fbf5f",
+      "apkSha256": "acd06f0f2e1d58ec8753436bc197d97f50d3899034cecca424ccef00596e8ab9"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "device": "android-phone",
+  "kind": "real app screenshot with editorial caption; raw UI retained",
+  "screenshots": [
+    {
+      "file": "01-store.png",
+      "caption": "Find your next favourite app.",
+      "raw": "en-US/images/phoneScreenshots/01-store.png",
+      "rawSha256": "4a378e73f3ede31eedac7fd0268f7cc19ca3ce42118de0dee957c8c4d05a2ae5",
+      "sha256": "96dbbf470c18649ca1f845fdd25517d6ed5753a0116c0b7792e3e331922db1ee",
+      "width": 1080,
+      "height": 1920,
+      "alpha": false
+    },
+    {
+      "file": "02-favourites.png",
+      "caption": "Your favourites. Always close.",
+      "raw": "en-US/images/phoneScreenshots/02-favourites.png",
+      "rawSha256": "e8412281948e4f800d557b768e3f9d9685157e80f457f94ba09671fa3b92450e",
+      "sha256": "2a0c043abc9df6a27e845c9b498f7113369d5130f21fde39fea32f8f02dca79b",
+      "width": 1080,
+      "height": 1920,
+      "alpha": false
+    },
+    {
+      "file": "03-contribute.png",
+      "caption": "Give your phone a way to help.",
+      "raw": "en-US/images/phoneScreenshots/03-contribute.png",
+      "rawSha256": "f41f9c9b222417dbc8eb84a0b8d7e01097ccd1b3f75348de93958b86687a0375",
+      "sha256": "4bfad811be147fa63680d0d815441d977d2c2290c79bb55b46c453b48715fc0e",
+      "width": 1080,
+      "height": 1920,
+      "alpha": false
+    },
+    {
+      "file": "04-sharing.png",
+      "caption": "Share only when you choose.",
+      "raw": "en-US/images/phoneScreenshots/04-sharing.png",
+      "rawSha256": "e5ee626f65d6b2ad99b2710ceed57d82f5ec22aa78bfb78c6ed88f7d6d4a33a9",
+      "sha256": "a8ab8034097ef507101e939d8efecfcf353561cc4dd7cb1c0075d07f359c9770",
+      "width": 1080,
+      "height": 1920,
+      "alpha": false
+    }
+  ]
+}
