@@ -23,7 +23,7 @@ This is a technical inventory, not a legal assessment.
 | What | Where it is kept | Source |
 |---|---|---|
 | Tool calls and results | Passed through in memory; never written, never sent to FreeAppStore | `desktop/src/main/hub.ts`, `mcp.ts` |
-| Activity log (time, tool, app, ok or error message; no arguments or results) | Memory only, 200 newest, gone on quit | `hub.ts` `record` |
+| Activity log (time, tool, app and success/failure; no arguments, results or app-supplied error text) | Newest 1,000 entries in `userData/ai-activity.json`, mode `0600`; retained across restarts and updates until cleared | `activity.ts`, `hub.ts` `record` |
 | MCP token | `userData/mcp-token`, mode `0600` | `token.ts` |
 | Claude Code / Claude Desktop config entry | The AI app's own config file; it holds no token | `integrations.ts` |
 
@@ -66,7 +66,7 @@ Android and iOS write run logs (`Run ended: …`) to the system log on the phone
 | Device credential (`ndev_`): on the device; the server keeps only its hash | Until **Disconnect** / **Sign out** / **Revoke**, or 90 days | `packages/backend/src/routes/native.ts` |
 | Device row: label (desktop: `FreeAppStore desktop (Mac)`; phones: model and OS), client kind, app version label, last seen | Deleted with the device; expired rows pruned every 15 minutes | `native-companion.ts` `pruneNative` |
 | QR pair code: SHA-256 of the code, who made it, the device it paired | 30 days after it expires | migration `0062` |
-| Pairing rate limit: UTC-day counter keyed by stable, unsalted SHA-256 of your IP | Days older than yesterday pruned daily at 03:00 UTC (normally about 27–51 hours); included in daily JSON backups whose expiry is unverified | `native-auth.ts`, `proxy-rate-limit.ts`, `backup.ts`; [reconciliation](native-store-data-reconciliation.md) |
+| Pairing rate limit: UTC-day counter keyed by stable, unsalted SHA-256 of your IP | Days older than yesterday pruned daily at 03:00 UTC (normally about 27–51 hours); included in daily JSON backups whose expiry is unverified | `native-auth.ts`, `proxy-rate-limit.ts`, `backup.ts`; [reconciliation](https://github.com/freeappstore-online/platform/blob/main/docs/native-store-data-reconciliation.md) |
 | Profile on the device (`/native/me`) | Desktop: memory only. Phones: on the phone until disconnect | `desktop/src/main/device.ts` |
 
 ## Contribute (community generation)
