@@ -137,7 +137,7 @@ function renderDesktopRelease(html, release) {
       html = block(html, marker, release.platforms[platform]);
       if (!release.platforms[platform]) html = html.replace(new RegExp(`<li><a[^>]+data-asset="${asset}[^"]+"[\\s\\S]*?<\\/li>`, 'g'), '');
     }
-    if (!release.platforms.windows) details += ' · Windows download is awaiting installation verification.';
+    if (!release.platforms.windows) details += ' · Windows Store release is being prepared.';
     if (release.macFormat === 'zip') {
       html = html.replaceAll('FreeAppStore-mac-arm64.dmg', 'FreeAppStore-mac-arm64.zip')
         .replaceAll('FreeAppStore-mac-x64.dmg', 'FreeAppStore-mac-x64.zip')

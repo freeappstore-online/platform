@@ -163,7 +163,7 @@ test('Windows stays unavailable until fresh-download verification; no security b
   assert.ok(html.includes('data-asset="linux-x64"'));
   assert.ok(!html.includes('data-asset="win-x64"'));
   assert.ok(!html.includes('id="windows"'));
-  assert.match(html, /Windows download is awaiting installation verification/);
+  assert.match(html, /Windows Store release is being prepared/);
   for (const output of [html, renderDesktopRelease(template, null)]) {
     assert.doesNotMatch(output, /Open Anyway|Run anyway|xattr|com\.apple\.quarantine/);
     assert.doesNotMatch(output, /<!-- (?:VERIFIED|MAC_INSTALL|WINDOWS_INSTALL|LINUX_INSTALL)/);
