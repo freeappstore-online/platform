@@ -75,8 +75,9 @@ class CompanionTest {
     // Store tab (#621, same rules as the iOS Store tab #620)
     @Test fun storeListsCategoriesAndAllAppsWithEmojiIcons() {
         screen(CompanionState(), tab = Tab.STORE)
-        compose.onNodeWithTag("store").performScrollToNode(hasText("Health Fitness"))
-        compose.onNodeWithText("Health Fitness").assertIsDisplayed()
+        val categoryHeading = hasText("Health Fitness") and !hasClickAction()
+        compose.onNodeWithTag("store").performScrollToNode(categoryHeading)
+        compose.onNode(categoryHeading).assertIsDisplayed()
         compose.onNodeWithTag("store").performScrollToNode(hasText("All apps"))
         compose.onNodeWithText("All apps").assertIsDisplayed()
         compose.onNodeWithTag("store").performScrollToNode(hasContentDescription("Open Hanzi Practice"))
