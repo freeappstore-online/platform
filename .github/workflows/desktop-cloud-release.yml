@@ -1,0 +1,188 @@
+name: Desktop cloud release
+
+# Cloud-managed Apple certificates stay in Xcode. This workflow accepts no private signing keys.
+# Only a tagged, tested source commit and independently verified signed ZIP bytes can be promoted.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing draft desktop-v version (for example 1.0.0)
+        required: true
+        type: string
+      build:
+        description: Exact numeric FAS_BUILD_NUMBER used by the local signed build
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: desktop-release
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    if: github.ref == 'refs/heads/main' || github.ref == format('refs/tags/desktop-v{0}', inputs.version)
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.resolve.outputs.commit }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Validate trusted input and snapshot the draft assets
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_BUILD: ${{ inputs.build }}
+        run: node desktop/scripts/cloud-release.mjs resolve "$RELEASE_VERSION" "$RELEASE_BUILD" cloud-release-state.json
+      - name: Exercise promotion and archive safety checks
+        run: node --test desktop/scripts/cloud-release.test.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloud-release-state
+          path: cloud-release-state.json
+          if-no-files-found: error
+
+  test:
+    needs: resolve
+    uses: ./.github/workflows/desktop.yml
+    with:
+      ref: ${{ needs.resolve.outputs.commit }}
+
+  verify-mac:
+    needs: resolve
+    runs-on: macos-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: control
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          path: source
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cloud-release-state
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Fetch only the snapshotted asset ID and verify its GitHub digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ARCH: ${{ matrix.arch }}
+        run: node control/desktop/scripts/cloud-release.mjs download cloud-release-state.json "$RELEASE_ARCH" out
+      - name: Rebuild the exact tagged JavaScript with the same build number
+        working-directory: source/desktop
+        env:
+          FAS_BUILD_NUMBER: ${{ inputs.build }}
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Verify archive safety, trusted signature, notarization and rebuilt source
+        env:
+          RELEASE_ARCH: ${{ matrix.arch }}
+        run: node control/desktop/scripts/cloud-release.mjs verify-mac cloud-release-state.json "$RELEASE_ARCH" out source
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloud-verified-mac-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  linux:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          path: control
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.resolve.outputs.commit }}
+          path: source
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cloud-release-state
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10.30.3
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Build Linux from the same source commit
+        working-directory: source/desktop
+        env:
+          FAS_BUILD_NUMBER: ${{ inputs.build }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm exec electron-builder --linux AppImage --x64 --publish never
+      - name: Bind the Linux build to its source and bytes
+        run: |
+          mkdir out
+          cp source/desktop/release/FreeAppStore-linux-x86_64.AppImage out/
+          node control/desktop/scripts/cloud-release.mjs verify-linux cloud-release-state.json out source
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cloud-verified-linux
+          path: out/*
+          if-no-files-found: error
+
+  promote:
+    needs: [resolve, test, verify-mac, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cloud-release-state
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: cloud-verified-*
+          path: out
+          merge-multiple: true
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: Bind verified receipts and generate updater hashes from final bytes
+        run: node desktop/scripts/cloud-release.mjs prepare cloud-release-state.json out
+      - name: Attest verified installers and signing manifest
+        id: provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: out/FreeAppStore-*
+      - name: Include attestation bundle
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$BUNDLE" out/FreeAppStore-provenance.sigstore.json
+      - name: Recheck draft, tag and exact digests; publish verified downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node desktop/scripts/cloud-release.mjs publish cloud-release-state.json out
