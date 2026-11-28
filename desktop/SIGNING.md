@@ -6,12 +6,12 @@ disable Gatekeeper, remove quarantine, or choose “Run anyway”.
 
 ## macOS website downloads
 
-Use `electron-builder.release.yml`: Developer ID Application, hardened runtime, notarization,
+The optional certificate-based CI route uses `electron-builder.release.yml`: Developer ID Application, hardened runtime, notarization,
 and stapling. `verify-mac-release.sh` verifies both architectures, the apps extracted from the
 shipped ZIPs, and Gatekeeper acceptance of the stapled DMGs. It writes its receipt only after
 every check succeeds, then refreshes updater hashes because stapling changes the DMG bytes.
 
-Required repository secrets: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, and the same
+Required repository secrets for that optional route: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, and the same
 `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` used by TestFlight. The repository
 variable `APPLE_TEAM_ID` pins the expected team. Provision through the ops store only, under
 [ops#61](https://github.com/serge-ivo/ops/issues/61); never paste private keys into issues.
@@ -19,7 +19,7 @@ Automatic tag-triggered certificate releases additionally require
 `DESKTOP_CERTIFICATE_RELEASE_ENABLED=true`; the manual certificate workflow remains available.
 Leave that opt-in unset when using the separate cloud-managed signing promotion route.
 
-As of 2026-11-28, no Developer ID certificate is installed. A public CSR is prepared at
+As of 2026-11-28, no local Developer ID private signing identity is installed. A public CSR is prepared at
 `build/signing/FreeAppStore-Developer-ID.certSigningRequest` in the local platform checkout.
 Its matching private key is stored only as encrypted
 `fas/MAC_DEVELOPER_ID_PRIVATE_KEY_BASE64` in ops, with no CI consumer. For the optional exportable-key
@@ -55,6 +55,31 @@ then attest the manifest before publication. Do not manually publish the probe o
 gate. Keep Xcode's local diagnostic logs private; only the verified installer ZIPs and public
 release metadata are upload candidates. The cloud signing audit is on ops#61; the prepared CSR
 remains a fallback and is not the cloud-managed signing key.
+
+### Verified production releases
+
+[Desktop 1.0.2](https://github.com/freeappstore-online/platform/releases/tag/desktop-v1.0.2), build
+`2026112803`, is the current verified Mac/Linux release. Its
+[promotion workflow](https://github.com/freeappstore-online/platform/actions/runs/46135844563)
+passed all source, end-to-end, native packaging and release checks. The application source is
+`6bcf052b307b5161556601c8fc24d436cb2d8e2a`; the trusted main verifier is
+`48b6fe8982f08603345082d01c00f81ab667cb7c`. Both Mac ZIPs contain the padded full-resolution icon
+and the corrected explanation of AI-provider data handling (#865).
+
+After publication, all seven release assets were downloaded through their public URLs without
+authentication. Their GitHub digests matched the bytes; installer hashes matched the signing
+manifest. The three installers and manifest each passed cryptographic verification against the
+downloaded Sigstore bundle, the exact `desktop-cloud-release.yml@refs/heads/main` workflow identity,
+and `--deny-self-hosted-runners`. Mac/Linux updater SHA-512 values matched the downloads; both
+`desktop-latest` updater aliases matched the versioned files. The local evidence is in
+`build/public-desktop-1.0.2-verification/public-verification.json`.
+
+The first verified production release was
+[1.0.0](https://github.com/freeappstore-online/platform/releases/tag/desktop-v1.0.0), build
+`2026112801`, from source `3fe64a94bd0d74cdd838441adc72ce8352b63b4a` and
+[workflow 46121391118](https://github.com/freeappstore-online/platform/actions/runs/46121391118).
+Version 1.0.1 stayed a private draft after its documentation-format check failed; the release gate
+was not bypassed and its immutable source tag was not changed.
 
 ## Windows: Microsoft Store package
 
