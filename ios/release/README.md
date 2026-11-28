@@ -49,3 +49,22 @@ python3 -m unittest discover -s ios/release -p '*_test.py'
 shellcheck ios/release/upload.sh
 actionlint .github/workflows/ios.yml
 ```
+
+## First release using an existing Xcode account
+
+On 2026-11-28, the signed-in Xcode account on the maintainer Mac successfully archived and exported this app with **Apple Distribution** signing for team `55DT52UQXE`. The exported profile was an App Store profile (`get-task-allow=false`, beta reports enabled, no device list), and deep/strict signature verification passed. This establishes account-backed distribution signing access even though CI secrets are absent. It does not establish an uploaded TestFlight build. The local Xcode was 16.0, below Apple's current SDK minimum.
+
+For this situation, dispatch the credential-free archive path:
+
+```sh
+gh workflow run ios.yml --repo freeappstore-online/platform --ref main -f archive_for_local_upload=true
+```
+
+After tests and archive generation pass, inspect the run's `headSha`, `headBranch`, event and conclusion with `gh run view`. Download only that run's `fas-ios-archive-RUN_ID` artifact. The artifact is retained for one day, contains no signing material, and cannot install on a phone. Before signing:
+
+1. Verify `archive.sha256` against the downloaded zip, then unpack it in an isolated build directory.
+2. Run `python3 ios/release/archive-manifest.py verify ARCHIVE_PATH archive-input.json EXPECTED_FULL_SHA EXPECTED_RUN_NUMBER EXPECTED_MARKETING_VERSION`. The expected SHA/build must come from the inspected GitHub run, and marketing version from `ios/Config/Version.xcconfig` at that exact commit, not the artifact itself. This checks bundle ID, version/build, commit, production flag, supported SDK and both privacy manifests.
+3. Use `xcodebuild -exportArchive` with the existing Xcode account, `-allowProvisioningUpdates`, `method=app-store-connect`, `signingStyle=automatic`, the verified team, and `destination=upload`. Keep automatic version/build renumbering off. If Apple rejects a reused build number, create a fresh archive; do not install it directly.
+4. Verify Apple processing and group/tester availability in App Store Connect (or the API helper when its key is available). An upload exit code is not enough to claim TestFlight availability.
+
+An older local Xcode may refuse to export a newer SDK archive; if so, use a supported local Xcode or the fully configured CI signing job above. Never bypass signature or SDK checks. Creating/replacing identities through the existing Xcode account is tracked in [ops#62](https://github.com/serge-ivo/ops/issues/62); no private keys are extracted for this path.

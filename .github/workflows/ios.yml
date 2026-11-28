@@ -8,6 +8,10 @@ on:
         description: Upload and verify availability in the configured internal TestFlight group
         type: boolean
         default: false
+      archive_for_local_upload:
+        description: Build an unsigned Xcode 26+ archive for account-backed export/upload on the maintainer Mac
+        type: boolean
+        default: false
 permissions: { contents: read }
 jobs:
   build-test:
@@ -113,3 +117,37 @@ jobs:
           ASC_APP_ID: ${{ vars.ASC_APP_ID }}
           ASC_BETA_GROUP_ID: ${{ vars.ASC_BETA_GROUP_ID }}
         run: node ios/release/testflight.mjs verify
+
+  # Uses no signing secrets. Existing Xcode account access can sign and upload this supported-SDK
+  # archive on the maintainer Mac. It is not an installable app and is retained for one day only.
+  archive-for-local-upload:
+    needs: [build-test, release-tools]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.archive_for_local_upload
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with: { xcode-version: latest-stable }
+      - name: Archive without credentials
+        run: |
+          major=$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)
+          (( major >= 26 )) || exit 1
+          xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/FreeAppStore.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" FAS_COMMIT="${GITHUB_SHA:0:7}" FAS_DEV_BUILD=NO
+      - name: Bind archive to commit, bundle, version and build
+        run: |
+          version=$(sed -n 's/^MARKETING_VERSION = //p' ios/Config/Version.xcconfig)
+          python3 ios/release/archive-manifest.py create "$RUNNER_TEMP/FreeAppStore.xcarchive" "$RUNNER_TEMP/archive-input.json" "$GITHUB_SHA" "$GITHUB_RUN_NUMBER" "$version"
+          ditto -c -k --keepParent "$RUNNER_TEMP/FreeAppStore.xcarchive" "$RUNNER_TEMP/FreeAppStore.xcarchive.zip"
+          cd "$RUNNER_TEMP" && shasum -a 256 FreeAppStore.xcarchive.zip > archive.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fas-ios-archive-${{ github.run_id }}
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/FreeAppStore.xcarchive.zip
+            ${{ runner.temp }}/archive-input.json
+            ${{ runner.temp }}/archive.sha256

@@ -53,11 +53,13 @@ export async function distribute(request, { appId, groupId, version, build }, { 
     await wait(20_000);
   }
   if (!id) throw new Error('Apple has not finished processing the build; no tester availability claimed');
-  const groups = await list(request, `/v1/builds/${id}/betaGroups?limit=200`);
+  // Apple exposes group membership through the betaGroups collection (not builds/{id}/betaGroups).
+  const groupQuery = `/v1/betaGroups?filter[app]=${appId}&filter[builds]=${id}&filter[id]=${groupId}&limit=200`;
+  const groups = await list(request, groupQuery);
   if (!groups.some(g => g.id === groupId)) await request(`/v1/betaGroups/${groupId}/relationships/builds`, 'POST', { data: [{ type: 'builds', id }] });
   for (let attempt = 0; attempt < 12; attempt++) {
     const detail = (await request(`/v1/builds/${id}/buildBetaDetail`)).data;
-    const assigned = await list(request, `/v1/builds/${id}/betaGroups?limit=200`);
+    const assigned = await list(request, groupQuery);
     const testers = await list(request, `/v1/betaGroups/${groupId}/betaTesters?limit=200`);
     if (detail.attributes.internalBuildState === 'IN_BETA_TESTING' && assigned.some(g => g.id === groupId) && testers.length) return { id, testerCount: testers.length };
     await wait(10_000);

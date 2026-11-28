@@ -24,7 +24,7 @@ test('processing success alone is insufficient; group assignment and beta eligib
     calls.push({ path, method, body });
     if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID', expired: false } }] };
     if (path.endsWith('/relationships/builds')) { assigned = true; return {}; }
-    if (path.includes('/betaGroups?')) return { data: assigned ? [{ id: 'group' }] : [] };
+    if (path === '/v1/betaGroups?filter[app]=1&filter[builds]=build&filter[id]=group&limit=200') return { data: assigned ? [{ id: 'group' }] : [] };
     if (path.endsWith('/buildBetaDetail')) return { data: { attributes: { internalBuildState: 'IN_BETA_TESTING' } } };
     if (path.includes('betaTesters')) return { data: [{ id: 'tester' }] };
     throw new Error(path);
@@ -41,7 +41,7 @@ test('failed, expired and never-processed builds never distribute', async () => 
 test('missing export compliance never claims availability', async () => {
   const request = async path => {
     if (path.startsWith('/v1/builds?')) return { data: [{ id: 'build', attributes: { processingState: 'VALID' } }] };
-    if (path.includes('/betaGroups?')) return { data: [{ id: 'group' }] };
+    if (path === '/v1/betaGroups?filter[app]=1&filter[builds]=build&filter[id]=group&limit=200') return { data: [{ id: 'group' }] };
     if (path.includes('betaTesters')) return { data: [{ id: 'tester' }] };
     return { data: { attributes: { internalBuildState: 'MISSING_EXPORT_COMPLIANCE' } } };
   };
