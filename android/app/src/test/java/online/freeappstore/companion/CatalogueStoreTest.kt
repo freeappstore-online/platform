@@ -50,6 +50,27 @@ class CatalogueStoreTest {
 
     private fun store() = CatalogueStore(dir, CatalogueClient(URL("http://127.0.0.1:${server.localPort}/registry.json")))
 
+    @Test fun shortcutsSurviveRelaunchAndClearingRecentKeepsFavourites() {
+        val first = store(); first.refresh()
+        val a = first.apps[0].id; val b = first.apps[1].id
+        first.setFavourite(a, true)
+        first.opened(a); first.opened(b); first.opened(a)
+        first.opened("unknown"); first.setFavourite("unknown", true)
+        val next = store()
+        assertEquals(listOf(a), next.favourites)
+        assertEquals(listOf(a, b), next.recent)
+        next.clearRecent()
+        assertTrue(store().recent.isEmpty())
+        assertEquals(listOf(a), store().favourites)
+        next.setFavourite(a, false)
+        assertTrue(store().favourites.isEmpty())
+    }
+
+    @Test fun corruptShortcutsDoNotBreakTheCatalogue() {
+        File(dir, "shortcuts.json").writeText("broken")
+        assertTrue(store().favourites.isEmpty()); assertTrue(store().recent.isEmpty())
+    }
+
     @Test fun productionClientTargetsTheFixedRegistry() {
         assertEquals("https://freeappstore.online/registry.json", CatalogueClient.REGISTRY_URL)
     }

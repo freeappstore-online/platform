@@ -29,7 +29,7 @@ async function prepare(page: Page) {
       serverError: null,
       paused: false,
       openAtLogin: false,
-      store: { recent: [], favorites: [] },
+      store: { recent: ['sample'], favorites: ['sample'] },
       updates: {
         status: 'manual',
         version: '0.7.0',
@@ -150,6 +150,9 @@ async function prepare(page: Page) {
         ],
         votes: {},
       }),
+      openApp: noop,
+      setFavorite: noop,
+      clearRecent: noop,
       releaseNotes: async () => ({
         version: '0.6.0',
         body: `Release notes ${'x'.repeat(150)}`,
@@ -222,6 +225,10 @@ for (const width of [420, 800, 1100]) {
         .click();
       if (name === 'Contribute')
         await expect(page.getByText('Showing 100 of more than 100 awaiting jobs.')).toBeVisible();
+      if (name === 'Home')
+        await expect(
+          page.getByRole('button', { name: 'Unfavourite An app with a long name' }),
+        ).toBeVisible();
       await noHorizontalScroll(page);
       if (name === 'Publish') {
         await page.getByRole('button', { name: 'New app', exact: true }).click();

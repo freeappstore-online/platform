@@ -98,6 +98,7 @@ declare global {
       setConnected(id: ClientId, connect: boolean): Promise<ClientStatus[]>;
       registry(): Promise<{ apps: RegistryApp[]; votes: Record<string, number> }>;
       setFavorite(appId: string, on: boolean): Promise<void>;
+      clearRecent(): Promise<void>;
       /** Look for a new version now, or apply the one found (Restart to update; the download on macOS). */
       update(action: 'check' | 'apply'): Promise<void>;
       setAutoUpdate(on: boolean): Promise<void>;

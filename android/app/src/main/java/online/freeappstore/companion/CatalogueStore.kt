@@ -5,6 +5,8 @@ import java.io.File
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import org.json.JSONObject
+import org.json.JSONArray
 
 /**
  * Credential-free client for the public registry. It never uses FasApi: the device credential stays on
@@ -61,6 +63,34 @@ class CatalogueStore(private val dir: File, private val client: CatalogueClient 
     /** The last refresh failed or returned something unusable; `apps` is the previous copy. */
     @Volatile var stale = false
         private set
+
+    private val shortcutsFile get() = File(dir, "shortcuts.json")
+    private val saved = try { if (shortcutsFile.length() <= 32_000) JSONObject(shortcutsFile.readText()) else JSONObject() } catch (_: Exception) { JSONObject() }
+    @Volatile var favourites: List<String> = ids(saved.optJSONArray("favourites"), 200)
+        private set
+    @Volatile var recent: List<String> = ids(saved.optJSONArray("recent"), 12)
+        private set
+    @Volatile var shortcutError = ""
+        private set
+    private fun ids(array: JSONArray?, limit: Int): List<String> = if (array == null) emptyList() else
+        (0 until array.length()).mapNotNull { array.opt(it) as? String }.filter { Regex("^[a-z0-9][a-z0-9-]{0,62}$").matches(it) }.distinct().take(limit)
+    @Synchronized fun setFavourite(id: String, on: Boolean) {
+        if (apps.none { it.id == id }) return
+        saveShortcuts(favourites.filter { it != id } + if (on) listOf(id) else emptyList(), recent)
+    }
+    @Synchronized fun opened(id: String) {
+        if (apps.none { it.id == id }) return
+        saveShortcuts(favourites, listOf(id) + recent.filter { it != id })
+    }
+    @Synchronized fun clearRecent() = saveShortcuts(favourites, emptyList())
+    private fun saveShortcuts(favourites: List<String>, recent: List<String>) {
+        val f = favourites.distinct().take(200); val r = recent.distinct().take(12)
+        try {
+            dir.mkdirs()
+            write(shortcutsFile, JSONObject().put("favourites", JSONArray(f)).put("recent", JSONArray(r)).toString().toByteArray())
+            this.favourites = f; this.recent = r; shortcutError = ""
+        } catch (_: Exception) { shortcutError = "Couldn't save shortcuts on this phone. Please try again." }
+    }
 
     /** 304 keeps the cache; a usable 200 replaces it; anything else keeps it and marks it stale. Blocking. */
     @Synchronized fun refresh() {

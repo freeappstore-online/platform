@@ -32,17 +32,21 @@ struct StorefrontView: View {
             .searchable(text: $query, prompt: "Search apps")
             .refreshable { await catalogue.refresh() }
             .navigationDestination(for: String.self) { id in
-                if let app = catalogue.apps.first(where: { $0.id == id }) { AppDetailView(app: app, model: model, open: openApp) }
+                if let app = catalogue.apps.first(where: { $0.id == id }) { AppDetailView(app: app, model: model, catalogue: catalogue, open: openApp) }
             }
         }
         .sheet(item: $guideFor) { app in
-            InstallGuideSheet(app: app, guide: guide) { openURL(app.appUrl) }
+            InstallGuideSheet(app: app, guide: guide) { launch(app) }
         }
     }
 
     /// Every Open goes through here: the guide the first time for each app, then straight to the browser.
     private func openApp(_ app: CatalogueApp) {
-        if guide.shouldShow(app.id) { guideFor = app } else { openURL(app.appUrl) }
+        if guide.shouldShow(app.id) { guideFor = app } else { launch(app) }
+    }
+
+    private func launch(_ app: CatalogueApp) {
+        openURL(app.appUrl) { accepted in if accepted { catalogue.opened(app.id) } }
     }
 
     @ViewBuilder private var empty: some View {
@@ -62,12 +66,27 @@ struct StorefrontView: View {
         if catalogue.stale {
             Text("Showing the last copy of the store saved on this phone.").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
         }
+        shortcuts
         featured
         let yours = catalogue.apps.filter { app in model.apps.contains { $0.id == app.id && model.enabled($0) } }
         if model.signedIn && !yours.isEmpty { row("Yours", yours) }
         ForEach(Catalogue.categories(catalogue.apps), id: \.name) { category in row(category.name, category.apps) }
         Text("All apps").font(.title2.bold()).padding(.horizontal)
         list(Catalogue.sortedByName(catalogue.apps))
+    }
+
+    private var shortcuts: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Quick access").font(.title2.bold()).padding(.horizontal)
+            Text("Favourites and recently opened apps stay on this phone.").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+            if !catalogue.shortcutError.isEmpty { Text(catalogue.shortcutError).foregroundStyle(.red).padding(.horizontal) }
+            let favourites = catalogue.favourites.compactMap { id in catalogue.apps.first { $0.id == id } }
+            let recent = catalogue.recent.filter { !catalogue.favourites.contains($0) }.compactMap { id in catalogue.apps.first { $0.id == id } }
+            if !favourites.isEmpty { Text("Favourites").font(.headline).padding(.horizontal); list(favourites) }
+            if !recent.isEmpty { Text("Recently used").font(.headline).padding(.horizontal); list(Array(recent.prefix(6))) }
+            if !catalogue.recent.isEmpty { Button("Clear recently used", action: catalogue.clearRecent).padding(.horizontal) }
+            if favourites.isEmpty && recent.isEmpty { Text("Star an app to keep it here. Apps you open appear here automatically.").font(.subheadline).padding(.horizontal) }
+        }
     }
 
     @ViewBuilder private var results: some View {
@@ -144,6 +163,9 @@ struct StorefrontView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityElement(children: .combine)
+                    Button { catalogue.setFavourite(app.id, on: !catalogue.favourites.contains(app.id)) } label: {
+                        Image(systemName: catalogue.favourites.contains(app.id) ? "star.fill" : "star").frame(minWidth: 44, minHeight: 44)
+                    }.accessibilityLabel("\(catalogue.favourites.contains(app.id) ? "Unfavourite" : "Favourite") \(app.name)")
                     Button("Open") { openApp(app) }
                         .buttonStyle(.bordered).buttonBorderShape(.capsule)
                         .accessibilityLabel("Open \(app.name)")

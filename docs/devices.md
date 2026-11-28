@@ -40,6 +40,10 @@ app has had a public release.
 
 ## Desktop
 
+**Quick access** on Home lists your **Favourites** and **Recently used** apps. Star an app in Store or
+Quick access to pin it; click its name to open it. **Clear recently used** removes that history and
+keeps your favourites. These shortcuts stay on this computer through restarts and updates.
+
 ### Install
 
 Download from [freeappstore.online/download](https://freeappstore.online/download). The builds are not signed yet,
@@ -103,6 +107,16 @@ can't reliably tell a metered connection. It does not keep the computer awake.
 | Crash or force quit | Stops | The next start marks the job interrupted |
 
 ## Phones
+
+The Store opens with **Quick access**: favourites and recently opened apps, with **Open** buttons.
+Star apps in the list or on their detail page. **Clear recently used** keeps favourites. Shortcuts are
+stored on this phone, independently of pairing, and survive app updates. Opening an app still uses
+your browser or Safari; viewing its details alone does not add it to Recently used.
+
+The [website](https://freeappstore.online/) has the same quick access section and star controls. Its
+shortcuts stay in that browser. None of these lists sync across devices or require sign-in; favourites
+are separate from public votes and app permissions. Only apps opened through these controls enter
+Recently used, not apps opened directly from a bookmark or Home Screen icon.
 
 ### Install
 

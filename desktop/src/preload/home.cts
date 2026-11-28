@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('fasDesktop', {
   setConnected: (id: string, connect: boolean) => ipcRenderer.invoke('home:connect', id, connect),
   registry: () => ipcRenderer.invoke('home:registry'),
   setFavorite: (appId: string, on: boolean) => ipcRenderer.invoke('home:set-favorite', appId, on),
+  clearRecent: () => ipcRenderer.invoke('home:clear-recent'),
   update: (action: 'check' | 'apply') => ipcRenderer.invoke('home:update', action),
   setAutoUpdate: (on: boolean) => ipcRenderer.invoke('home:set-auto-update', on),
   releaseNotes: (version: string) => ipcRenderer.invoke('home:release-notes', version),

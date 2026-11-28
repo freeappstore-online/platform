@@ -155,6 +155,7 @@ const card = 'min-w-0 max-w-full rounded-card border border-line bg-panel shadow
 function Home({ state, openStore }: { state: DesktopState; openStore: () => void }) {
   return (
     <>
+      <QuickAccess store={state.store} openStore={openStore} />
       <h1 className="mt-0 mb-2 text-3xl font-extrabold">Let your AI work in your apps</h1>
       <p className="mt-0 mb-8 text-muted max-w-2xl">
         Apps that allow AI access offer tools to AI apps on this computer, such as Claude. The tools
@@ -195,6 +196,130 @@ function Home({ state, openStore }: { state: DesktopState; openStore: () => void
 
       <ManualSetup state={state} />
     </>
+  );
+}
+
+function QuickAccess({
+  store,
+  openStore,
+}: {
+  store: DesktopState['store'];
+  openStore: () => void;
+}) {
+  const [apps, setApps] = useState<RegistryApp[]>([]);
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refresh, setRefresh] = useState(0);
+  const hasApps = store.recent.length > 0 || store.favorites.length > 0;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Retry explicitly reloads the catalogue.
+  useEffect(() => {
+    if (!hasApps) {
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setFailed(false);
+    desktop
+      .registry()
+      .then(
+        ({ apps }) => {
+          if (active) setApps(apps);
+        },
+        () => {
+          if (active) setFailed(true);
+        },
+      )
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [refresh, hasApps]);
+  const byId = new Map(apps.map((app) => [app.id, app]));
+  const favourites = store.favorites.flatMap((id) => byId.get(id) ?? []);
+  const recent = store.recent
+    .filter((id) => !store.favorites.includes(id))
+    .flatMap((id) => byId.get(id) ?? [])
+    .slice(0, 6);
+  const row = (title: string, items: RegistryApp[]) =>
+    items.length > 0 && (
+      <div className="min-w-0">
+        <h3 className="text-base font-bold mb-3">{title}</h3>
+        <ul className="m-0 p-0 list-none grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {items.map((app) => (
+            <li key={app.id} className={`${card} flex items-center gap-2 p-3`}>
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left font-semibold cursor-pointer"
+                onClick={() => desktop.openApp(app.id)}
+                aria-label={`Open ${app.name}`}
+              >
+                {app.icon && (
+                  <span aria-hidden="true" className="mr-2">
+                    {decodeIcon(app.icon)}
+                  </span>
+                )}
+                {app.name}
+              </button>
+              <button
+                type="button"
+                className="shrink-0 p-2 cursor-pointer text-warning"
+                aria-label={`${store.favorites.includes(app.id) ? 'Unfavourite' : 'Favourite'} ${app.name}`}
+                aria-pressed={store.favorites.includes(app.id)}
+                onClick={() => desktop.setFavorite(app.id, !store.favorites.includes(app.id))}
+              >
+                {store.favorites.includes(app.id) ? '★' : '☆'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  return (
+    <Section
+      title="Quick access"
+      aside={
+        <button type="button" className={secondary} onClick={openStore}>
+          Browse all apps
+        </button>
+      }
+    >
+      <p className="text-sm text-muted">
+        Your favourites and recently opened apps, saved on this computer.
+      </p>
+      {loading ? (
+        <p role="status">Loading your apps…</p>
+      ) : failed ? (
+        <div role="alert">
+          Couldn't load your apps.{' '}
+          <button type="button" className={secondary} onClick={() => setRefresh((n) => n + 1)}>
+            Retry
+          </button>
+        </div>
+      ) : (
+        <>
+          {row('Favourites', favourites)}
+          {row('Recently used', recent)}
+          {store.recent.length > 0 && (
+            <button
+              type="button"
+              className={`${secondary} mt-3`}
+              onClick={() => desktop.clearRecent()}
+            >
+              Clear recently used
+            </button>
+          )}
+          {!favourites.length && !recent.length && (
+            <p>
+              Star an app in the Store to keep it here. Apps you open also appear here
+              automatically.
+            </p>
+          )}
+        </>
+      )}
+    </Section>
   );
 }
 

@@ -2652,3 +2652,14 @@ a.tag { text-decoration: none; }
 .dl-list li:first-child { border-top: none; }
 .dl-list span { color: var(--muted); font-family: var(--font-mono); font-size: 0.85rem; }
 @media (max-width: 480px) { .dl-buttons a { width: 100%; } }
+.quick-access { margin-block: 1.5rem 2rem; min-width: 0; }
+.quick-access h2 { margin-bottom: .5rem; }
+.quick-access h3 { margin-block: 1.25rem .75rem; font-size: 1rem; }
+.shortcut-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: .75rem; padding: 0; margin: 0 0 1rem; list-style: none; }
+.shortcut-item { display: flex; align-items: center; min-width: 0; gap: .5rem; padding: .75rem; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.shortcut-open { display: flex; align-items: center; min-width: 0; flex: 1; gap: .65rem; color: var(--ink-strong); font-weight: 600; overflow-wrap: anywhere; }
+.shortcut-icon { flex-shrink: 0; font-size: 1.4em; }
+.shortcut-star { flex-shrink: 0; min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); cursor: pointer; font: inherit; font-size: 1.2em; }
+.shortcut-star[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.shortcut-star:focus-visible, .shortcut-open:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.app-card.compact .shortcut-star { align-self: flex-start; margin-top: .4rem; }

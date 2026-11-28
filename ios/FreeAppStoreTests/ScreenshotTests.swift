@@ -159,7 +159,7 @@ final class ScreenshotTests: XCTestCase {
             let storeRun = try XCTUnwrap(catalogue.apps.first { $0.id == "run" })
             let page = UIWindow(windowScene: scene)
             page.overrideUserInterfaceStyle = style
-            page.rootViewController = UIHostingController(rootView: NavigationStack { AppDetailView(app: storeRun, model: model, open: { _ in }) })
+            page.rootViewController = UIHostingController(rootView: NavigationStack { AppDetailView(app: storeRun, model: model, catalogue: catalogue, open: { _ in }) })
             page.makeKeyAndVisible()
             try await Task.sleep(for: .seconds(2))
             try save(page, to: "\(output)/store-run-\(name).png")

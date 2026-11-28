@@ -17,6 +17,32 @@ final class CatalogueStore: ObservableObject {
     /// The last refresh failed or returned something unusable; `apps` is the previous copy.
     @Published private(set) var stale = false
     @Published private(set) var loading = false
+    @Published private(set) var favourites: [String] = []
+    @Published private(set) var recent: [String] = []
+    @Published private(set) var shortcutError = ""
+
+    private struct Shortcuts: Codable { var favourites: [String]; var recent: [String] }
+    private static func ids(_ values: [String], limit: Int) -> [String] {
+        var seen = Set<String>()
+        return Array(values.filter { $0.range(of: "^[a-z0-9][a-z0-9-]{0,62}$", options: .regularExpression) != nil && seen.insert($0).inserted }.prefix(limit))
+    }
+    private func saveShortcuts(_ favourites: [String], _ recent: [String]) {
+        let value = Shortcuts(favourites: Self.ids(favourites, limit: 200), recent: Self.ids(recent, limit: 12))
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try JSONEncoder().encode(value).write(to: directory.appendingPathComponent("shortcuts.json"), options: .atomic)
+            self.favourites = value.favourites; self.recent = value.recent; shortcutError = ""
+        } catch { shortcutError = "Couldn't save shortcuts on this phone. Please try again." }
+    }
+    func setFavourite(_ id: String, on: Bool) {
+        guard apps.contains(where: { $0.id == id }) else { return }
+        saveShortcuts(favourites.filter { $0 != id } + (on ? [id] : []), recent)
+    }
+    func opened(_ id: String) {
+        guard apps.contains(where: { $0.id == id }) else { return }
+        saveShortcuts(favourites, [id] + recent.filter { $0 != id })
+    }
+    func clearRecent() { saveShortcuts(favourites, []) }
 
     private let directory: URL
     private let session: URLSession
@@ -34,6 +60,10 @@ final class CatalogueStore: ObservableObject {
         configuration.urlCache = nil
         session = URLSession(configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
         if let data = try? Data(contentsOf: dataFile), let cached = CatalogueApp.decode(data) { apps = cached }
+        if let data = try? Data(contentsOf: directory.appendingPathComponent("shortcuts.json")),
+           data.count <= 32_000, let saved = try? JSONDecoder().decode(Shortcuts.self, from: data) {
+            favourites = Self.ids(saved.favourites, limit: 200); recent = Self.ids(saved.recent, limit: 12)
+        }
     }
 
     /// 304 keeps the cache; a usable 200 replaces it; anything else keeps it and marks it stale.

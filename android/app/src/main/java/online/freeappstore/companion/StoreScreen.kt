@@ -34,11 +34,11 @@ import androidx.compose.ui.unit.dp
 internal fun StoreScreen(state: CompanionState, catalogue: CatalogueState, actions: CompanionActions, askConsent: (ConnectedApp) -> Unit, showProfile: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
-    val openApp = { app: CatalogueApp -> actions.open(Catalogue.installUrl(app.appUrl)) }
+    val openApp = actions.openCatalogueApp
     val detail = selected?.let { id -> catalogue.apps.find { it.id == id } }
     if (detail != null) {
         BackHandler { selected = null }
-        AppDetail(detail, state, actions, askConsent, openApp) { selected = null }
+        AppDetail(detail, state, catalogue, actions, askConsent, openApp) { selected = null }
         return
     }
     val show = { app: CatalogueApp -> selected = app.id }
@@ -65,18 +65,33 @@ internal fun StoreScreen(state: CompanionState, catalogue: CatalogueState, actio
             query.isNotBlank() -> {
                 val found = Catalogue.sortedByName(Catalogue.search(catalogue.apps, query))
                 if (found.isEmpty()) item { Text("No apps match “${query.trim()}”", Modifier.padding(horizontal = 24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                items(found, key = { "result-${it.id}" }) { AppRow(it, show, openApp) }
+                items(found, key = { "result-${it.id}" }) { AppRow(it, show, openApp, it.id in catalogue.favourites, actions.favourite) }
             }
             else -> {
                 if (catalogue.stale) item {
                     Text("Showing the last copy of the store saved on this phone.", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.bodySmall)
                 }
+                item {
+                    Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Quick access", style = MaterialTheme.typography.titleLarge)
+                        Text("Favourites and recently opened apps stay on this phone.", style = MaterialTheme.typography.bodySmall)
+                        if (catalogue.shortcutError.isNotEmpty()) Text(catalogue.shortcutError, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                val favourites = catalogue.favourites.mapNotNull { id -> catalogue.apps.find { it.id == id } }
+                val recent = catalogue.recent.filter { it !in catalogue.favourites }.mapNotNull { id -> catalogue.apps.find { it.id == id } }.take(6)
+                if (favourites.isNotEmpty()) item { Text("Favourites", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium) }
+                items(favourites, key = { "favourite-${it.id}" }) { AppRow(it, show, openApp, true, actions.favourite) }
+                if (recent.isNotEmpty()) item { Text("Recently used", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleMedium) }
+                items(recent, key = { "recent-${it.id}" }) { AppRow(it, show, openApp, false, actions.favourite) }
+                if (catalogue.recent.isNotEmpty()) item { TextButton(onClick = actions.clearRecentApps, modifier = Modifier.padding(horizontal = 24.dp)) { Text("Clear recently used") } }
+                if (favourites.isEmpty() && recent.isEmpty()) item { Text("Star an app to keep it here. Apps you open appear here automatically.", Modifier.padding(horizontal = 24.dp)) }
                 item { Featured(Catalogue.featured(catalogue.apps), show) }
                 val yours = catalogue.apps.filter { app -> state.apps.any { it.id == app.id && state.enabled(it) } }
                 if (state.signedIn && yours.isNotEmpty()) item { CategoryRow("Yours", yours, show) }
                 items(Catalogue.categories(catalogue.apps), key = { "category-${it.first}" }) { (name, apps) -> CategoryRow(name, apps, show) }
                 item { Text("All apps", Modifier.padding(horizontal = 24.dp), style = MaterialTheme.typography.titleLarge) }
-                items(Catalogue.sortedByName(catalogue.apps), key = { "all-${it.id}" }) { AppRow(it, show, openApp) }
+                items(Catalogue.sortedByName(catalogue.apps), key = { "all-${it.id}" }) { AppRow(it, show, openApp, it.id in catalogue.favourites, actions.favourite) }
             }
         }
     }
@@ -113,7 +128,7 @@ private fun CategoryRow(title: String, apps: List<CatalogueApp>, show: (Catalogu
 }
 
 @Composable
-private fun AppRow(app: CatalogueApp, show: (CatalogueApp) -> Unit, open: (CatalogueApp) -> Unit) {
+private fun AppRow(app: CatalogueApp, show: (CatalogueApp) -> Unit, open: (CatalogueApp) -> Unit, favourite: Boolean, setFavourite: (String, Boolean) -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(Modifier.weight(1f).clickable { show(app) }.semantics(mergeDescendants = true) {}, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             AppIcon(app, 48.dp)
@@ -122,6 +137,7 @@ private fun AppRow(app: CatalogueApp, show: (CatalogueApp) -> Unit, open: (Catal
                 Text(app.category, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        IconToggleButton(checked = favourite, onCheckedChange = { setFavourite(app.id, it) }, modifier = Modifier.semantics { contentDescription = "${if (favourite) "Unfavourite" else "Favourite"} ${app.name}" }) { Text(if (favourite) "★" else "☆") }
         OutlinedButton(onClick = { open(app) }, Modifier.semantics { contentDescription = "Open ${app.name}" }) { Text("Open") }
     }
 }
@@ -129,7 +145,7 @@ private fun AppRow(app: CatalogueApp, show: (CatalogueApp) -> Unit, open: (Catal
 /** One app's page: icon, description, Open, Use with companion for apps on the native list, and permissions. */
 @Composable
 private fun AppDetail(
-    app: CatalogueApp, state: CompanionState, actions: CompanionActions, askConsent: (ConnectedApp) -> Unit,
+    app: CatalogueApp, state: CompanionState, catalogue: CatalogueState, actions: CompanionActions, askConsent: (ConnectedApp) -> Unit,
     open: (CatalogueApp) -> Unit, back: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -144,6 +160,8 @@ private fun AppDetail(
             }
         }
         Button(onClick = { open(app) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = "Open ${app.name}" }) { Text("Open") }
+        OutlinedButton(onClick = { actions.favourite(app.id, app.id !in catalogue.favourites) }, Modifier.fillMaxWidth()) { Text(if (app.id in catalogue.favourites) "★ Remove from favourites" else "☆ Add to favourites") }
+        if (catalogue.shortcutError.isNotEmpty()) Text(catalogue.shortcutError, color = MaterialTheme.colorScheme.error)
         if (app.description.isNotEmpty()) Text(app.description)
         state.apps.find { it.id == app.id }?.let { connected -> CompanionCard(connected, state, actions, askConsent) }
         if (state.signedIn) Card(Modifier.fillMaxWidth()) {

@@ -29,7 +29,7 @@
   {{HEADER}}
 
 
-  <main class="container">
+  <main class="container" data-quick-app data-id="{{ID}}" data-name="{{NAME}}">
     <div class="app-split">
       <div class="app-split-info">
         <div class="app-hero">
@@ -135,5 +135,6 @@
   <script type="application/json" id="page-data">{"id":"{{ID}}"}</script>
   <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
   <script src="/detail-page.js?v={{VER_DETAIL_PAGE_JS}}" integrity="{{SRI_DETAIL_PAGE_JS}}" defer></script>
+  <script src="/quick-access.js?v={{VER_QUICK_ACCESS_JS}}" integrity="{{SRI_QUICK_ACCESS_JS}}" defer></script>
 </body>
 </html>

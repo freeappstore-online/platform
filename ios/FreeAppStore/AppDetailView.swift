@@ -4,6 +4,7 @@ import SwiftUI
 struct AppDetailView: View {
     let app: CatalogueApp
     @ObservedObject var model: CompanionModel
+    @ObservedObject var catalogue: CatalogueStore
     let open: (CatalogueApp) -> Void
 
     var body: some View {
@@ -24,6 +25,10 @@ struct AppDetailView: View {
                 Button { open(app) } label: { Text("Open").frame(maxWidth: .infinity) }
                     .buttonStyle(.borderedProminent).controlSize(.large)
                     .accessibilityLabel("Open \(app.name)")
+                Button(catalogue.favourites.contains(app.id) ? "★ Remove from favourites" : "☆ Add to favourites") {
+                    catalogue.setFavourite(app.id, on: !catalogue.favourites.contains(app.id))
+                }.buttonStyle(.bordered)
+                if !catalogue.shortcutError.isEmpty { Text(catalogue.shortcutError).foregroundStyle(.red) }
                 if !app.description.isEmpty { Text(app.description) }
                 if let connected = model.apps.first(where: { $0.id == app.id }) { companion(connected) }
                 if model.signedIn {

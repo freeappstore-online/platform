@@ -24,6 +24,30 @@ final class CatalogueStoreTests: XCTestCase {
 
     private func store() -> CatalogueStore { CatalogueStore(directory: directory, configuration: configuration) }
 
+    func testShortcutsSurviveRelaunchAndClearRecentPreservesFavourites() async throws {
+        StubProtocol.handler = { [registry] _ in .init(json: registry) }
+        let first = store()
+        await first.refresh()
+        first.setFavourite("run", on: true)
+        first.opened("run"); first.opened("language"); first.opened("run")
+        first.opened("unknown"); first.setFavourite("unknown", on: true)
+        let next = store()
+        XCTAssertEqual(next.favourites, ["run"])
+        XCTAssertEqual(next.recent, ["run", "language"])
+        next.clearRecent()
+        XCTAssertEqual(store().recent, [])
+        XCTAssertEqual(store().favourites, ["run"])
+        next.setFavourite("run", on: false)
+        XCTAssertEqual(store().favourites, [])
+    }
+
+    func testCorruptShortcutsDoNotBreakTheCatalogue() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("broken".utf8).write(to: directory.appendingPathComponent("shortcuts.json"))
+        XCTAssertEqual(store().favourites, [])
+        XCTAssertEqual(store().recent, [])
+    }
+
     func testFirstLoadCachesAndTheNextRequestRevalidates() async throws {
         StubProtocol.handler = { [registry] _ in .init(json: registry, headers: ["ETag": "\"v1\""]) }
         let first = store()

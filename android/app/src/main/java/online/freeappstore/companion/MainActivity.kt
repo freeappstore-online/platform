@@ -70,7 +70,8 @@ data class CompanionState(
     val profile: Profile? = null,
 )
 
-data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
+data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false,
+    val favourites: List<String> = emptyList(), val recent: List<String> = emptyList(), val shortcutError: String = "")
 
 /** Everything the screens can ask for. Defaults are no-ops so tests pass only what they check. */
 data class CompanionActions(
@@ -83,6 +84,7 @@ data class CompanionActions(
     val disconnect: () -> Unit = {}, val privacy: () -> Unit = {}, val account: () -> Unit = {},
     /** Opens a URL in the browser. Open buttons pass `?install=1` URLs (#621). */
     val open: (String) -> Unit = {}, val refreshCatalogue: () -> Unit = {},
+    val openCatalogueApp: (CatalogueApp) -> Unit = {}, val favourite: (String, Boolean) -> Unit = { _, _ -> }, val clearRecentApps: () -> Unit = {},
     /** The on-device sharing history (#649): clear it, and read tracks off the main thread. */
     val clearHistory: () -> Unit = {},
     val loadTracks: suspend (List<String>, LongRange) -> Map<String, List<TrackSample>> = { _, _ -> emptyMap() },
@@ -134,7 +136,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) handleLink(intent)
         // Upgrade path: sessions for grants held before the history existed start at their consent time.
         if (graph.repository.token() != null) runCatching { graph.local.seedIfEmpty() }
-        catalogue = CatalogueState(graph.catalogue.apps)
+        updateCatalogue()
         refresh()
         val actions = CompanionActions(
             connect = { act { open(graph.repository.startSignIn()) } },
@@ -155,6 +157,14 @@ class MainActivity : ComponentActivity() {
             privacy = { open("https://docs.freeappstore.online/native-companion/") },
             account = { open("https://freeappstore.online/app/") },
             open = ::open,
+            openCatalogueApp = { app ->
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(Catalogue.installUrl(app.appUrl))))
+                    graph.catalogue.opened(app.id); updateCatalogue()
+                } catch (_: RuntimeException) { error = "No browser is available to open ${app.name}." }
+            },
+            favourite = { id, on -> graph.catalogue.setFavourite(id, on); updateCatalogue() },
+            clearRecentApps = { graph.catalogue.clearRecent(); updateCatalogue() },
             refreshCatalogue = ::refreshCatalogue,
             clearHistory = { runCatching { graph.local.clearHistory() }.onFailure { error = it.message ?: "Could not clear history." }; refresh() },
             loadTracks = { ids, range -> withContext(Dispatchers.IO) { ids.associateWith { graph.local.track(it, range.first, range.last) } } },
@@ -333,8 +343,12 @@ class MainActivity : ComponentActivity() {
         catalogue = catalogue.copy(loading = true)
         lifecycleScope.launch {
             withContext(Dispatchers.IO) { graph.catalogue.refresh() }
-            catalogue = CatalogueState(graph.catalogue.apps, graph.catalogue.stale)
+            updateCatalogue()
         }
+    }
+    private fun updateCatalogue() {
+        val saved = graph.catalogue
+        catalogue = CatalogueState(saved.apps, saved.stale, favourites = saved.favourites, recent = saved.recent, shortcutError = saved.shortcutError)
     }
     private fun act(action: suspend () -> Unit) {
         if (working) return

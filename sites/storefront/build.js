@@ -552,6 +552,7 @@ const styleCssFilename = `style.${contentVersionForPath(STYLE_CSS_PATH)}.css`;
 const sriHashes = {
   SEARCH_JS: sriHash('search.js'),
   STOREFRONT_JS: sriHash('storefront.js'),
+  QUICK_ACCESS_JS: sriHash('quick-access.js'),
   AUTH_JS: sriHash('auth.js'),
   DETAIL_PAGE_JS: sriHash('detail-page.js'),
   GET_STARTED_JS: sriHash('get-started.js'),
@@ -567,6 +568,7 @@ const sriHashes = {
 const contentVersions = {
   SEARCH_JS: contentVersion('search.js'),
   STOREFRONT_JS: contentVersion('storefront.js'),
+  QUICK_ACCESS_JS: contentVersion('quick-access.js'),
   AUTH_JS: contentVersion('auth.js'),
   DETAIL_PAGE_JS: contentVersion('detail-page.js'),
   GET_STARTED_JS: contentVersion('get-started.js'),
@@ -1309,6 +1311,7 @@ fs.writeFileSync(path.join(DIST, 'registry.json'), JSON.stringify({ ...registry,
 const filesToCopy = [
   'search.js',
   'storefront.js',
+  'quick-access.js',
   'detail-page.js',
   'quality.js',
   'analytics.js',

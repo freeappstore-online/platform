@@ -10,10 +10,10 @@ name: Desktop
 on:
   push:
     branches: [main]
-    paths: ['desktop/**', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'sites/storefront/quick-access.js', 'sites/storefront/style.css', '.github/workflows/desktop.yml']
   pull_request:
     branches: [main]
-    paths: ['desktop/**', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'sites/storefront/quick-access.js', 'sites/storefront/style.css', '.github/workflows/desktop.yml']
   workflow_call:
     inputs:
       ref:

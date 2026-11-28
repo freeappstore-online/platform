@@ -431,10 +431,10 @@ ipcMain.handle('home:connect', async (event, id: unknown, connect: unknown) => {
 ipcMain.handle('home:registry', async (event) => {
   if (!fromHome(event)) return null;
   const [response, votes] = await Promise.all([
-    net.fetch(REGISTRY),
+    net.fetch(REGISTRY, { signal: AbortSignal.timeout(20_000) }),
     // Votes only order Most popular (#834): the Store still loads without them.
     net
-      .fetch(VOTES)
+      .fetch(VOTES, { signal: AbortSignal.timeout(20_000) })
       .then((r) => (r.ok ? r.json() : {}))
       .then((body: { votes?: Record<string, number> }) => body.votes ?? {})
       .catch(() => ({})),
@@ -448,6 +448,13 @@ ipcMain.handle('home:set-favorite', (event, appId: unknown, on: unknown) => {
   if (!fromHome(event) || typeof appId !== 'string' || !APP_ID.test(appId)) return;
   const favorites = settings.favoriteApps.filter((id) => id !== appId);
   settings.favoriteApps = on === true ? [...favorites, appId] : favorites;
+  saveSettings(app.getPath('userData'), settings);
+  pushState();
+});
+
+ipcMain.handle('home:clear-recent', (event) => {
+  if (!fromHome(event)) return;
+  settings.recentApps = [];
   saveSettings(app.getPath('userData'), settings);
   pushState();
 });

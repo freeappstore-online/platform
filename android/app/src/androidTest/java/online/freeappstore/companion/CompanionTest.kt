@@ -84,10 +84,23 @@ class CompanionTest {
     }
     @Test fun storeOpenUsesTheValidatedAppUrlWithInstall() {
         val opened = mutableListOf<String>()
-        screen(CompanionState(), CompanionActions(open = { opened += it }), tab = Tab.STORE)
+        screen(CompanionState(), CompanionActions(openCatalogueApp = { opened += Catalogue.installUrl(it.appUrl) }), tab = Tab.STORE)
         compose.onNodeWithTag("store").performScrollToNode(hasContentDescription("Open Hanzi Practice"))
         compose.onNodeWithContentDescription("Open Hanzi Practice").performClick()
         assertEquals(listOf("https://hanzi.freeappstore.online/?install=1"), opened)
+    }
+    @Test fun quickAccessOpensDirectlyAndClearingRecentDoesNotToggleFavourites() {
+        val opened = mutableListOf<String>(); val stars = mutableListOf<Pair<String, Boolean>>(); var cleared = 0
+        screen(CompanionState(), CompanionActions(openCatalogueApp = { opened += it.id },
+            favourite = { id, on -> stars += id to on }, clearRecentApps = { cleared++ }),
+            store = catalogue.copy(favourites = listOf("run"), recent = listOf("run")), tab = Tab.STORE)
+        compose.onAllNodesWithContentDescription("Open Run").onFirst().performClick()
+        assertEquals(listOf("run"), opened)
+        compose.onNodeWithTag("store").performScrollToNode(hasText("Clear recently used"))
+        compose.onNodeWithText("Clear recently used").performClick()
+        assertEquals(1, cleared); assertTrue(stars.isEmpty())
+        compose.onAllNodesWithContentDescription("Unfavourite Run").onFirst().performClick()
+        assertEquals(listOf("run" to false), stars)
     }
     @Test fun searchFiltersAndSaysWhenNothingMatches() {
         screen(CompanionState(), tab = Tab.STORE)
