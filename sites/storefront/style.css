@@ -2638,6 +2638,18 @@ pre[class*="language-"] {
 a.tag { text-decoration: none; }
 
 /* ---- Desktop app download page (/download, download.html + download.js) ---- */
+.dl-preview { margin: 2rem 0; }
+.dl-preview img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.dl-preview figcaption { margin-top: .75rem; text-align: center; color: var(--muted); font-size: .875rem; }
+.dl-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 1rem; margin: 1.25rem 0 2rem; }
+.dl-features article { min-width: 0; padding: 1.25rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.dl-feature-label { color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.page-content .dl-features h3 { margin: .5rem 0 .75rem; font-size: 1.15rem; }
+.page-content .dl-features p { margin: 0; font-size: .95rem; }
+.dl-phone { padding: 1.25rem; margin-top: 2rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.page-content .dl-phone h2 { margin-top: 0; }
+.page-content .dl-phone p:last-child { margin-bottom: 0; }
+.page-content .dl-phone-note { font-size: .875rem; color: var(--muted); }
 .dl-primary { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1rem; }
 .page-content .dl-primary h2 { margin-top: 0.25rem; }
 .page-content .dl-primary p { margin-bottom: 0; color: var(--ink); }

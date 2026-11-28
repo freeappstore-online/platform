@@ -1331,6 +1331,7 @@ const filesToCopy = [
   'install.html',
   'download.html',
   'download.js',
+  'desktop-store-preview.webp',
   'faq.html',
   'og-image.png',
   'capabilities.html',
