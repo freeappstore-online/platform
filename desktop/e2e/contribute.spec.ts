@@ -81,6 +81,21 @@ function serveApi(): Promise<Server> {
           sets: [{ ...set(appId), open: 1 }],
         })),
       });
+    if (path === '/v1/generation/backlog')
+      return send(200, {
+        jobs: [
+          {
+            id: 'j1',
+            appId: 'books',
+            key: 'e2e/books',
+            inputPreview: TEXT,
+            inputChars: TEXT.length,
+            model: 'kokoro',
+            modelVersion: 'v1.0',
+          },
+        ],
+        hasMore: false,
+      });
     const claim = /^\/v1\/apps\/(books|dialogue)\/generation\/claim$/.exec(path);
     if (claim) {
       const appId = claim[1] as keyof typeof APPS;
@@ -191,7 +206,14 @@ test('Off is a hard stop that survives a restart; Run now turns it back on; a co
   await expect(home.getByTestId('contribute-why')).toHaveText(OFF);
   await expect(mode('Off')).toHaveAttribute('aria-pressed', 'true');
   await home.waitForTimeout(1500);
-  expect(seen.filter((r) => r.includes('/generation/'))).toEqual(['GET /v1/generation/open']);
+  expect(seen.filter((r) => r.includes('/generation/')).sort()).toEqual([
+    'GET /v1/generation/backlog',
+    'GET /v1/generation/open',
+  ]);
+  await expect(home.getByText('Showing 1 awaiting jobs.')).toBeVisible();
+  await home.getByRole('button', { name: 'Refresh backlog', exact: true }).click();
+  await expect.poll(() => seen.filter((r) => r === 'GET /v1/generation/backlog').length).toBe(2);
+  expect(seen.some((r) => r.includes('/claim'))).toBe(false);
   await expect(home.getByRole('button', { name: 'Look again', exact: true })).toBeEnabled();
   await home.getByRole('button', { name: 'Look again', exact: true }).click();
   await expect.poll(() => seen.filter((r) => r === 'GET /v1/generation/open').length).toBe(2);
