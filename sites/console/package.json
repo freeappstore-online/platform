@@ -6,6 +6,7 @@
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"],
     "overrides": {
+      "sharp@<0.35.5": "0.35.5",
       "brace-expansion@>=4.0.0 <5.0.12": "^5.0.12",
       "fast-uri@>=3.0.0 <3.1.9": "^3.1.9",
       "glob@>=9.0.0 <14.0.2": "^14.0.2",

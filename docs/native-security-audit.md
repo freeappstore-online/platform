@@ -24,6 +24,11 @@ Advisories: [sharp/libvips](https://github.com/advisories/GHSA-f88m-g3jw-g9cj),
 [minimatch](https://github.com/advisories/GHSA-g3hv-75wg-m249).
 Permission behavior: [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security#5-handle-session-permission-requests-from-remote-content).
 
+The same sharp advisories were also present in the Creator Console's generation dependencies. Its lockfile now
+pins sharp 0.35.5; the console audit is clean, its production build succeeds and all 125 tests pass. Desktop CI
+passed on macOS (both architectures packaged), Windows and Linux in
+[run 46091031662](https://github.com/freeappstore-online/platform/actions/runs/46091031662).
+
 ## Boundaries reviewed
 
 - Desktop renderer sandbox and context isolation are enabled; Node integration is disabled. The app bridge validates
