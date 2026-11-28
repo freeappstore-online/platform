@@ -42,7 +42,7 @@ Desktop:
 | `api.freeappstore.online` | Pairing, `/native/me`, Contribute calls, with the device credential and `X-FAS-App-Version` / `X-FAS-Client` | Only after **Connect this computer** |
 | Your sign-in provider's avatar host (for example GitHub) | Avatar image request | After connecting |
 | `github.com/k2-fsa/sherpa-onnx` releases | Voice model download (350 MB), checked against a pinned SHA-256 | Only when you click **Download** |
-| `github.com/freeappstore-online/platform` releases, `api.github.com` | Update check (`latest*.yml`), installer download, release notes | Start and daily, unless **Check for updates automatically** is off; **What's new** |
+| `github.com/freeappstore-online/platform` releases, `api.github.com` | Website-distributed builds: update check (`latest*.yml`) and installer download. All builds: release notes | Start and daily for the direct updater, unless **Check for updates automatically** is off; **What's new**. Microsoft Store packages disable the direct updater and receive updates through Microsoft Store |
 | Google Fonts | Fonts for the home screen | Home window opens |
 
 Phones (Android and iOS):
