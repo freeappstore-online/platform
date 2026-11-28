@@ -11,7 +11,7 @@ The requested installation policy is TestFlight for iPhone, Google Play testing 
 desktop downloads from the website. Do not install phone builds directly with devicectl/ADB or tell users to
 bypass Gatekeeper/SmartScreen. Existing phone data must be preserved when moving to store distribution.
 
-Android 0.2.0 (version code 61) is published to the **internal** Play track and was verified through a fresh
+Android 0.2.0 (version code 62, following the initial manual release 61) is published to the **internal** Play track and was verified through a fresh
 Publisher API edit. The owner-only tester list is selected and the track is Active. Eligible testers can
 [join through Google Play](https://play.google.com/apps/internaltest/4701334236045250583). This is not public
 production availability. Future Android main builds publish to internal testing only after build and emulator
@@ -75,6 +75,12 @@ the preview configuration and are never promoted by this workflow. Missing confi
 a release tag. Mac/Linux builds and the existing desktop test workflow must pass before publishing. Direct
 Windows builds are opt-in with `DESKTOP_WINDOWS_DIRECT_ENABLED=true`; missing Windows credentials then fail the gate.
 
+An alternative using the already-authorized Xcode account has now been proven: Apple's cloud-managed Developer ID
+signing and notarization produced an app accepted by Gatekeeper after ZIP extraction and quarantine was applied.
+That probe was an old development package and is not a release candidate. `desktop/scripts/cloud-sign-mac.sh`
+builds both architectures from an exact release tag for the separately verified cloud-release promotion path;
+it does not require exporting Apple's private signing key. See [desktop/SIGNING.md](../desktop/SIGNING.md).
+
 Use the ops store and an ops issue to provision these scoped GitHub Actions secrets; never paste credentials in
 issues, source files or command arguments:
 
@@ -98,11 +104,11 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
 
 ## Outstanding release requirements
 
-- **macOS:** the local keychain has development identities only. A Developer ID private key has now been generated
-  into the encrypted ops store, with a matching public CSR at `build/signing/FreeAppStore-Developer-ID.certSigningRequest`
-  (ops#61). No Developer ID certificate or usable notarization API credential is provisioned yet. The claim in an
-  older issue that ASC keys were already stored was checked and found stale. The Apple Account Holder must issue Developer ID
-  ([#807](https://github.com/freeappstore-online/platform/issues/807)).
+- **macOS:** cloud-managed Developer ID signing, accepted notarization, stapling and Gatekeeper acceptance have
+  been verified using the existing Xcode account (ops#61). A fresh release for both architectures must still pass
+  source-bound CI verification and publication. Exportable P12/API credentials are absent but are no longer a
+  blocker for this account-backed route. The public CSR and encrypted private key prepared in ops#61 remain an
+  unused fallback; they are not the cloud-managed key.
 - **Windows:** Microsoft Store submission packaging is implemented, including Store-managed updates/startup and
   a CI-only package fixture. Actual submission requires a reserved Partner Center identity, a 1.x package version,
   listing/certification and an installable Store product. See [desktop/SIGNING.md](../desktop/SIGNING.md) and
@@ -111,9 +117,12 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
   plus actual installation checks.
 - **iOS:** the paid team's development-signed 0.2.0 build is on the paired iPhone; this is not TestFlight delivery.
   The existing Xcode account successfully exported an Apple Distribution-signed archive for team `55DT52UQXE`,
-  so account-backed distribution signing works. The local Xcode 16 SDK is too old for a new upload; the Xcode 26
-  archive/upload path, App Store Connect app/tester setup and actual processed TestFlight availability are tracked
-  in [#863](https://github.com/freeappstore-online/platform/issues/863). CI credentials remain unprovisioned.
+  so account-backed distribution signing works. CI produced a verified SDK 26.5 archive, 0.2.0 build 55, and the
+  existing account signed its IPA successfully. Upload reached authenticated App Store Connect, which returned
+  zero app records for `online.freeappstore.companion`; create the app record, retry the prepared build, then
+  configure/verify TestFlight tester access. These steps remain tracked in
+  [#863](https://github.com/freeappstore-online/platform/issues/863). CI credentials remain unprovisioned but are
+  not required for this account-backed upload route.
   No simulator or development-signed binary may be advertised as a public iPhone release.
 - **Android:** internal Play testing is live as recorded above. Public Play availability still requires the listing, declarations,
   testing/review and release-track work tracked in [#654](https://github.com/freeappstore-online/platform/issues/654).

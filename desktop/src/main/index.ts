@@ -577,13 +577,13 @@ const updates = new Updates(electronUpdater.autoUpdater, {
   changed: () => pushState(),
 });
 
-/** Restart to update, or on macOS open the new version's installer for this Mac in the browser. */
+/** Restart to update, or on macOS download the signed app ZIP for this Mac. */
 function applyUpdate() {
   const { status, version } = updates.state;
   if (status === 'ready') updates.install();
   else if (status === 'manual' && version)
     openExternal(
-      `https://github.com/${RELEASES}/download/desktop-v${version}/FreeAppStore-mac-${process.arch}.dmg`,
+      `https://github.com/${RELEASES}/download/desktop-v${version}/FreeAppStore-mac-${process.arch}.zip`,
     );
 }
 

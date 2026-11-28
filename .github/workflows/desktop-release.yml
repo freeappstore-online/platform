@@ -39,6 +39,8 @@ concurrency:
 
 jobs:
   tag:
+    # Cloud-managed Xcode signing uses desktop-cloud-release.yml instead of an exportable private key.
+    if: github.event_name == 'workflow_dispatch' || vars.DESKTOP_CERTIFICATE_RELEASE_ENABLED == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -15,6 +15,9 @@ Required repository secrets: `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, and the sam
 `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` used by TestFlight. The repository
 variable `APPLE_TEAM_ID` pins the expected team. Provision through the ops store only, under
 [ops#61](https://github.com/serge-ivo/ops/issues/61); never paste private keys into issues.
+Automatic tag-triggered certificate releases additionally require
+`DESKTOP_CERTIFICATE_RELEASE_ENABLED=true`; the manual certificate workflow remains available.
+Leave that opt-in unset when using the separate cloud-managed signing promotion route.
 
 As of 2026-11-28, no Developer ID certificate is installed. A public CSR is prepared at
 `build/signing/FreeAppStore-Developer-ID.certSigningRequest` in the local platform checkout.
@@ -29,6 +32,29 @@ a second private key or a new Apple Developer membership.
 requires Account Holder access. The previously documented claim that an ASC API key was already
 stored was stale: the PAS entries were still pending in ops#58 when checked. Do not infer a usable
 credential from an inventory entry.
+
+### Existing Xcode account: cloud signing and notarization
+
+The existing authorized Xcode account can also sign through Apple's cloud-managed Developer ID
+service and submit for notarization. This path was verified on an isolated Intel app: Developer ID
+team `55DT52UQXE`, hardened runtime, deep signature validation, accepted notarization, a valid
+stapled ticket, and Gatekeeper's `Notarized Developer ID` result. No local Developer ID private
+identity or exported private key was needed. The original probe was the older `1fade4e` development
+build and must never be published as the new release.
+
+For a release, commit all source changes on main, set the intended version and create its
+`desktop-v<version>` tag. Run `bash desktop/scripts/cloud-sign-mac.sh <version> <numeric-build>`
+from that exact clean tagged commit. The script packages both Mac architectures, signs and uploads
+each archive using the authorized Xcode account, polls only Apple's explicit processing state,
+and refuses rejected/failed/unstapled/untrusted output. Its app ZIPs preserve stapled metadata;
+DMGs are omitted until separately notarized. It never changes the installed application.
+
+The ZIPs are only inputs to the separate cloud-release CI promotion gate: CI must verify the
+signed apps, notarization, archive safety, exact release identity and rebuilt source contents,
+then attest the manifest before publication. Do not manually publish the probe or bypass that
+gate. Keep Xcode's local diagnostic logs private; only the verified installer ZIPs and public
+release metadata are upload candidates. The cloud signing audit is on ops#61; the prepared CSR
+remains a fallback and is not the cloud-managed signing key.
 
 ## Windows: Microsoft Store package
 
