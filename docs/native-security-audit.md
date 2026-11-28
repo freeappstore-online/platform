@@ -72,7 +72,8 @@ passed on macOS (both architectures packaged), Windows and Linux in
 
 `.github/workflows/desktop-release.yml` uses `desktop/electron-builder.release.yml`. Local/CI smoke packages retain
 the preview configuration and are never promoted by this workflow. Missing configuration fails **before** creating
-a release tag. All three platform builds and the existing desktop test workflow must pass before publishing.
+a release tag. Mac/Linux builds and the existing desktop test workflow must pass before publishing. Direct
+Windows builds are opt-in with `DESKTOP_WINDOWS_DIRECT_ENABLED=true`; missing Windows credentials then fail the gate.
 
 Use the ops store and an ops issue to provision these scoped GitHub Actions secrets; never paste credentials in
 issues, source files or command arguments:
@@ -80,7 +81,7 @@ issues, source files or command arguments:
 | Configuration | Purpose |
 | --- | --- |
 | `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD` (secrets) | Base64 Developer ID Application P12 and its password |
-| `APPLE_API_KEY_BASE64`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` (secrets) | App Store Connect API key for notarization; restored only to a private runner temp file and removed on exit |
+| `ASC_API_KEY_P8_BASE64`, `ASC_API_KEY_ID`, `ASC_API_ISSUER_ID` (secrets) | Shared App Store Connect API key for notarization and TestFlight; restored only to a private runner temp file and removed on exit |
 | `APPLE_TEAM_ID` (repository variable) | Expected Developer ID team; verify against the issued certificate |
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` (secrets) | Windows Authenticode certificate accepted by electron-builder's signtool integration |
 | `WINDOWS_SIGNING_THUMBPRINT` (repository variable) | Exact expected certificate thumbprint, checked on both the application and installer |
@@ -102,12 +103,17 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
   (ops#61). No Developer ID certificate or usable notarization API credential is provisioned yet. The claim in an
   older issue that ASC keys were already stored was checked and found stale. The Apple Account Holder must issue Developer ID
   ([#807](https://github.com/freeappstore-online/platform/issues/807)).
-- **Windows:** no signing identity/provider is provisioned. Publisher identity and provider must be established
-  ([#808](https://github.com/freeappstore-online/platform/issues/808)). Microsoft Artifact Signing eligibility must
-  be checked for the actual publisher; do not assume an Australian individual qualifies.
+- **Windows:** Microsoft Store submission packaging is implemented, including Store-managed updates/startup and
+  a CI-only package fixture. Actual submission requires a reserved Partner Center identity, a 1.x package version,
+  listing/certification and an installable Store product. See [desktop/SIGNING.md](../desktop/SIGNING.md) and
+  [#808](https://github.com/freeappstore-online/platform/issues/808). No production Store package or listing is
+  claimed from the fixture. Direct EXE distribution remains optional and requires a validated signing provider
+  plus actual installation checks.
 - **iOS:** the paid team's development-signed 0.2.0 build is on the paired iPhone; this is not TestFlight delivery.
-  Distribution provisioning, usable App Store Connect credentials, a processed TestFlight build and tester access
-  remain outstanding, tracked in [#863](https://github.com/freeappstore-online/platform/issues/863).
+  The existing Xcode account successfully exported an Apple Distribution-signed archive for team `55DT52UQXE`,
+  so account-backed distribution signing works. The local Xcode 16 SDK is too old for a new upload; the Xcode 26
+  archive/upload path, App Store Connect app/tester setup and actual processed TestFlight availability are tracked
+  in [#863](https://github.com/freeappstore-online/platform/issues/863). CI credentials remain unprovisioned.
   No simulator or development-signed binary may be advertised as a public iPhone release.
 - **Android:** internal Play testing is live as recorded above. Public Play availability still requires the listing, declarations,
   testing/review and release-track work tracked in [#654](https://github.com/freeappstore-online/platform/issues/654).
