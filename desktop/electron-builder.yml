@@ -18,7 +18,7 @@ asarUnpack:
   - "**/node_modules/sherpa-onnx-*/**"
 mac:
   category: public.app-category.productivity
-  icon: build/icon.png
+  icon: build/icon-mac.png
   # Ad-hoc signature ("-"): no certificate, but Apple Silicon refuses to start an unsigned app at all.
   identity: "-"
   artifactName: FreeAppStore-mac-${arch}.${ext}

@@ -1,9 +1,9 @@
 {
   "name": "freeappstore-desktop",
   "productName": "FreeAppStore",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
-  "description": "FreeAppStore desktop app: runs FAS apps in their own windows and lets a local AI client use their tools through a loopback MCP server.",
+  "description": "Your favourite free web apps in their own windows, with optional local AI connections and community narration.",
   "license": "MIT",
   "type": "module",
   "main": "dist/main/index.js",

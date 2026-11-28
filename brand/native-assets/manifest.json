@@ -1,0 +1,21 @@
+{
+  "brandVersion": "2026-11-18",
+  "source": "brand/assets/favicon.svg + mark.svg",
+  "renderer": {
+    "sharp": "0.35.5",
+    "vips": "8.18.7",
+    "rsvg": "2.63.2"
+  },
+  "sha256": {
+    "brand/native-assets/app-icon-master.svg": "5a8e43ce63c32f270af159fde84f7945d60b42d2fc8facfccc649deb8e527fe2",
+    "brand/native-assets/app-icon-1024.png": "832ad1175541683c56f489def4c3152064e56f664f2b2e266589ab091b6364df",
+    "brand/native-assets/mac-icon-master.svg": "c00cfa1768b41d4779a4cd26d3e61db94d30d281e26f574563c17f1403fcf930",
+    "brand/native-assets/mac-icon-1024.png": "629bdcc0c3cac1ea54bc1502d0afd6ea0e28040cc7a2cd9a67b3cb1dbd804928",
+    "brand/native-assets/play-icon-512.png": "cdb85693fa0379cde698d0dc79fc7892b3b9316ac18f02fd5c3255b0a30fddff",
+    "brand/native-assets/contact-sheet.svg": "994dc087496f0a05b6f6c1c0cc0d9888da8406c90043641e53cab0ca494dfda2",
+    "desktop/build/icon.png": "832ad1175541683c56f489def4c3152064e56f664f2b2e266589ab091b6364df",
+    "desktop/build/icon-mac.png": "629bdcc0c3cac1ea54bc1502d0afd6ea0e28040cc7a2cd9a67b3cb1dbd804928",
+    "ios/FreeAppStore/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png": "832ad1175541683c56f489def4c3152064e56f664f2b2e266589ab091b6364df",
+    "android/app/src/main/res/drawable/ic_launcher_foreground.xml": "9e3a0c261c74d089f9ae3b91b54f5af7ceb73084396bc53504f21c4bb8e0c41a"
+  }
+}
