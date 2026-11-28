@@ -4,6 +4,16 @@ Issue [#863](https://github.com/freeappstore-online/platform/issues/863), part o
 
 Phone installs and updates use TestFlight. Do not use direct Xcode/devicectl installs as a substitute for this release path. This workflow does not submit a production App Store version or create an external/public beta invitation.
 
+## Current release — 2026-11-28
+
+**0.2.0 (62)** is **Testing** in the existing Internal testers group (one tester, two builds). Apple build ID: `077b5fe6-19d5-4901-ae61-ece9ae46ae94`. The App Store 0.2.0 draft selects build 62 and remains **Prepare for Submission**; no App Review submission was made. Build-specific What to Test was saved (1218 characters).
+
+[CI run 46136360135](https://github.com/freeappstore-online/platform/actions/runs/46136360135) passed simulator tests, unsigned device compilation, release-tool checks and archive generation from `6b5e83ef89e8cc9ada296dd017f53ca4fad4f5bf`, using SDK 26.5. Before account-backed signing/upload, the artifact hash and expected commit/bundle/version/build were checked, along with the archived Product Interaction declaration (linked, App Functionality, no tracking), encryption flag and iPhone-only device family. Xcode returned upload/export success; App Store Connect subsequently confirmed **Testing**.
+
+Apple's tester record now confirms **Installed 0.2.0 (55)** on the iPhone 15 Pro. Installation of build 62 and a fresh contribution upload remain unverified. Evidence: [#863 release verification](https://github.com/freeappstore-online/platform/issues/863#issuecomment-7238215894), [#866 privacy fix](https://github.com/freeappstore-online/platform/issues/866#issuecomment-7238216127).
+
+Nonfatal upload advisories: SDK 27 becomes required from April 2027; the vendored SherpaOnnxC framework lacks a matching dSYM, limiting framework crash symbolication. Neither advisory prevented this upload. No direct phone install or new exported signing credential was used.
+
 ## One-time setup
 
 1. The existing App Store Connect record is **FreeAppStore Companion**, app ID `6840294127`, bundle ID `online.freeappstore.companion`, under team `55DT52UQXE`. The shorter name FreeAppStore was unavailable. Reuse this record.
@@ -39,7 +49,7 @@ After upload, `testflight.mjs` waits up to 30 minutes for Apple processing, adds
 
 ## Privacy manifest
 
-`FreeAppStore/PrivacyInfo.xcprivacy` describes optional account/pairing, enabled location sharing, generated audio, user-submitted content, and generation performance/diagnostics. There are no tracking domains. Keep App Store Connect privacy answers aligned with the app and server behavior; generated narration is audio data but the app does not record microphone audio.
+`FreeAppStore/PrivacyInfo.xcprivacy` describes optional account/pairing, enabled location sharing, generated audio, user-submitted content, product interaction, and generation performance/diagnostics. Build 62 adds account-linked Product Interaction under #866. There are no tracking domains. Keep App Store Connect privacy answers aligned with the app and server behavior; generated narration is audio data but the app does not record microphone audio.
 
 Required-reason declarations reflect install-guide preferences (UserDefaults), model-download disk checks, in-app elapsed stage timings, and app-container file metadata. The embedded SherpaOnnxC framework receives its own reviewed file-metadata declaration from `ios/Privacy/`; both manifests are required in the archive. See [Apple's required-reason API list](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype). An app privacy manifest does not replace any required manifest in a third-party framework.
 
@@ -54,7 +64,7 @@ actionlint .github/workflows/ios.yml
 
 ## First release using an existing Xcode account
 
-On 2026-11-28, the signed-in Xcode account on the maintainer Mac successfully archived and exported this app with **Apple Distribution** signing for team `55DT52UQXE`. The exported profile was an App Store profile (`get-task-allow=false`, beta reports enabled, no device list), and deep/strict signature verification passed. This establishes account-backed distribution signing access even though CI secrets are absent. The initial local archive used Xcode 16.0, below Apple's current SDK minimum; it was not uploaded. CI subsequently produced the verified SDK 26.5 archive **0.2.0 (55)** in run [46118297110](https://github.com/freeappstore-online/platform/actions/runs/46118297110), from source `aaa6452c0ad12594e573d03423e698810ac97cc2`. After the app record was created, account-backed upload succeeded on 2026-11-28. Apple processing completed, the internal group shows build **0.2.0 (55)** as **Testing**, and the owner tester shows **Invited**. The build ID is `00e8d03a-c38e-43bd-ba88-de97f36a8502`. Physical installation and contribution verification remain tracked in #863. Apple accepted SDK 26.5 with an advisory that uploads from April 2027 require SDK 27 or later.
+On 2026-11-28, the signed-in Xcode account on the maintainer Mac successfully archived and exported this app with **Apple Distribution** signing for team `55DT52UQXE`. The exported profile was an App Store profile (`get-task-allow=false`, beta reports enabled, no device list), and deep/strict signature verification passed. This establishes account-backed distribution signing access even though CI secrets are absent. The initial local archive used Xcode 16.0, below Apple's current SDK minimum; it was not uploaded. CI subsequently produced the verified SDK 26.5 archive **0.2.0 (55)** in run [46118297110](https://github.com/freeappstore-online/platform/actions/runs/46118297110), from source `aaa6452c0ad12594e573d03423e698810ac97cc2`. After the app record was created, account-backed upload succeeded on 2026-11-28. Apple processing completed and the internal group showed build **0.2.0 (55)** as **Testing**, initially with the owner tester **Invited**. The build ID is `00e8d03a-c38e-43bd-ba88-de97f36a8502`. Later that day the tester record changed to **Installed 0.2.0 (55)**; the current release and remaining device checks are recorded above.
 
 For this situation, dispatch the credential-free archive path:
 

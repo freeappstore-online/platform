@@ -136,17 +136,22 @@ timestamp checks. Do not export a non-exportable key or downgrade its protection
   [#808](https://github.com/freeappstore-online/platform/issues/808). No production Store package or listing is
   claimed from the fixture. Direct EXE distribution remains optional and requires a validated signing provider
   plus actual installation checks.
-- **iOS:** **FreeAppStore Companion 0.2.0 (55)** is available to the owner through internal TestFlight testing.
+- **iOS:** **FreeAppStore Companion 0.2.0 (62)** is available to the owner through internal TestFlight testing.
   The App Store Connect record is `6840294127`, bundle `online.freeappstore.companion`; the shorter listing name
   FreeAppStore was unavailable. The existing Xcode account signed CI's verified SDK 26.5 archive with Apple
-  Distribution for team `55DT52UQXE` and uploaded it successfully. Apple processing completed; the internal group
-  has one build with status **Testing** and one owner tester with status **Invited**. This was verified in the
-  App Store Connect UI on 2026-11-28. Beta description, support/privacy links and testing notes are saved.
-  Physical TestFlight installation and fresh contribution are not yet verified. There is no public beta invitation
+  Distribution for team `55DT52UQXE` and uploaded it successfully. Build 62 came from source
+  `6b5e83ef89e8cc9ada296dd017f53ca4fad4f5bf`, [run 46136360135](https://github.com/freeappstore-online/platform/actions/runs/46136360135);
+  the archive hash, identity/version and added Product Interaction privacy declaration were verified before upload.
+  Apple processing completed; the internal group has two builds **Testing** and one owner tester. App Store Connect
+  now confirms **Installed 0.2.0 (55)** on the iPhone 15 Pro. Build 62 installation and a fresh contribution remain
+  unverified. The 0.2.0 App Store draft selects build 62; beta description, support/privacy links and its 1218-character
+  testing notes are saved. These states were verified in App Store Connect on 2026-11-28. No App Review submission
+  or App Privacy form update was made by this release. There is no public beta invitation
   or production App Store listing. These remaining checks stay in
   [#863](https://github.com/freeappstore-online/platform/issues/863). CI credentials remain unprovisioned but are
   unnecessary for the proven account-backed upload route. Apple accepted SDK 26.5 with an advisory that uploads
-  from April 2027 require SDK 27 or later; update the build environment before that deadline.
+  from April 2027 require SDK 27 or later; update the build environment before that deadline. The accepted upload
+  also warned that the vendored SherpaOnnxC framework lacks a matching dSYM, limiting framework crash symbolication.
 - **Android:** internal Play testing is live as recorded above. Public Play availability still requires the listing, declarations,
   testing/review and release-track work tracked in [#654](https://github.com/freeappstore-online/platform/issues/654).
 - The cloud-managed Mac/Linux release path completed successfully with real signed Mac artifacts. Windows remains

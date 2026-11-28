@@ -1,16 +1,18 @@
 # iOS store listing
 
-English (U.S.) copy for the existing **FreeAppStore Companion** record, App Store Connect ID `6840294127`, bundle `online.freeappstore.companion`. The shorter name FreeAppStore was unavailable. This file is submission material; it does not claim public App Store approval. Current distribution is internal TestFlight, **0.2.0 (55)**.
+English (U.S.) copy for the existing **FreeAppStore Companion** record, App Store Connect ID `6840294127`, bundle `online.freeappstore.companion`. The shorter name FreeAppStore was unavailable. This file is submission material; it does not claim public App Store approval. Current distribution is internal TestFlight, **0.2.0 (62)**.
 
 ## Saved in App Store Connect — 2026-11-28
 
-The 0.2.0 draft has build **55** attached, with the correct app icon. Promotional text, description, keywords, support/marketing URLs, copyright, subtitle, Productivity/Utilities categories and privacy-policy URL were saved.
+The 0.2.0 draft now has build **62** attached, with the correct app icon; the build replacement was saved. Promotional text, description, keywords, support/marketing URLs, copyright, subtitle, Productivity/Utilities categories and privacy-policy URL remain saved.
 
 The custom header from `brand/store-assets/app-store-header.png` persisted after navigation and rendered correctly in Apple's **Device Preview**, including the brand mark and headline. All four opaque RGB screenshots from `store-assets/listing/iphone-medium/` persisted and were accepted in the **iPhone with Dynamic Island (medium display)** slot. Their current saved order is **01, 04, 02, 03**. A brief drag-reorder attempt left the order unchanged; the four accepted assets were retained.
 
-The TestFlight beta description below was saved and read back after a full page reload (811 characters). Build **0.2.0 (55)** received the What to Test text below (1120 characters), and App Store Connect confirmed **Saved**. The build remains assigned to the internal testing group. TestFlight's invitation screen says screenshots/category come from the latest version that reached **Ready for Distribution**; these draft listing assets are not yet evidence that they appear in tester invitations.
+The TestFlight beta description below was saved and read back after a full page reload (811 characters). Build **0.2.0 (62)** received the What to Test text below (1218 characters), and App Store Connect confirmed **Saved**. The six numbered checks were previously saved for build 55 (1120 characters); build 62 adds the introductory privacy-disclosure note. The internal group shows one tester and both builds **Testing**. TestFlight's invitation screen says screenshots/category come from the latest version that reached **Ready for Distribution**; these draft listing assets are not yet evidence that they appear in tester invitations.
 
-The App Store version remains **Prepare for Submission**. This metadata update did not submit App Review, change privacy declarations or establish physical installation/contribution. Public release and wider beta access remain separate work.
+The App Store version remains **Prepare for Submission**. No App Review submission or App Store privacy-form update was made. Apple's tester record now shows **Installed 0.2.0 (55)** on the iPhone 15 Pro; installation of build 62 and a fresh contribution upload remain unverified. See [release evidence](https://github.com/freeappstore-online/platform/issues/863#issuecomment-7238215894). Public release and wider beta access remain separate work.
+
+The screenshot captures remain build **55** from the source/fixture documented in [store-assets/README.md](store-assets/README.md) and the raw manifest. Build 62's privacy-manifest change does not alter the captured UI. Do not relabel these historical captures as build 62.
 
 ## App information
 
@@ -62,7 +64,9 @@ Optional Contribute lets your device generate narration for participating apps. 
 
 Browsing does not require an account. Contributions and location sharing require connecting your FreeAppStore account. This beta is for testing; available jobs depend on what app publishers have queued.
 
-## What to test — 0.2.0 (55)
+## What to test — 0.2.0 (62)
+
+Build 0.2.0 (62) updates the app's privacy disclosures for account-linked contribution activity.
 
 1. Browse and search the Store. Open an app, save a favourite, restart FreeAppStore, and check that your shortcuts remain.
 2. Open an app's page and check the Add to Home Screen guidance. Web apps open in the browser.
