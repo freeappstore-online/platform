@@ -3549,7 +3549,12 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T02:39:45.145Z",
       "creatorGithub": "reeyansh404",
-      "permissions": []
+      "permissions": [
+        {
+          "name": "notifications",
+          "reason": "Optional reminders when a payment is due. Only asked when you tap Turn on reminders."
+        }
+      ]
     },
     {
       "id": "csvguard-lite",
