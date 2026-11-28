@@ -75,7 +75,8 @@ class CompanionTest {
     // Store tab (#621, same rules as the iOS Store tab #620)
     @Test fun storeListsCategoriesAndAllAppsWithEmojiIcons() {
         screen(CompanionState(), tab = Tab.STORE)
-        compose.onNodeWithText("Health Fitness").assertExists()
+        compose.onNodeWithTag("store").performScrollToNode(hasText("Health Fitness"))
+        compose.onNodeWithText("Health Fitness").assertIsDisplayed()
         compose.onNodeWithTag("store").performScrollToNode(hasText("All apps"))
         compose.onNodeWithText("All apps").assertIsDisplayed()
         compose.onNodeWithTag("store").performScrollToNode(hasContentDescription("Open Hanzi Practice"))
@@ -122,7 +123,7 @@ class CompanionTest {
         var granted = 0
         screen(CompanionState(signedIn = true, apps = listOf(run)), CompanionActions(enable = { granted++ }), tab = Tab.STORE)
         compose.onAllNodesWithText("Run").onFirst().performClick()
-        compose.onNodeWithText("Use with companion").assertIsDisplayed()
+        compose.onNodeWithText("Use with companion").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Permissions").performScrollTo().assertIsDisplayed()
         // The first switch is the companion's; the second, Contribute (#731).
         compose.onAllNodes(isToggleable()).onFirst().performScrollTo().assertIsOff().performClick()
@@ -275,12 +276,13 @@ class CompanionTest {
         screen(CompanionState(apps = listOf(run)), CompanionActions(connect = { connects++ }), tab = Tab.STORE)
         compose.onAllNodesWithText("Run").onFirst().performClick()
         compose.onNode(isToggleable()).assertDoesNotExist()
-        compose.onNodeWithText("Sign in to use with FreeAppStore").performClick()
+        compose.onNodeWithText("Sign in to use with FreeAppStore").performScrollTo().performClick()
         assertEquals(1, connects)
     }
     @Test fun enabledAppsAppearUnderYours() {
         screen(CompanionState(signedIn = true, apps = listOf(run.copy(grantId = "g"))), tab = Tab.STORE)
-        compose.onNodeWithText("Yours").assertExists()
+        compose.onNodeWithTag("store").performScrollToNode(hasText("Yours"))
+        compose.onNodeWithText("Yours").assertIsDisplayed()
     }
 
     @Test fun queueSurvivesReopenAndRevokesOnlyItsRecipient() {
