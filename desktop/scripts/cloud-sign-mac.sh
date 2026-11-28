@@ -71,7 +71,7 @@ for arch in x64 arm64; do
   grep -Eq 'flags=.*runtime' <<< "$details"
   xcrun stapler validate "$app"
   spctl --assess --type execute --verbose=2 "$app"
-  lipo -verify_arch "$([[ $arch == x64 ]] && echo x86_64 || echo arm64)" "$app/Contents/MacOS/FreeAppStore"
+  lipo "$app/Contents/MacOS/FreeAppStore" -verify_arch "$([[ $arch == x64 ]] && echo x86_64 || echo arm64)"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$output/installers/FreeAppStore-mac-$arch.zip"
 done
 

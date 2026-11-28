@@ -22,9 +22,9 @@ Leave that opt-in unset when using the separate cloud-managed signing promotion 
 As of 2026-11-28, no Developer ID certificate is installed. A public CSR is prepared at
 `build/signing/FreeAppStore-Developer-ID.certSigningRequest` in the local platform checkout.
 Its matching private key is stored only as encrypted
-`fas/MAC_DEVELOPER_ID_PRIVATE_KEY_BASE64` in ops, with no CI consumer. The Account Holder must
-issue a Developer ID Application certificate for this CSR (or complete the authenticated
-certificate flow with an agent). Verify the returned certificate's public key before combining
+`fas/MAC_DEVELOPER_ID_PRIVATE_KEY_BASE64` in ops, with no CI consumer. For the optional exportable-key
+CI route, the Account Holder can issue a Developer ID Application certificate for this CSR.
+This step is not required for the verified Xcode cloud-managed route below. Verify any returned certificate's public key before combining
 it with the stored private key and placing the signing bundle through ops. This does not require
 a second private key or a new Apple Developer membership.
 
@@ -108,7 +108,8 @@ The default desktop release builds Mac and Linux; it does not require Windows si
 while Windows takes the Store route. Set `DESKTOP_WINDOWS_DIRECT_ENABLED=true` only after the
 direct Windows signing provider is provisioned. In that mode missing Windows credentials fail
 before tagging. The manifest has `windows:null` when no direct EXE was built; no Windows evidence
-is invented and the five Mac/Linux artifacts remain mandatory.
+is invented. The certificate workflow requires its five Mac/Linux artifacts; the cloud-managed
+workflow requires the two notarized Mac ZIPs and Linux AppImage, with no unverified DMGs.
 
 `verify-windows-release.ps1` checks both the application and installer for a trusted signature,
 the expected certificate and a timestamp. It cannot prove SmartScreen reputation. After a real
