@@ -19,7 +19,7 @@ Bundle ID: `online.freeappstore.companion` (`FAS_BUNDLE_ID` in `Config/Base.xcco
 
 `ContributeTests.testRealKokoroNarratesAndEncodes` runs the real model when `TEST_RUNNER_FAS_KOKORO_ARCHIVE` names a local copy of the pinned `kokoro-multi-lang-v1_0.tar.bz2`; otherwise it is skipped.
 
-Device installs are signed in Xcode with your own team. `DEVELOPMENT_TEAM` is never committed: set it in Signing & Capabilities or in an untracked `Config/Local.xcconfig` (which may also override `FAS_BUNDLE_ID`). Distribution is developer installation only; there is no TestFlight or App Store build.
+Phone installs and updates use **TestFlight**, through the manually dispatched release job in `.github/workflows/ios.yml`. See [TestFlight setup, release and verification](release/README.md). Simulator and unsigned CI builds above remain development checks; they are not distribution releases. `DEVELOPMENT_TEAM` remains local/CI configuration and is not committed.
 
 ## Version and branding
 

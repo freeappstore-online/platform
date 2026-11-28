@@ -10,7 +10,15 @@ URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/xcframework/sherpa-
 DIR="${SRCROOT:-$(cd "$(dirname "$0")/.." && pwd)}/Vendor"
 STAMP="$DIR/sherpa-onnx.sha256"
 
-if [ -d "$DIR/SherpaOnnxC.xcframework" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$SHA256" ]; then exit 0; fi
+install_privacy_manifest() {
+  for framework in "$DIR"/SherpaOnnxC.xcframework/*/SherpaOnnxC.framework; do
+    cp "$DIR/../Privacy/SherpaOnnxC.xcprivacy" "$framework/PrivacyInfo.xcprivacy"
+  done
+}
+if [ -d "$DIR/SherpaOnnxC.xcframework" ] && [ "$(cat "$STAMP" 2>/dev/null)" = "$SHA256" ]; then
+  install_privacy_manifest
+  exit 0
+fi
 rm -rf "$DIR/SherpaOnnxC.xcframework" "$STAMP"
 mkdir -p "$DIR"
 PART="$DIR/sherpa-onnx.zip.part"
@@ -23,3 +31,6 @@ fi
 unzip -q -o "$PART" -d "$DIR"
 rm -f "$PART"
 echo "$SHA256" > "$STAMP"
+
+# Xcode re-signs the embedded framework after adding its required privacy resource.
+install_privacy_manifest

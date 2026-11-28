@@ -3,6 +3,11 @@ on:
   push: { branches: [main], paths: ['ios/**', '.github/workflows/ios.yml'] }
   pull_request: { paths: ['ios/**', '.github/workflows/ios.yml'] }
   workflow_dispatch:
+    inputs:
+      testflight:
+        description: Upload and verify availability in the configured internal TestFlight group
+        type: boolean
+        default: false
 permissions: { contents: read }
 jobs:
   build-test:
@@ -32,6 +37,79 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ios=sorted((k for k in d if "iOS" in k), key=lambda k: [int(x) for x in k.rsplit("iOS-",1)[1].split("-")]); print(next(x["udid"] for k in reversed(ios) for x in d[k] if x["name"].startswith("iPhone")))')
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
       - name: Unit tests (simulator, ad-hoc signed)
-        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'id=${{ steps.sim.outputs.udid }}' -derivedDataPath build/ios test CODE_SIGN_IDENTITY=- CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7} FAS_DEV_BUILD=NO
+        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'id=${{ steps.sim.outputs.udid }}' -derivedDataPath build/ios test CODE_SIGN_IDENTITY=- CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT="${GITHUB_SHA::7}" FAS_DEV_BUILD=NO
       - name: Device build (unsigned)
-        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'generic/platform=iOS' -derivedDataPath build/ios build CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7} FAS_DEV_BUILD=NO
+        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'generic/platform=iOS' -derivedDataPath build/ios build CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT="${GITHUB_SHA::7}" FAS_DEV_BUILD=NO
+
+  release-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: '22' }
+      - run: node --test ios/release/testflight.test.mjs
+      - run: python3 -m unittest discover -s ios/release -p '*_test.py'
+      - run: bash -n ios/release/upload.sh && shellcheck ios/release/upload.sh
+
+  # #863: uploads are manual and main-only. A green job means Apple processed the build and
+  # the configured internal group has access, not merely that xcodebuild uploaded an archive.
+  testflight:
+    needs: [build-test, release-tools]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.testflight
+    runs-on: macos-26
+    timeout-minutes: 60
+    concurrency: { group: fas-ios-testflight, cancel-in-progress: false }
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with: { xcode-version: latest-stable }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with: { node-version: '22' }
+      - name: Validate release configuration
+        env:
+          IOS_DIST_CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          ASC_BETA_GROUP_ID: ${{ vars.ASC_BETA_GROUP_ID }}
+        run: |
+          missing=0
+          for name in IOS_DIST_CERT_P12_BASE64 IOS_DIST_CERT_PASSWORD IOS_APPSTORE_PROFILE_BASE64 ASC_API_KEY_ID ASC_API_ISSUER_ID ASC_API_KEY_P8_BASE64 IOS_TEAM_ID ASC_APP_ID ASC_BETA_GROUP_ID; do
+            if [[ -z "${!name}" ]]; then echo "::error::Missing $name. See ios/release/README.md and #863."; missing=1; fi
+          done
+          (( missing == 0 )) || exit 1
+          version=$(sed -n 's/^MARKETING_VERSION = //p' ios/Config/Version.xcconfig)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          echo "IOS_MARKETING_VERSION=$version" >> "$GITHUB_ENV"
+          major=$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)
+          (( major >= 26 )) || { echo '::error::App Store Connect requires Xcode 26 or newer'; exit 1; }
+      - name: Verify app and tester group; choose monotonic build number
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          ASC_BETA_GROUP_ID: ${{ vars.ASC_BETA_GROUP_ID }}
+        run: node ios/release/testflight.mjs preflight
+      - name: Archive, validate signing, export and upload
+        env:
+          IOS_DIST_CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+          IOS_APPSTORE_PROFILE_BASE64: ${{ secrets.IOS_APPSTORE_PROFILE_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+        run: bash ios/release/upload.sh
+      - name: Wait for processing and verify internal tester availability
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+          ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+          ASC_BETA_GROUP_ID: ${{ vars.ASC_BETA_GROUP_ID }}
+        run: node ios/release/testflight.mjs verify
