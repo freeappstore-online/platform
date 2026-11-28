@@ -16,9 +16,9 @@ keeps it running. Quit from the tray menu or with Cmd+Q.
 
 A self-contained pnpm project outside the root workspace, like `workers/*`.
 
-**Install:** download the preview installer for Mac, Windows or Linux from
-[freeappstore.online/download](https://freeappstore.online/download), which also has the first-launch steps for
-these unsigned builds.
+**Install:** use [freeappstore.online/download](https://freeappstore.online/download), which lists verified release
+installers and their installation steps. Mac downloads require Developer ID signing and notarization; Windows
+Store distribution is being prepared. Local development packages are not public release installers.
 
 ## Run
 
@@ -269,22 +269,28 @@ pnpm --dir desktop dist:mac   # unsigned, ad-hoc signed: release/FreeAppStore-ma
 
 ### Release
 
-`.github/workflows/desktop-release.yml` builds the installers on GitHub Actions: macOS dmg + zip (x64 and arm64,
-ad-hoc signed so Apple Silicon starts them), Windows NSIS `.exe` and Linux AppImage. `package.json`'s version is the
-app's version; run the workflow with the next version and it writes that to `package.json` on `main` and tags the
-commit (see [docs/versioning.md](../docs/versioning.md)):
+The public download page accepts versioned releases only after their installer hashes, signing manifest and GitHub
+provenance pass verification. It does not fall back to an unsigned `desktop-latest` package. See
+[SIGNING.md](SIGNING.md) and [the native security audit](../docs/native-security-audit.md) for required evidence.
+
+For the existing Xcode account, `scripts/cloud-sign-mac.sh` builds both Mac architectures from an immutable
+`desktop-v<version>` tag, uses Apple's cloud-managed Developer ID signing and notarization, and verifies the
+stapled apps before creating ZIPs. Upload those ZIPs to the matching draft GitHub release, then run:
 
 ```bash
-gh workflow run desktop-release.yml --repo freeappstore-online/platform --ref main -f version=0.3.0
+gh workflow run desktop-cloud-release.yml --repo freeappstore-online/platform --ref main \
+  -f version=1.0.0 -f build=2026112801
 ```
 
-Each run publishes the release `desktop-v<version>` and refreshes
-`desktop-latest`, whose asset URLs never change; the download page links there:
-`https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-x64.dmg`
-(also `-mac-arm64.dmg`, `-mac-{x64,arm64}.zip`, `-win-x64.exe`, `-linux-x86_64.AppImage`).
+The workflow validates the draft assets against the tagged source, runs Desktop CI, independently verifies Mac
+signatures and notarization, builds Linux, and publishes only after all gates pass. It also refreshes the Mac and
+Linux `desktop-latest` update feeds. This example identifies the first signed release candidate; it is not an
+instruction to overwrite an already-published version.
 
-The builds are not signed with a certificate or notarized, so macOS Gatekeeper and Windows SmartScreen warn on
-first launch. Signing and notarization are #799.
+`.github/workflows/desktop-release.yml` provides the alternative exportable-certificate route. Its required
+signing configuration must exist before it creates a tag. Windows direct installers are optional and require
+Authenticode signing plus separately verified installation behavior. `.github/workflows/desktop-store.yml`
+prepares the Windows Store submission package after Partner Center supplies the reserved package identity.
 
 ### Updates
 
@@ -292,8 +298,9 @@ Installed builds look for a newer version when they start and once a day (#839, 
 unless **Check for updates automatically** is off (Account > About, which also has **Check now**). The feed is
 `desktop-latest` (electron-builder.yml `publish`): the release workflow uploads `latest.yml`, `latest-linux.yml` and
 `latest-mac.yml` there after the installers. Windows and Linux (AppImage) download the update in the background and offer
-**Restart to update** (otherwise it installs on quit). Unsigned macOS builds can't install themselves, so the Mac app says
-which version is available and **Download** opens that version's dmg for this Mac. A banner and the tray menu show an
+**Restart to update** (otherwise it installs on quit). Microsoft Store builds use Store-managed updates. The Mac app
+uses manual replacement: it says which version is available and **Download** opens that version's signed ZIP for
+this Mac. A banner and the tray menu show an
 available update. **What's new** shows the GitHub release notes of the new and the current version: the desktop's commits
 since the previous desktop tag. Dev builds never check.
 

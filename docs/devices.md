@@ -2,7 +2,7 @@
 
 FreeAppStore apps are web apps. You don't need anything else to use them. The desktop app and the phone apps are
 optional extras for things a browser can't do well. This page says what each one does today, how to start, and what
-to expect. Checked against the code on 2026-11-27 (#850).
+to expect. Checked against the code and release channels on 2026-11-28 (#850, #857).
 
 Where your data goes: [Desktop and phone apps: where data goes](device-data.md) and the
 [privacy policy](https://freeappstore.online/privacy).
@@ -20,8 +20,8 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 
 | | Web (browser) | Desktop | Android | iPhone |
 |---|---|---|---|---|
-| How to get it | [freeappstore.online](https://freeappstore.online) | [Download](https://freeappstore.online/download): Mac, Windows, Linux preview | No public download yet. Built from source; Play testing is being prepared (#658) | No public download. Developers install it from Xcode; no TestFlight |
-| Released | Yes | 0.4.1 preview, unsigned | No release yet (#846) | No release yet (#846) |
+| How to get it | [freeappstore.online](https://freeappstore.online) | [Download](https://freeappstore.online/download): verified installers appear when available; Windows Store publication is being prepared | [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583), for invited testers | TestFlight is being prepared (#863); no tester download yet |
+| Release status | Public | Signed Mac release and Linux release being verified; Windows Store pending | 0.2.0 (62), internal testing; not a public production release | 0.2.0 (55) signed; App Store Connect app record and upload pending |
 | Minimum system | A current browser | What Electron 45 supports; 64-bit only | Android 10 | iOS 17 |
 | Use apps | Yes | In their own windows | Opens them in the browser | Opens them in Safari |
 | App data | In that browser | In the desktop app, separate from every browser | In the browser | In Safari |
@@ -33,10 +33,10 @@ Where your data goes: [Desktop and phone apps: where data goes](device-data.md) 
 | Battery, heat and data conditions | No | Power, battery and heat; no mobile-data setting | Yes | Yes |
 | Overnight summary | No | No | Yes | Yes |
 | Pair a phone by QR code | Console: **Settings > Devices > Add a phone** | **Account > Add a phone** | Scanning: in progress (#845) | Scan or type the code |
-| Updates | Prompted in each app | Windows and Linux update themselves. Mac: the app tells you and opens the download | n/a | n/a |
+| Updates | Prompted in each app | Mac: notification and download. Linux AppImage: in-app update. Windows Store builds: Store-managed | Google Play | TestFlight, once available |
 
-"Released" means you can install it without building it. Features in a phone column are in the code; neither phone
-app has had a public release.
+Internal testing requires an invited account. Android is available to the configured internal testers; neither phone
+app has a public production listing yet. The download page is the current source for available desktop installers.
 
 ## Desktop
 
@@ -46,8 +46,9 @@ keeps your favourites. These shortcuts stay on this computer through restarts an
 
 ### Install
 
-Download from [freeappstore.online/download](https://freeappstore.online/download). The builds are not signed yet,
-so macOS and Windows warn the first time; the download page has the steps.
+Use [freeappstore.online/download](https://freeappstore.online/download). It shows only installers whose release
+checks passed. Mac downloads require Developer ID signing and Apple notarization. Windows distribution is being
+prepared through Microsoft Store. Follow the installation instructions beside the available download.
 
 ### Connect an AI app
 
@@ -120,9 +121,13 @@ Recently used, not apps opened directly from a bookmark or Home Screen icon.
 
 ### Install
 
-There is no public download yet. Android builds come from `android/` (Android 10 and later); Play testing is being
-prepared (#658). The iPhone app is installed by a developer from Xcode (`ios/`, iOS 17 and later). First releases:
-#846.
+Android (10 and later): invited testers can opt in through [Google Play internal testing](https://play.google.com/apps/internaltest/4701334236045250583),
+then install or update from Google Play using the invited Google account. The current tester list is limited; a public
+production listing is still being prepared (#658).
+
+iPhone (iOS 17 and later): TestFlight distribution is being prepared (#863). The signed build is ready, but its App
+Store Connect app record, upload and tester availability are not complete. A TestFlight invitation will be provided
+when it is available. Phone distribution uses these store channels.
 
 ### Connect
 

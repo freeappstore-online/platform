@@ -1,8 +1,8 @@
 /**
  * Updates (#839): look for a newer version on start and daily, from the release the app was built for
  * (electron-builder's `publish`, read by electron-updater from app-update.yml). Windows and Linux download it in
- * the background and install it on Restart to update or on quit. macOS builds are unsigned, so Squirrel.Mac can't
- * install them: there the app says which version is available and the user downloads it.
+ * the background and install it on Restart to update or on quit. macOS uses manual replacement: the app says
+ * which version is available and the user downloads its signed ZIP. Microsoft Store owns its packaged updates.
  */
 
 /** What the app knows about a newer version. */
@@ -46,7 +46,7 @@ export class Updates {
   constructor(
     private readonly updater: Updater,
     private readonly options: {
-      /** This platform installs updates itself (not macOS's unsigned builds). */
+      /** This platform installs updates itself (macOS uses manual replacement). */
       canInstall: boolean;
       /** Microsoft Store owns updates for its packaged builds. Never contact the direct-download channel. */
       storeManaged?: boolean;
